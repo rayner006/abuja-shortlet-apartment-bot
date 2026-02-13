@@ -155,7 +155,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
         });
       }
       
-      // Send each apartment as a separate message with photos attached
+      // Send each apartment as a separate message with photos at the top
       results.forEach(apt => {
         // Get the photos for this apartment
         let photoPaths = [];
@@ -184,28 +184,13 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           typeFolder = apt.type.toLowerCase().replace(' ', '-');
         }
         
-        // Create the message with address included
-        const message = `
-🏠 *Apartment Name:* ${apt.name}
-📍 *Location:* ${apt.location}
-📌 *Address:* ${apt.address || 'Contact admin for address'}
-🏷️ *Type:* ${apt.type}
-💰 *Price:* ₦${apt.price}/night
-🛏️ *Bedrooms:* ${apt.bedrooms || 0}
-🚿 *Bathrooms:* ${apt.bathrooms || 1}
-📝 *Description:* ${apt.description}
-
-✨ *Apartment Photos:* ✨
-        `;
-        
-        // Send the text message first
-        bot.sendMessage(chatId, message, {
+        // Send a header message first
+        bot.sendMessage(chatId, `📸 *${apt.name}* - Photos:`, {
           parse_mode: 'Markdown'
         }).then(() => {
           
-          // Then send all photos one by one
+          // Send all photos first
           if (photoPaths.length > 0) {
-            // Send each photo
             const photoPromises = photoPaths.map(photoPath => {
               const fullPath = photoPath.startsWith('/') 
                 ? photoPath 
@@ -218,23 +203,48 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
                 });
             });
             
-            // After all photos are sent, show booking option
+            // After all photos are sent, send the apartment details
             Promise.all(photoPromises).then(() => {
-              setTimeout(() => {
-                bot.sendMessage(chatId, '✨ *Would you like to book this apartment?* ✨', {
-                  parse_mode: 'Markdown',
-                  reply_markup: {
-                    inline_keyboard: [
-                      [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
-                      [{ text: '🔍 Search Again', callback_data: 'search_again' }]
-                    ]
-                  }
-                });
-              }, 500);
+              // Create the message with address included
+              const message = `
+🏠 *Apartment Name:* ${apt.name}
+📍 *Location:* ${apt.location}
+📌 *Address:* ${apt.address || 'Contact admin for address'}
+🏷️ *Type:* ${apt.type}
+💰 *Price:* ₦${apt.price}/night
+🛏️ *Bedrooms:* ${apt.bedrooms || 0}
+🚿 *Bathrooms:* ${apt.bathrooms || 1}
+📝 *Description:* ${apt.description}
+
+✨ *Would you like to book this apartment?* ✨
+              `;
+              
+              bot.sendMessage(chatId, message, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
+                    [{ text: '🔍 Search Again', callback_data: 'search_again' }]
+                  ]
+                }
+              });
             });
           } else {
-            // If no photos, just show booking option
-            bot.sendMessage(chatId, '✨ *Would you like to book this apartment?* ✨', {
+            // If no photos, just show the details with booking option
+            const message = `
+🏠 *Apartment Name:* ${apt.name}
+📍 *Location:* ${apt.location}
+📌 *Address:* ${apt.address || 'Contact admin for address'}
+🏷️ *Type:* ${apt.type}
+💰 *Price:* ₦${apt.price}/night
+🛏️ *Bedrooms:* ${apt.bedrooms || 0}
+🚿 *Bathrooms:* ${apt.bathrooms || 1}
+📝 *Description:* ${apt.description}
+
+✨ *Would you like to book this apartment?* ✨
+            `;
+            
+            bot.sendMessage(chatId, message, {
               parse_mode: 'Markdown',
               reply_markup: {
                 inline_keyboard: [
@@ -567,4 +577,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Updated with address and auto photo display 🏠');
+console.log('✅ Bot Ready - Photos at the top with apartment details below 🏠');
