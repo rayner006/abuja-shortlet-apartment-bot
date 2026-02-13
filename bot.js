@@ -83,36 +83,20 @@ function showMainMenu(chatId, text = 'Welcome To\nAbuja Shortlet Apartments 🏠
 
 /* ================= SHOW LOCATIONS ================= */
 function showLocations(chatId) {
-  bot.sendMessage(chatId, '📍 *Select a location:*\n\n🏛️ *Premium Areas*\n🏢 *Business Hubs*\n🏘️ *Residential Areas*\n💰 *Budget Friendly*', {
+  bot.sendMessage(chatId, '📍 *Select a location:*', {
     parse_mode: 'Markdown',
     reply_markup: {
       keyboard: [
         ['🏛️ Maitama', '🏛️ Asokoro'],
-        ['🏛️ Wuse 2', '🏛️ Jabi'],
-        ['🏢 CBD', '🏢 Wuse Zone 4'],
-        ['🏘️ Gwarimpa', '🏘️ Lokogoma'],
-        ['🏘️ Kubwa', '💰 Garki 2'],
-        ['💰 Utako', '💰 Galadimawa'],
-        ['⬅️ Back to Main Menu']
-      ],
-      resize_keyboard: true
-    }
-  });
-}
-
-/* ================= SHOW MORE LOCATIONS ================= */
-function showMoreLocations(chatId) {
-  bot.sendMessage(chatId, '📍 *More Locations:*\n\n🏛️ *Premium*\n🏘️ *Residential*\n💰 *Budget*', {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      keyboard: [
+        ['🏛️ Wuse', '🏛️ Jabi'],
+        ['🏛️ Garki', '🏘️ Gwarinpa'],
         ['🏛️ Guzape', '🏛️ Katampe'],
-        ['🏘️ Apo', '🏘️ Garki Village'],
-        ['🏘️ Life Camp', '🏘️ Dutse Alhaji'],
-        ['💰 Nyanya', '💰 Karu'],
-        ['💰 Mararaba', '💰 Dei-Dei'],
-        ['🏘️ Bwari', '🏘️ Kaura'],
-        ['⬅️ Back to Locations', '⬅️ Back to Main Menu']
+        ['🏘️ Jahi', '💰 Utako'],
+        ['🏘️ Wuye', '🏘️ Life Camp'],
+        ['🏘️ Apo', '🏘️ Lokogoma'],
+        ['🏘️ Kubwa', '🏘️ Lugbe'],
+        ['🏘️ Durumi', '🏭 Gwagwalada'],
+        ['⬅️ Back to Main Menu']
       ],
       resize_keyboard: true
     }
@@ -122,7 +106,7 @@ function showMoreLocations(chatId) {
 /* ================= FETCH APARTMENTS BY LOCATION ================= */
 function showApartmentsByLocation(chatId, location) {
   // Remove emoji and trim
-  const cleanLocation = location.replace(/[🏛️🏢🏘️💰]/g, '').trim();
+  const cleanLocation = location.replace(/[🏛️🏢🏘️💰🏭]/g, '').trim();
   
   db.query(
     'SELECT * FROM apartments WHERE location = ? AND is_available = true',
@@ -138,7 +122,6 @@ function showApartmentsByLocation(chatId, location) {
           reply_markup: {
             keyboard: [
               ['🔍 Search Again'],
-              ['📍 More Locations'],
               ['⬅️ Back to Main Menu']
             ],
             resize_keyboard: true
@@ -174,7 +157,6 @@ function showApartmentsByLocation(chatId, location) {
         reply_markup: {
           keyboard: [
             ['🔍 Search Again'],
-            ['📍 More Locations'],
             ['⬅️ Back to Main Menu']
           ],
           resize_keyboard: true
@@ -272,19 +254,12 @@ function aboutUs(chatId) {
   const message = `
 ℹ️ *About Abuja Shortlet Apartments*
 
-We provide premium short-let apartments across Abuja's finest districts:
+We provide premium short-let apartments across Abuja's finest locations:
 
-🏛️ *Premium Areas:*
-Maitama • Asokoro • Wuse 2 • Jabi • Guzape • Katampe
-
-🏢 *Business Hubs:*
-CBD • Wuse Zone 4 • Garki Village • Utako
-
-🏘️ *Residential Areas:*
-Gwarimpa • Lokogoma • Apo • Life Camp • Dutse Alhaji • Bwari • Kaura
-
-💰 *Budget Friendly:*
-Garki 2 • Galadimawa • Nyanya • Karu • Mararaba • Dei-Dei • Kubwa
+🏛️ *Our Locations:*
+Maitama • Asokoro • Wuse • Jabi • Garki • Gwarinpa
+Guzape • Katampe • Jahi • Utako • Wuye • Life Camp
+Apo • Lokogoma • Kubwa • Lugbe • Durumi • Gwagwalada
 
 ✨ *Why choose us?*
 • Verified properties ✅
@@ -357,14 +332,6 @@ bot.on('message', (msg) => {
       showMainMenu(chatId);
       break;
       
-    case '⬅️ Back to Locations':
-      showLocations(chatId);
-      break;
-      
-    case '📍 More Locations':
-      showMoreLocations(chatId);
-      break;
-      
     case '🏠 View Apartments':
     case '🔍 Search Again':
       showLocations(chatId);
@@ -378,37 +345,25 @@ bot.on('message', (msg) => {
       aboutUs(chatId);
       break;
       
-    // Premium Areas
+    // All locations - exactly as requested
     case '🏛️ Maitama':
     case '🏛️ Asokoro':
-    case '🏛️ Wuse 2':
+    case '🏛️ Wuse':
     case '🏛️ Jabi':
+    case '🏛️ Garki':
+    case '🏘️ Gwarinpa':
     case '🏛️ Guzape':
     case '🏛️ Katampe':
-      
-    // Business Hubs
-    case '🏢 CBD':
-    case '🏢 Wuse Zone 4':
-    case '🏢 Garki Village':
+    case '🏘️ Jahi':
     case '💰 Utako':
-      
-    // Residential Areas
-    case '🏘️ Gwarimpa':
-    case '🏘️ Lokogoma':
-    case '🏘️ Apo':
+    case '🏘️ Wuye':
     case '🏘️ Life Camp':
-    case '🏘️ Dutse Alhaji':
-    case '🏘️ Bwari':
-    case '🏘️ Kaura':
-      
-    // Budget Friendly
-    case '💰 Garki 2':
-    case '💰 Galadimawa':
-    case '💰 Nyanya':
-    case '💰 Karu':
-    case '💰 Mararaba':
-    case '💰 Dei-Dei':
+    case '🏘️ Apo':
+    case '🏘️ Lokogoma':
     case '🏘️ Kubwa':
+    case '🏘️ Lugbe':
+    case '🏘️ Durumi':
+    case '🏭 Gwagwalada':
       showApartmentsByLocation(chatId, text);
       break;
       
@@ -501,4 +456,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Complete Abuja Locations Added! 🗺️');
+console.log('✅ Bot Ready - Working with your specified locations! 🗺️');
