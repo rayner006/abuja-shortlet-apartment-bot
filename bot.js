@@ -355,7 +355,7 @@ bot.on('message', (msg) => {
     default:
       // 👇 FIX #2: ANY message from user who deleted chat goes to main menu
       // This handles when user types anything after deleting chat history
-      showMainMenu(chatId, 'Welcome Back! 👋\n\nWelcome To Abuja Shortlet Apartments 🏠, Click On Any Menu Below To Continue 👇👇👇');
+      showMainMenu(chatId, 'Welcome Back! 👋\n\nAbuja Shortlet Apartments 🏠, Click On Any Menu Below To Continue 👇👇👇');
       break;
   }
 });
@@ -447,3 +447,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
 }
 
 console.log('✅ Bot Ready - Fixed welcome message and chat history handling');
+
