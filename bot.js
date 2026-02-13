@@ -134,7 +134,6 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
   const cleanLocation = location.replace(/[🏛️🏘️💰🏭]/g, '').trim();
   let cleanType = apartmentType.replace('🛏️ ', '').trim();
   
-  // Using 'price' column instead of 'price_per_night'
   db.query(
     'SELECT * FROM apartments WHERE location = ? AND type = ? AND verified = 1 ORDER BY price',
     [cleanLocation, cleanType],
@@ -156,129 +155,114 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
         });
       }
       
-      // Send each apartment as a separate message with inline buttons
+      // Send each apartment as a separate message with photos attached
       results.forEach(apt => {
+        // Get the photos for this apartment
+        let photoPaths = [];
+        try {
+          if (apt.photo_paths) {
+            photoPaths = JSON.parse(apt.photo_paths);
+          } else if (apt.photos) {
+            photoPaths = apt.photos.split(',').map(p => p.trim());
+          }
+        } catch (e) {
+          console.error('Error parsing photos:', e);
+          photoPaths = [];
+        }
+        
+        // Determine the folder path based on apartment type
+        let typeFolder = '';
+        if (apt.type === 'Self Contain') {
+          typeFolder = 'self-contain';
+        } else if (apt.type === '1-Bedroom') {
+          typeFolder = '1-bedroom';
+        } else if (apt.type === '2-Bedroom') {
+          typeFolder = '2-bedroom';
+        } else if (apt.type === '3-Bedroom') {
+          typeFolder = '3-bedroom';
+        } else {
+          typeFolder = apt.type.toLowerCase().replace(' ', '-');
+        }
+        
+        // Create the message with address included
         const message = `
-👤 *Owner:* ${apt.landlord_id ? 'Property Owner' : 'Rayner'}
-🏠 *${apt.name}*
+🏠 *Apartment Name:* ${apt.name}
 📍 *Location:* ${apt.location}
+📌 *Address:* ${apt.address || 'Contact admin for address'}
 🏷️ *Type:* ${apt.type}
 💰 *Price:* ₦${apt.price}/night
 🛏️ *Bedrooms:* ${apt.bedrooms || 0}
 🚿 *Bathrooms:* ${apt.bathrooms || 1}
 📝 *Description:* ${apt.description}
+
+✨ *Apartment Photos:* ✨
         `;
         
+        // Send the text message first
         bot.sendMessage(chatId, message, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
-              [{ text: '📸 View Photos', callback_data: `photos_${apt.id}` }]
-            ]
+          parse_mode: 'Markdown'
+        }).then(() => {
+          
+          // Then send all photos one by one
+          if (photoPaths.length > 0) {
+            // Send each photo
+            const photoPromises = photoPaths.map(photoPath => {
+              const fullPath = photoPath.startsWith('/') 
+                ? photoPath 
+                : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPath}`;
+              
+              return bot.sendPhoto(chatId, path.join(__dirname, fullPath))
+                .catch(err => {
+                  console.error('Error sending photo:', err);
+                  return null;
+                });
+            });
+            
+            // After all photos are sent, show booking option
+            Promise.all(photoPromises).then(() => {
+              setTimeout(() => {
+                bot.sendMessage(chatId, '✨ *Would you like to book this apartment?* ✨', {
+                  parse_mode: 'Markdown',
+                  reply_markup: {
+                    inline_keyboard: [
+                      [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
+                      [{ text: '🔍 Search Again', callback_data: 'search_again' }]
+                    ]
+                  }
+                });
+              }, 500);
+            });
+          } else {
+            // If no photos, just show booking option
+            bot.sendMessage(chatId, '✨ *Would you like to book this apartment?* ✨', {
+              parse_mode: 'Markdown',
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
+                  [{ text: '🔍 Search Again', callback_data: 'search_again' }]
+                ]
+              }
+            });
           }
         });
       });
       
-      // Show options after apartments
-      bot.sendMessage(chatId, '✨ *What would you like to do next?* ✨', {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          keyboard: [
-            ['🔍 Search Again'],
-            ['⬅️ Back to Main Menu']
-          ],
-          resize_keyboard: true
-        }
-      });
+      // Show options after all apartments
+      setTimeout(() => {
+        bot.sendMessage(chatId, '🔍 *What would you like to do next?*', {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            keyboard: [
+              ['🔍 Search Again'],
+              ['⬅️ Back to Main Menu']
+            ],
+            resize_keyboard: true
+          }
+        });
+      }, 1000);
       
       // Clear the selected location
       delete selectedLocation[chatId];
-    }
-  );
-}
-
-/* ================= SEND APARTMENT PHOTOS ================= */
-function sendApartmentPhotos(chatId, apartmentId) {
-  db.query(
-    'SELECT * FROM apartments WHERE id = ?',
-    [apartmentId],
-    (err, results) => {
-      if (err || results.length === 0) {
-        return bot.sendMessage(chatId, '❌ Apartment not found');
-      }
-      
-      const apt = results[0];
-      let photoPaths = [];
-      
-      // Try to get from photo_paths first, then fall back to photos
-      try {
-        if (apt.photo_paths) {
-          photoPaths = JSON.parse(apt.photo_paths);
-        } else if (apt.photos) {
-          // If photos are stored as comma-separated string
-          photoPaths = apt.photos.split(',').map(p => p.trim());
-        }
-      } catch (e) {
-        console.error('Error parsing photos:', e);
-        photoPaths = [];
-      }
-      
-      if (photoPaths.length === 0) {
-        return bot.sendMessage(chatId, '📸 No photos available for this apartment');
-      }
-      
-      // Determine the folder path based on apartment type
-      let typeFolder = '';
-      if (apt.type === 'Self Contain') {
-        typeFolder = 'self-contain';
-      } else if (apt.type === '1-Bedroom') {
-        typeFolder = '1-bedroom';
-      } else if (apt.type === '2-Bedroom') {
-        typeFolder = '2-bedroom';
-      } else if (apt.type === '3-Bedroom') {
-        typeFolder = '3-bedroom';
-      } else {
-        typeFolder = apt.type.toLowerCase().replace(' ', '-');
-      }
-      
-      // Send first photo with caption - using 'price' instead of 'price_per_night'
-      const firstPhoto = photoPaths[0].startsWith('/') 
-        ? photoPaths[0] 
-        : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPaths[0]}`;
-      
-      bot.sendPhoto(chatId, path.join(__dirname, firstPhoto), {
-        caption: `👤 *Owner:* Rayner\n🏠 *${apt.name}*\n📍 *Location:* ${apt.location}\n🏷️ *Type:* ${apt.type}\n💰 *Price:* ₦${apt.price}/night`,
-        parse_mode: 'Markdown'
-      }).then(() => {
-        
-        // Send remaining photos
-        photoPaths.slice(1).forEach(photoPath => {
-          const fullPath = photoPath.startsWith('/') 
-            ? photoPath 
-            : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPath}`;
-          
-          bot.sendPhoto(chatId, path.join(__dirname, fullPath)).catch(err => {
-            console.error('Error sending photo:', err);
-          });
-        });
-        
-        // After sending all photos, ask if they want to book
-        setTimeout(() => {
-          bot.sendMessage(chatId, '✨ *Would you like to book this apartment?* ✨', {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
-                [{ text: '🔍 Search Again', callback_data: 'search_again' }]
-              ]
-            }
-          });
-        }, 1000);
-      }).catch(err => {
-        console.error('Error sending photo:', err);
-        bot.sendMessage(chatId, '❌ Error loading photos. Make sure the image files exist in the uploads folder.');
-      });
     }
   );
 }
@@ -515,11 +499,6 @@ bot.on('callback_query', (cb) => {
     const apartmentId = data.replace('book_', '');
     startBooking(chatId, apartmentId);
   }
-  
-  if (data.startsWith('photos_')) {
-    const apartmentId = data.replace('photos_', '');
-    sendApartmentPhotos(chatId, apartmentId);
-  }
 
   if (data.startsWith('confirm_property_owner_')) {
     const bookingCode = data.replace('confirm_property_owner_', '');
@@ -588,4 +567,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Using "price" column instead of "price_per_night" 🏠');
+console.log('✅ Bot Ready - Updated with address and auto photo display 🏠');
