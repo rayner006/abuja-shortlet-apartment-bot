@@ -457,3 +457,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
 }
 
 console.log('✅ Bot Ready - Working with your specified locations! 🗺️');
+
