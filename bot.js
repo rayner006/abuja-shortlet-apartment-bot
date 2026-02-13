@@ -184,26 +184,26 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           typeFolder = apt.type.toLowerCase().replace(' ', '-');
         }
         
-        // Create ONE media group with ALL photos
+        // Create ONE media group with ALL photos - NO CAPTION
         if (photoPaths.length > 0) {
           const mediaGroup = [];
           
           // Add up to 10 photos to media group (Telegram limit)
           const photosToSend = photoPaths.slice(0, 10);
           
-          photosToSend.forEach((photoPath, index) => {
+          photosToSend.forEach((photoPath) => {
             const fullPath = photoPath.startsWith('/') 
               ? photoPath 
               : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPath}`;
             
             mediaGroup.push({
               type: 'photo',
-              media: path.join(__dirname, fullPath),
-              caption: index === 0 ? `📸 ${apt.name} (${photoPaths.length} photos)` : undefined
+              media: path.join(__dirname, fullPath)
+              // NO CAPTION - removed completely
             });
           });
           
-          // Send ALL photos in ONE album/box
+          // Send ALL photos in ONE album/box with no text
           bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
             console.error('Error sending media group:', err);
           });
@@ -553,4 +553,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Apartment name in details section 🏠');
+console.log('✅ Bot Ready - Clean album with no extra text! 🏠');
