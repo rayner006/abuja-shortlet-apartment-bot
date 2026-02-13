@@ -59,6 +59,7 @@ process.on('SIGINT', () => {
 /* ================= TEMP STORAGE ================= */
 const awaitingPin = {};
 const userSessions = {}; // Store user booking data
+const selectedLocation = {}; // Store selected location for filtering
 
 /* ================= ERROR HANDLING ================= */
 bot.on('polling_error', (error) => {
@@ -103,14 +104,55 @@ function showLocations(chatId) {
   });
 }
 
-/* ================= FETCH APARTMENTS BY LOCATION ================= */
-function showApartmentsByLocation(chatId, location) {
-  // Remove emoji and trim
-  const cleanLocation = location.replace(/[🏛️🏢🏘️💰🏭]/g, '').trim();
+/* ================= SHOW APARTMENT TYPES ================= */
+function showApartmentTypes(chatId, location) {
+  // Store the selected location
+  selectedLocation[chatId] = location;
+  
+  bot.sendMessage(chatId, `📍 *Location:* ${location.replace(/[🏛️🏘️💰🏭]/g, '').trim()}\n\n🏠 *Select Apartment Type:*`, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      keyboard: [
+        ['🛏️ Self Contain', '🛏️ 1-Bedroom'],
+        ['🛏️ 2-Bedroom', '🛏️ 3-Bedroom'],
+        ['🛏️ 4-Bedroom', '🛏️ Duplex'],
+        ['🔍 Search Again', '⬅️ Back to Main Menu']
+      ],
+      resize_keyboard: true
+    }
+  });
+}
+
+/* ================= FETCH APARTMENTS BY LOCATION AND TYPE ================= */
+function showApartmentsByLocationAndType(chatId, apartmentType) {
+  const location = selectedLocation[chatId];
+  if (!location) {
+    return showLocations(chatId);
+  }
+  
+  // Clean up location and apartment type
+  const cleanLocation = location.replace(/[🏛️🏘️💰🏭]/g, '').trim();
+  let cleanType = apartmentType.replace('🛏️ ', '').trim();
+  
+  // Handle different naming conventions
+  let dbType = cleanType;
+  if (cleanType === 'Self Contain') {
+    dbType = 'Self Contain';
+  } else if (cleanType === '1-Bedroom') {
+    dbType = '1-Bedroom';
+  } else if (cleanType === '2-Bedroom') {
+    dbType = '2-Bedroom';
+  } else if (cleanType === '3-Bedroom') {
+    dbType = '3-Bedroom';
+  } else if (cleanType === '4-Bedroom') {
+    dbType = '4-Bedroom';
+  } else if (cleanType === 'Duplex') {
+    dbType = 'Duplex';
+  }
   
   db.query(
-    'SELECT * FROM apartments WHERE location = ? AND is_available = true',
-    [cleanLocation],
+    'SELECT * FROM apartments WHERE location = ? AND type = ? AND is_available = true',
+    [cleanLocation, dbType],
     (err, results) => {
       if (err) {
         console.error('Database error:', err);
@@ -118,7 +160,7 @@ function showApartmentsByLocation(chatId, location) {
       }
       
       if (results.length === 0) {
-        return bot.sendMessage(chatId, `😔 No apartments available in ${cleanLocation} right now.\nCheck back soon or try another location!`, {
+        return bot.sendMessage(chatId, `😔 No ${cleanType} apartments available in ${cleanLocation} right now.\nTry another apartment type or location!`, {
           reply_markup: {
             keyboard: [
               ['🔍 Search Again'],
@@ -134,6 +176,7 @@ function showApartmentsByLocation(chatId, location) {
         const message = `
 🏠 *${apt.name}*
 📍 *Location:* ${apt.location}
+🏷️ *Type:* ${apt.type}
 💰 *Price:* ₦${apt.price_per_night}/night
 🛏️ *Bedrooms:* ${apt.bedrooms}
 🚿 *Bathrooms:* ${apt.bathrooms}
@@ -162,6 +205,9 @@ function showApartmentsByLocation(chatId, location) {
           resize_keyboard: true
         }
       });
+      
+      // Clear the selected location
+      delete selectedLocation[chatId];
     }
   );
 }
@@ -261,6 +307,10 @@ Maitama • Asokoro • Wuse • Jabi • Garki • Gwarinpa
 Guzape • Katampe • Jahi • Utako • Wuye • Life Camp
 Apo • Lokogoma • Kubwa • Lugbe • Durumi • Gwagwalada
 
+🏠 *Apartment Types:*
+Self Contain • 1-Bedroom • 2-Bedroom • 3-Bedroom
+4-Bedroom • Duplex
+
 ✨ *Why choose us?*
 • Verified properties ✅
 • Secure payments 🔒
@@ -345,7 +395,17 @@ bot.on('message', (msg) => {
       aboutUs(chatId);
       break;
       
-    // All locations - exactly as requested
+    // Apartment type selections
+    case '🛏️ Self Contain':
+    case '🛏️ 1-Bedroom':
+    case '🛏️ 2-Bedroom':
+    case '🛏️ 3-Bedroom':
+    case '🛏️ 4-Bedroom':
+    case '🛏️ Duplex':
+      showApartmentsByLocationAndType(chatId, text);
+      break;
+      
+    // All locations
     case '🏛️ Maitama':
     case '🏛️ Asokoro':
     case '🏛️ Wuse':
@@ -364,7 +424,7 @@ bot.on('message', (msg) => {
     case '🏘️ Lugbe':
     case '🏘️ Durumi':
     case '🏭 Gwagwalada':
-      showApartmentsByLocation(chatId, text);
+      showApartmentTypes(chatId, text);
       break;
       
     default:
@@ -456,5 +516,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Working with your specified locations! 🗺️');
-
+console.log('✅ Bot Ready - Location and Apartment Type filtering added! 🏠');
