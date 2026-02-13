@@ -68,7 +68,7 @@ bot.on('polling_error', (error) => {
 console.log(`${process.env.BOT_NAME || 'Abuja Shortlet Bot'} is running...`);
 
 /* ================= MAIN MENU ================= */
-function showMainMenu(chatId, text = 'Welcome To Abuja Shortlet Apartments 🏠, Click On Any Menu Below To Continue 👇👇👇') {
+function showMainMenu(chatId, text = 'Welcome To Abuja Shortlet Apartments 🏠,\nClick On Any Menu Below To Continue 👇👇👇') {
   bot.sendMessage(chatId, text, {
     reply_markup: {
       keyboard: [
@@ -353,9 +353,9 @@ bot.on('message', (msg) => {
       break;
       
     default:
-      // 👇 FIX #2: ANY message from user who deleted chat goes to main menu
-      // This handles when user types anything after deleting chat history
-      showMainMenu(chatId, 'Welcome Back! 👋\n\nAbuja Shortlet Apartments 🏠, Click On Any Menu Below To Continue 👇👇👇');
+      // 👇 ANY message from user who deleted chat goes to main menu
+      // With proper line breaks
+      showMainMenu(chatId, 'Welcome Back! 👋\n\nAbuja Shortlet Apartments 🏠,\nClick On Any Menu Below To Continue 👇👇👇');
       break;
   }
 });
@@ -376,7 +376,7 @@ bot.on('callback_query', (cb) => {
   if (data.startsWith('photos_')) {
     const apartmentId = data.replace('photos_', '');
     // For now, send a placeholder
-    bot.sendMessage(chatId, '📸 *Photos Feature Coming Soon!* \n\nWe\'re working on adding beautiful photos of our apartments. Check back soon! 🚧', {
+    bot.sendMessage(chatId, '📸 *Photos Feature Coming Soon!* \n\nWe\'re working on adding beautiful photos of our apartments.\nCheck back soon! 🚧', {
       parse_mode: 'Markdown'
     });
   }
@@ -421,7 +421,7 @@ function verifyPin(chatId, bookingCode, pin) {
             });
           }
           
-          bot.sendMessage(chatId, '✅ *Payment Confirmed!* 🎉\n\nYour booking is complete. Thank you for choosing Abuja Shortlet Apartments! 🏠', {
+          bot.sendMessage(chatId, '✅ *Payment Confirmed!* 🎉\n\nYour booking is complete.\nThank you for choosing Abuja Shortlet Apartments! 🏠', {
             parse_mode: 'Markdown',
             reply_markup: {
               keyboard: [
@@ -446,5 +446,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Fixed welcome message and chat history handling');
-
+console.log('✅ Bot Ready - Messages formatted with proper line breaks');
