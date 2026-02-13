@@ -115,7 +115,6 @@ function showApartmentTypes(chatId, location) {
       keyboard: [
         ['🛏️ Self Contain', '🛏️ 1-Bedroom'],
         ['🛏️ 2-Bedroom', '🛏️ 3-Bedroom'],
-        ['🛏️ 4-Bedroom', '🛏️ Duplex'],
         ['🔍 Search Again', '⬅️ Back to Main Menu']
       ],
       resize_keyboard: true
@@ -144,10 +143,6 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
     dbType = '2-Bedroom';
   } else if (cleanType === '3-Bedroom') {
     dbType = '3-Bedroom';
-  } else if (cleanType === '4-Bedroom') {
-    dbType = '4-Bedroom';
-  } else if (cleanType === 'Duplex') {
-    dbType = 'Duplex';
   }
   
   db.query(
@@ -309,7 +304,6 @@ Apo • Lokogoma • Kubwa • Lugbe • Durumi • Gwagwalada
 
 🏠 *Apartment Types:*
 Self Contain • 1-Bedroom • 2-Bedroom • 3-Bedroom
-4-Bedroom • Duplex
 
 ✨ *Why choose us?*
 • Verified properties ✅
@@ -395,13 +389,11 @@ bot.on('message', (msg) => {
       aboutUs(chatId);
       break;
       
-    // Apartment type selections
+    // Apartment type selections (limited to 3-Bedroom)
     case '🛏️ Self Contain':
     case '🛏️ 1-Bedroom':
     case '🛏️ 2-Bedroom':
     case '🛏️ 3-Bedroom':
-    case '🛏️ 4-Bedroom':
-    case '🛏️ Duplex':
       showApartmentsByLocationAndType(chatId, text);
       break;
       
@@ -516,4 +508,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Location and Apartment Type filtering added! 🏠');
+console.log('✅ Bot Ready - Apartment types limited to 3-Bedroom 🏠');
