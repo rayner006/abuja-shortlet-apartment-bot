@@ -27,6 +27,7 @@ app.listen(PORT, () => {
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./config/db');
 const { generateaccesspin } = require('./utils/pingenerator');
+const path = require('path');
 
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { 
@@ -133,21 +134,9 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
   const cleanLocation = location.replace(/[🏛️🏘️💰🏭]/g, '').trim();
   let cleanType = apartmentType.replace('🛏️ ', '').trim();
   
-  // Handle different naming conventions
-  let dbType = cleanType;
-  if (cleanType === 'Self Contain') {
-    dbType = 'Self Contain';
-  } else if (cleanType === '1-Bedroom') {
-    dbType = '1-Bedroom';
-  } else if (cleanType === '2-Bedroom') {
-    dbType = '2-Bedroom';
-  } else if (cleanType === '3-Bedroom') {
-    dbType = '3-Bedroom';
-  }
-  
   db.query(
-    'SELECT * FROM apartments WHERE location = ? AND type = ? AND is_available = true',
-    [cleanLocation, dbType],
+    'SELECT * FROM apartments WHERE location = ? AND type = ? AND is_available = true ORDER BY price_per_night',
+    [cleanLocation, cleanType],
     (err, results) => {
       if (err) {
         console.error('Database error:', err);
@@ -169,6 +158,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       // Send each apartment as a separate message with inline buttons
       results.forEach(apt => {
         const message = `
+👤 *Owner:* ${apt.owner_name || 'Property Owner'}
 🏠 *${apt.name}*
 📍 *Location:* ${apt.location}
 🏷️ *Type:* ${apt.type}
@@ -203,6 +193,91 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       
       // Clear the selected location
       delete selectedLocation[chatId];
+    }
+  );
+}
+
+/* ================= SEND APARTMENT PHOTOS ================= */
+function sendApartmentPhotos(chatId, apartmentId) {
+  db.query(
+    'SELECT * FROM apartments WHERE id = ?',
+    [apartmentId],
+    (err, results) => {
+      if (err || results.length === 0) {
+        return bot.sendMessage(chatId, '❌ Apartment not found');
+      }
+      
+      const apt = results[0];
+      let photoPaths = [];
+      
+      // Try to get from photo_paths first, then fall back to photos
+      try {
+        if (apt.photo_paths) {
+          photoPaths = JSON.parse(apt.photo_paths);
+        } else if (apt.photos) {
+          // If photos are stored as comma-separated string
+          photoPaths = apt.photos.split(',').map(p => p.trim());
+        }
+      } catch (e) {
+        console.error('Error parsing photos:', e);
+        photoPaths = [];
+      }
+      
+      if (photoPaths.length === 0) {
+        return bot.sendMessage(chatId, '📸 No photos available for this apartment');
+      }
+      
+      // Determine the folder path based on apartment type
+      let typeFolder = '';
+      if (apt.type === 'Self Contain') {
+        typeFolder = 'self-contain';
+      } else if (apt.type === '1-Bedroom') {
+        typeFolder = '1-bedroom';
+      } else if (apt.type === '2-Bedroom') {
+        typeFolder = '2-bedroom';
+      } else if (apt.type === '3-Bedroom') {
+        typeFolder = '3-bedroom';
+      } else {
+        typeFolder = apt.type.toLowerCase().replace(' ', '-');
+      }
+      
+      // Send first photo with caption
+      const firstPhoto = photoPaths[0].startsWith('/') 
+        ? photoPaths[0] 
+        : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPaths[0]}`;
+      
+      bot.sendPhoto(chatId, path.join(__dirname, firstPhoto), {
+        caption: `👤 *Owner:* ${apt.owner_name || 'Rayner'}\n🏠 *${apt.name}*\n📍 *Location:* ${apt.location}\n🏷️ *Type:* ${apt.type}\n💰 *Price:* ₦${apt.price_per_night}/night`,
+        parse_mode: 'Markdown'
+      }).then(() => {
+        
+        // Send remaining photos
+        photoPaths.slice(1).forEach(photoPath => {
+          const fullPath = photoPath.startsWith('/') 
+            ? photoPath 
+            : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPath}`;
+          
+          bot.sendPhoto(chatId, path.join(__dirname, fullPath)).catch(err => {
+            console.error('Error sending photo:', err);
+          });
+        });
+        
+        // After sending all photos, ask if they want to book
+        setTimeout(() => {
+          bot.sendMessage(chatId, '✨ *Would you like to book this apartment?* ✨', {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
+                [{ text: '🔍 Search Again', callback_data: 'search_again' }]
+              ]
+            }
+          });
+        }, 1000);
+      }).catch(err => {
+        console.error('Error sending photo:', err);
+        bot.sendMessage(chatId, '❌ Error loading photos. Make sure the image files exist in the uploads folder.');
+      });
     }
   );
 }
@@ -305,6 +380,9 @@ Apo • Lokogoma • Kubwa • Lugbe • Durumi • Gwagwalada
 🏠 *Apartment Types:*
 Self Contain • 1-Bedroom • 2-Bedroom • 3-Bedroom
 
+👤 *Featured Owners:*
+Rayner • (More owners coming soon)
+
 ✨ *Why choose us?*
 • Verified properties ✅
 • Secure payments 🔒
@@ -389,7 +467,7 @@ bot.on('message', (msg) => {
       aboutUs(chatId);
       break;
       
-    // Apartment type selections (limited to 3-Bedroom)
+    // Apartment type selections
     case '🛏️ Self Contain':
     case '🛏️ 1-Bedroom':
     case '🛏️ 2-Bedroom':
@@ -429,7 +507,6 @@ bot.on('message', (msg) => {
 bot.on('callback_query', (cb) => {
   const chatId = cb.message.chat.id;
   const data = cb.data;
-  const messageId = cb.message.message_id;
 
   bot.answerCallbackQuery(cb.id);
 
@@ -440,9 +517,7 @@ bot.on('callback_query', (cb) => {
   
   if (data.startsWith('photos_')) {
     const apartmentId = data.replace('photos_', '');
-    bot.sendMessage(chatId, '📸 *Photos Feature Coming Soon!* \n\nWe\'re working on adding beautiful photos of our apartments.\nCheck back soon! 🚧', {
-      parse_mode: 'Markdown'
-    });
+    sendApartmentPhotos(chatId, apartmentId);
   }
 
   if (data.startsWith('confirm_property_owner_')) {
@@ -451,6 +526,10 @@ bot.on('callback_query', (cb) => {
     return bot.sendMessage(chatId, '🔐 *Enter tenant PIN:*', {
       parse_mode: 'Markdown'
     });
+  }
+  
+  if (data === 'search_again') {
+    showLocations(chatId);
   }
 });
 
@@ -508,4 +587,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Apartment types limited to 3-Bedroom 🏠');
+console.log('✅ Bot Ready - Complete with Rayner\'s 4 apartments in Kubwa! 🏠');
