@@ -1,4 +1,19 @@
 require('dotenv').config();
+
+/* ================= KEEP ALIVE SERVER (RAILWAY FIX) ================= */
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.get('/', (req, res) => {
+  res.send('Abuja Shortlet Bot is running 🚀');
+});
+
+app.listen(PORT, () => {
+  console.log(`🌍 Web server running on port ${PORT}`);
+});
+
+/* ================= TELEGRAM BOT ================= */
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./config/db');
 const path = require('path');
@@ -8,9 +23,10 @@ const { tenantConfirmKeyboard, propertyOwnerConfirmKeyboard } = require('./utils
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
-// TEMP PIN WAIT STORE
+/* ================= TEMP PIN STORE ================= */
 const awaitingPin = {};
 
+/* ================= ERRORS ================= */
 bot.on('polling_error', (error) => console.error('Polling error:', error));
 
 console.log(`${process.env.BOT_NAME || 'Abuja Shortlet Bot'} is running...`);
@@ -33,21 +49,21 @@ bot.onText(/\/start/, (msg) => {
   showmainmenu(msg.chat.id);
 });
 
-/* ================= PIN INPUT HANDLER ================= */
+/* ================= MESSAGE HANDLER ================= */
 bot.on('message', (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
   if (!text) return;
 
-  // PIN CHECK
+  /* ===== PIN INPUT ===== */
   if (awaitingPin[chatId]) {
     const bookingCode = awaitingPin[chatId];
     delete awaitingPin[chatId];
-
     return verifyPin(chatId, bookingCode, text.trim());
   }
 
+  /* ===== VIEW APARTMENTS ===== */
   if (text === '🏠 View Apartments') {
     return bot.sendMessage(chatId, 'Select Location:', {
       reply_markup: {
@@ -61,7 +77,10 @@ bot.on('message', (msg) => {
     });
   }
 
-  if (text === '⬅ Back to Menu') return showmainmenu(chatId);
+  /* ===== BACK MENU ===== */
+  if (text === '⬅ Back to Menu') {
+    return showmainmenu(chatId);
+  }
 });
 
 /* ================= CALLBACK ================= */
@@ -71,13 +90,12 @@ bot.on('callback_query', (cb) => {
 
   bot.answerCallbackQuery(cb.id);
 
-  // PROPERTY OWNER CONFIRM
+  /* ===== PROPERTY OWNER CONFIRM ===== */
   if (data.startsWith('confirm_property_owner_')) {
     const bookingCode = data.replace('confirm_property_owner_', '');
-
     awaitingPin[chatId] = bookingCode;
 
-    return bot.sendMessage(chatId, 'Enter tenant PIN:');
+    return bot.sendMessage(chatId, '🔐 Enter tenant PIN:');
   }
 });
 
@@ -88,8 +106,13 @@ function verifyPin(chatId, bookingCode, pin) {
      WHERE booking_code=? AND access_pin=? AND pin_used=false`,
     [bookingCode, pin],
     (err, rows) => {
+      if (err) {
+        console.error(err);
+        return bot.sendMessage(chatId, 'Database error ❌');
+      }
+
       if (rows.length === 0) {
-        return bot.sendMessage(chatId, '❌ Invalid PIN');
+        return bot.sendMessage(chatId, '❌ Invalid or Used PIN');
       }
 
       db.query(
