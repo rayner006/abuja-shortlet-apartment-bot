@@ -1,0 +1,22 @@
+{
+  "name": "abuja-shortlet-apartment-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for Abuja Shortlet Apartments",
+  "main": "bot.js",
+  "type": "commonjs",
+  "author": "David",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.4",
+    "express": "^5.2.1",
+    "mysql2": "^3.17.0",
+    "node-telegram-bot-api": "^0.67.0",
+    "sequelize": "^6.37.7"
+  }
+}
