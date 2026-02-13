@@ -155,7 +155,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
         });
       }
       
-      // Send each apartment with ALL photos at the top
+      // Send each apartment with ALL photos in one media group
       results.forEach(apt => {
         // Get all photos for this apartment
         let photoPaths = [];
@@ -184,41 +184,35 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           typeFolder = apt.type.toLowerCase().replace(' ', '-');
         }
         
-        // Send a header for the apartment
-        bot.sendMessage(chatId, `🏠 *${apt.name}*`, {
-          parse_mode: 'Markdown'
-        }).then(() => {
+        // Create ONE media group with ALL photos
+        if (photoPaths.length > 0) {
+          const mediaGroup = [];
           
-          // Send ALL photos first (in batches to avoid flooding)
-          if (photoPaths.length > 0) {
-            const sendPhotoBatch = (paths, index = 0) => {
-              if (index >= paths.length) return;
-              
-              const batch = paths.slice(index, index + 5); // Send 5 photos at a time
-              const promises = batch.map(photoPath => {
-                const fullPath = photoPath.startsWith('/') 
-                  ? photoPath 
-                  : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPath}`;
-                
-                return bot.sendPhoto(chatId, path.join(__dirname, fullPath))
-                  .catch(err => {
-                    console.error('Error sending photo:', err);
-                    return null;
-                  });
-              });
-              
-              Promise.all(promises).then(() => {
-                // Send next batch after a short delay
-                setTimeout(() => sendPhotoBatch(paths, index + 5), 300);
-              });
-            };
+          // Add up to 10 photos to media group (Telegram limit)
+          const photosToSend = photoPaths.slice(0, 10);
+          
+          photosToSend.forEach((photoPath, index) => {
+            const fullPath = photoPath.startsWith('/') 
+              ? photoPath 
+              : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPath}`;
             
-            sendPhotoBatch(photoPaths);
-          }
+            mediaGroup.push({
+              type: 'photo',
+              media: path.join(__dirname, fullPath),
+              caption: index === 0 ? `📸 ${apt.name} (${photoPaths.length} photos)` : undefined
+            });
+          });
           
-          // Then send the apartment details with Book Now button
-          setTimeout(() => {
-            const message = `
+          // Send ALL photos in ONE album/box
+          bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
+            console.error('Error sending media group:', err);
+          });
+        }
+        
+        // Then send the apartment details with Book Now button
+        setTimeout(() => {
+          const message = `
+🏠 *Name:* ${apt.name}
 📍 *Location:* ${apt.location}
 📌 *Address:* ${apt.address || 'Contact admin for address'}
 🏷️ *Type:* ${apt.type}
@@ -226,18 +220,17 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
 🛏️ *Bedrooms:* ${apt.bedrooms || 0}
 🚿 *Bathrooms:* ${apt.bathrooms || 1}
 📝 *Description:* ${apt.description}
-            `;
-            
-            bot.sendMessage(chatId, message, {
-              parse_mode: 'Markdown',
-              reply_markup: {
-                inline_keyboard: [
-                  [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }]
-                ]
-              }
-            });
-          }, photoPaths.length > 0 ? 1000 : 0); // Delay if photos were sent
-        });
+          `;
+          
+          bot.sendMessage(chatId, message, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }]
+              ]
+            }
+          });
+        }, 1000);
       });
       
       // Show options after all apartments
@@ -560,4 +553,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - All photos at top, description below, one Book Now button 🏠');
+console.log('✅ Bot Ready - Apartment name in details section 🏠');
