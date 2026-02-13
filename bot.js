@@ -1,13 +1,13 @@
 require('dotenv').config();
 
-// 👇 ADD THIS RIGHT HERE - UNHANDLED REJECTION HANDLER
+// 👇 UNHANDLED REJECTION HANDLER
 process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise);
   console.error('💥 Reason:', reason);
   console.error('📋 Stack:', reason?.stack || 'No stack trace');
 });
 
-// 👇 ADD THIS TOO - UNHANDLED EXCEPTIONS (just in case)
+// 👇 UNHANDLED EXCEPTIONS HANDLER
 process.on('uncaughtException', (error) => {
   console.error('💥 Uncaught Exception:', error);
 });
@@ -33,13 +33,45 @@ const { generateaccesspin } = require('./utils/pingenerator');
 const { tenantConfirmKeyboard, propertyOwnerConfirmKeyboard } = require('./utils/keyboard');
 
 const token = process.env.BOT_TOKEN;
-const bot = new TelegramBot(token, { polling: true });
+
+// 👇 UPDATED BOT INITIALIZATION WITH POLLING FIX
+const bot = new TelegramBot(token, { 
+  polling: true,
+  // This helps prevent multiple instance conflicts
+  polling: {
+    params: {
+      timeout: 30,
+      limit: 100,
+      allowed_updates: ['message', 'callback_query']
+    }
+  }
+});
+
+// 👇 GRACEFUL SHUTDOWN HANDLERS (Fixes 409 Conflict)
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, stopping bot...');
+  bot.stopPolling().then(() => {
+    console.log('✅ Polling stopped');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received, stopping bot...');
+  bot.stopPolling().then(() => {
+    console.log('✅ Polling stopped');
+    process.exit(0);
+  });
+});
 
 /* ================= TEMP PIN STORE ================= */
 const awaitingPin = {};
 
 /* ================= ERRORS ================= */
-bot.on('polling_error', (error) => console.error('Polling error:', error));
+bot.on('polling_error', (error) => {
+  console.error('Polling error:', error);
+  // Don't crash the bot on polling errors
+});
 
 console.log(`${process.env.BOT_NAME || 'Abuja Shortlet Bot'} is running...`);
 
@@ -120,7 +152,7 @@ function verifyPin(chatId, bookingCode, pin) {
     (err, rows) => {
 
       if (err) {
-        console.error(err);
+        console.error('Database error in verifyPin:', err);
         return bot.sendMessage(chatId, '❌ Database Error');
       }
 
@@ -130,10 +162,15 @@ function verifyPin(chatId, bookingCode, pin) {
 
       db.query(
         `UPDATE bookings SET pin_used=true WHERE booking_code=?`,
-        [bookingCode]
+        [bookingCode],
+        (updateErr) => {
+          if (updateErr) {
+            console.error('Error updating PIN status:', updateErr);
+            return bot.sendMessage(chatId, '❌ Error confirming PIN');
+          }
+          bot.sendMessage(chatId, '✅ Payment Confirmed!');
+        }
       );
-
-      bot.sendMessage(chatId, '✅ Payment Confirmed!');
     }
   );
 }
