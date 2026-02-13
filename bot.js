@@ -59,7 +59,6 @@ process.on('SIGINT', () => {
 /* ================= TEMP STORAGE ================= */
 const awaitingPin = {};
 const userSessions = {}; // Store user booking data
-const userFirstVisit = {}; // Track if user has seen welcome
 
 /* ================= ERROR HANDLING ================= */
 bot.on('polling_error', (error) => {
@@ -321,12 +320,8 @@ bot.on('message', (msg) => {
   // Handle menu navigation
   switch(text) {
     case '/start':
-      // 👇 UPDATED: Emoji-flair welcome message
-      bot.sendMessage(chatId, '👋 *Hello Dear!* \n\n✨ Click The Start Button Below To Begin Your Abuja Apartment Journey! ✨', {
-        parse_mode: 'Markdown'
-      }).then(() => {
-        showMainMenu(chatId);
-      });
+      // 👌 DIRECTLY SHOW MAIN MENU - NO DUPLICATE MESSAGE
+      showMainMenu(chatId);
       break;
       
     case '⬅️ Back to Main Menu':
@@ -359,7 +354,7 @@ bot.on('message', (msg) => {
       
     default:
       // If nothing matches, just show menu
-      showMainMenu(chatId, '🤔 I didn\'t understand that. Please choose an option below:');
+      showMainMenu(chatId, 'I didn\'t understand that. Please choose an option:');
   }
 });
 
@@ -449,4 +444,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Full functionality loaded with emoji flair! 🚀');
+console.log('✅ Bot Ready - Clean version with no duplicate message');
