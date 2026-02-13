@@ -68,7 +68,7 @@ bot.on('polling_error', (error) => {
 console.log(`${process.env.BOT_NAME || 'Abuja Shortlet Bot'} is running...`);
 
 /* ================= MAIN MENU ================= */
-function showMainMenu(chatId, text = 'Welcome To Abuja Shortlet Apartments 🏠,\nClick On Any Menu Below To Continue 👇👇👇') {
+function showMainMenu(chatId, text = 'Welcome To Abuja Shortlet Apartments 🏠,\nClick On Any Menu Below 👇👇👇') {
   bot.sendMessage(chatId, text, {
     reply_markup: {
       keyboard: [
@@ -355,7 +355,7 @@ bot.on('message', (msg) => {
     default:
       // 👇 ANY message from user who deleted chat goes to main menu
       // With proper line breaks
-      showMainMenu(chatId, 'Welcome Back! 👋\n\nAbuja Shortlet Apartments 🏠,\nClick On Any Menu Below To Continue 👇👇👇');
+      showMainMenu(chatId, 'Welcome Back! 👋\n\nAbuja Shortlet Apartments 🏠,\nClick On Any Menu Below 👇👇👇');
       break;
   }
 });
@@ -447,3 +447,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
 }
 
 console.log('✅ Bot Ready - Messages formatted with proper line breaks');
+
