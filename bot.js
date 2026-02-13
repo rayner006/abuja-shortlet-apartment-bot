@@ -1,5 +1,17 @@
 require('dotenv').config();
 
+// 👇 ADD THIS RIGHT HERE - UNHANDLED REJECTION HANDLER
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise);
+  console.error('💥 Reason:', reason);
+  console.error('📋 Stack:', reason?.stack || 'No stack trace');
+});
+
+// 👇 ADD THIS TOO - UNHANDLED EXCEPTIONS (just in case)
+process.on('uncaughtException', (error) => {
+  console.error('💥 Uncaught Exception:', error);
+});
+
 /* ================= KEEP ALIVE SERVER (FOR RAILWAY) ================= */
 const express = require('express');
 const app = express();
