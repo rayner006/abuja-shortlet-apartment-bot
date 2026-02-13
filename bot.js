@@ -68,7 +68,7 @@ bot.on('polling_error', (error) => {
 console.log(`${process.env.BOT_NAME || 'Abuja Shortlet Bot'} is running...`);
 
 /* ================= MAIN MENU ================= */
-function showMainMenu(chatId, text = 'Welcome to Abuja Shortlet Apartments 🏠') {
+function showMainMenu(chatId, text = 'Welcome To Abuja Shortlet Apartments 🏠, Click On Any Menu Below To Continue 👇👇👇') {
   bot.sendMessage(chatId, text, {
     reply_markup: {
       keyboard: [
@@ -320,7 +320,7 @@ bot.on('message', (msg) => {
   // Handle menu navigation
   switch(text) {
     case '/start':
-      // 👌 DIRECTLY SHOW MAIN MENU - NO DUPLICATE MESSAGE
+      // 👌 DIRECTLY SHOW MAIN MENU - NO EXTRA MESSAGE
       showMainMenu(chatId);
       break;
       
@@ -353,8 +353,10 @@ bot.on('message', (msg) => {
       break;
       
     default:
-      // If nothing matches, just show menu
-      showMainMenu(chatId, 'I didn\'t understand that. Please choose an option:');
+      // 👇 FIX #2: ANY message from user who deleted chat goes to main menu
+      // This handles when user types anything after deleting chat history
+      showMainMenu(chatId, 'Welcome Back! 👋\n\nWelcome To Abuja Shortlet Apartments 🏠, Click On Any Menu Below To Continue 👇👇👇');
+      break;
   }
 });
 
@@ -444,4 +446,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Clean version with no duplicate message');
+console.log('✅ Bot Ready - Fixed welcome message and chat history handling');
