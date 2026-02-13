@@ -134,8 +134,9 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
   const cleanLocation = location.replace(/[🏛️🏘️💰🏭]/g, '').trim();
   let cleanType = apartmentType.replace('🛏️ ', '').trim();
   
+  // Using 'price' column instead of 'price_per_night'
   db.query(
-    'SELECT * FROM apartments WHERE location = ? AND type = ? AND is_available = true ORDER BY price_per_night',
+    'SELECT * FROM apartments WHERE location = ? AND type = ? AND verified = 1 ORDER BY price',
     [cleanLocation, cleanType],
     (err, results) => {
       if (err) {
@@ -158,13 +159,13 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       // Send each apartment as a separate message with inline buttons
       results.forEach(apt => {
         const message = `
-👤 *Owner:* ${apt.owner_name || 'Property Owner'}
+👤 *Owner:* ${apt.landlord_id ? 'Property Owner' : 'Rayner'}
 🏠 *${apt.name}*
 📍 *Location:* ${apt.location}
 🏷️ *Type:* ${apt.type}
-💰 *Price:* ₦${apt.price_per_night}/night
-🛏️ *Bedrooms:* ${apt.bedrooms}
-🚿 *Bathrooms:* ${apt.bathrooms}
+💰 *Price:* ₦${apt.price}/night
+🛏️ *Bedrooms:* ${apt.bedrooms || 0}
+🚿 *Bathrooms:* ${apt.bathrooms || 1}
 📝 *Description:* ${apt.description}
         `;
         
@@ -241,13 +242,13 @@ function sendApartmentPhotos(chatId, apartmentId) {
         typeFolder = apt.type.toLowerCase().replace(' ', '-');
       }
       
-      // Send first photo with caption
+      // Send first photo with caption - using 'price' instead of 'price_per_night'
       const firstPhoto = photoPaths[0].startsWith('/') 
         ? photoPaths[0] 
         : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPaths[0]}`;
       
       bot.sendPhoto(chatId, path.join(__dirname, firstPhoto), {
-        caption: `👤 *Owner:* ${apt.owner_name || 'Rayner'}\n🏠 *${apt.name}*\n📍 *Location:* ${apt.location}\n🏷️ *Type:* ${apt.type}\n💰 *Price:* ₦${apt.price_per_night}/night`,
+        caption: `👤 *Owner:* Rayner\n🏠 *${apt.name}*\n📍 *Location:* ${apt.location}\n🏷️ *Type:* ${apt.type}\n💰 *Price:* ₦${apt.price}/night`,
         parse_mode: 'Markdown'
       }).then(() => {
         
@@ -381,7 +382,7 @@ Apo • Lokogoma • Kubwa • Lugbe • Durumi • Gwagwalada
 Self Contain • 1-Bedroom • 2-Bedroom • 3-Bedroom
 
 👤 *Featured Owners:*
-Rayner • (More owners coming soon)
+Rayner in Kubwa • More owners coming soon!
 
 ✨ *Why choose us?*
 • Verified properties ✅
@@ -587,4 +588,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Complete with Rayner\'s 4 apartments in Kubwa! 🏠');
+console.log('✅ Bot Ready - Using "price" column instead of "price_per_night" 🏠');
