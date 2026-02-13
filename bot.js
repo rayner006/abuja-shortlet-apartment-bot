@@ -1,12 +1,12 @@
 require('dotenv').config();
 
-/* ================= KEEP ALIVE SERVER (RAILWAY FIX) ================= */
+/* ================= KEEP ALIVE SERVER (FOR RAILWAY) ================= */
 const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('Abuja Shortlet Bot is running 🚀');
+  res.send('Abuja Shortlet Bot Running 🚀');
 });
 
 app.listen(PORT, () => {
@@ -106,9 +106,10 @@ function verifyPin(chatId, bookingCode, pin) {
      WHERE booking_code=? AND access_pin=? AND pin_used=false`,
     [bookingCode, pin],
     (err, rows) => {
+
       if (err) {
         console.error(err);
-        return bot.sendMessage(chatId, 'Database error ❌');
+        return bot.sendMessage(chatId, '❌ Database Error');
       }
 
       if (rows.length === 0) {
