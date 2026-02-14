@@ -286,60 +286,61 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
         
         console.log(`📸 ${apt.type} - Final photo paths (${photoPaths.length} photos):`, photoPaths);
         
-        // Send all photos in ONE album
-        if (photoPaths.length > 0) {
-          const mediaGroup = [];
-          
-          // Take up to 10 photos (Telegram's limit per album)
-          const photosToSend = photoPaths.slice(0, 10);
-          
-          photosToSend.forEach((photoPath, index) => {
-            // Clean the path - remove any quotes if present
-            const cleanPath = photoPath.replace(/^"|"$/g, '');
-            
-            // Construct full path
-            const fullPath = path.join(__dirname, cleanPath);
-            console.log(`📸 ${apt.type} - Adding to album:`, fullPath);
-            
-            // Check if file exists
-            if (fs.existsSync(fullPath)) {
-              mediaGroup.push({
-              type: 'photo',
-              media: fullPath
-           // No caption - completely removed
-            });
-            } else {
-              console.log(`❌ ${apt.type} - Photo not found for album:`, fullPath);
-            }
-          });
-          
-          // Send as single album if we have photos
-          if (mediaGroup.length > 0) {
-            bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
-              console.error('Error sending media group:', err);
-              // Fallback to individual photos if album fails
-              photoPaths.forEach((photoPath, idx) => {
-                const cleanPath = photoPath.replace(/^"|"$/g, '');
-                const fullPath = path.join(__dirname, cleanPath);
-                
-                setTimeout(() => {
-                  bot.sendPhoto(chatId, fullPath, {
-                    caption: idx === 0 ? `📸 *${apt.name}*` : undefined,
-                    parse_mode: 'Markdown'
-                  }).catch(e => console.error(`Error sending photo ${idx + 1}:`, e.message));
-                }, idx * 500);
-              });
-            });
-          } else {
-            bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
-          }
-        } else {
-          bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
-        }
+      // Send all photos in ONE album
+if (photoPaths.length > 0) {
+  const mediaGroup = [];
+  
+  // Take up to 10 photos (Telegram's limit per album)
+  const photosToSend = photoPaths.slice(0, 10);
+  
+  photosToSend.forEach((photoPath, index) => {
+    // Clean the path - remove any quotes if present
+    const cleanPath = photoPath.replace(/^"|"$/g, '');
+    
+    // Construct full path
+    const fullPath = path.join(__dirname, cleanPath);
+    console.log(`📸 ${apt.type} - Adding to album:`, fullPath);
+    
+    // Check if file exists
+    if (fs.existsSync(fullPath)) {
+      mediaGroup.push({
+        type: 'photo',
+        media: fullPath,
+        caption: index === 0 ? `📸 *${apt.name}* (${photoPaths.length} photos)` : undefined,
+        parse_mode: 'Markdown'
+      });
+    } else {
+      console.log(`❌ ${apt.type} - Photo not found for album:`, fullPath);
+    }
+  });
+  
+  // Send as single album if we have photos
+  if (mediaGroup.length > 0) {
+    bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
+      console.error('Error sending media group:', err);
+      // Fallback to individual photos if album fails
+      photoPaths.forEach((photoPath, idx) => {
+        const cleanPath = photoPath.replace(/^"|"$/g, '');
+        const fullPath = path.join(__dirname, cleanPath);
         
-        // Send apartment details with Book Now button after photos
         setTimeout(() => {
-          const message = `
+          bot.sendPhoto(chatId, fullPath, {
+            caption: idx === 0 ? `📸 *${apt.name}*` : undefined,
+            parse_mode: 'Markdown'
+          }).catch(e => console.error(`Error sending photo ${idx + 1}:`, e.message));
+        }, idx * 500);
+      });
+    });
+  } else {
+    bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
+  }
+} else {
+  bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
+}
+
+// Send apartment details with Book Now button after photos
+setTimeout(() => {
+  const message = `
 🏠 *Name:* ${apt.name}
 📍 *Location:* ${apt.location}
 📌 *Address:* ${apt.address || 'Contact admin for address'}
@@ -348,19 +349,18 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
 🛏️ *Bedrooms:* ${apt.bedrooms || 0}
 🚿 *Bathrooms:* ${apt.bathrooms || 1}
 📝 *Description:* ${apt.description}
-          `;
-          
-          const keyboard = getApartmentActionsKeyboard(apt.id);
-          
-          bot.sendMessage(chatId, message, {
-            parse_mode: 'Markdown',
-            reply_markup: keyboard
-          }).catch(err => {
-            console.error('Error sending apartment details:', err);
-          });
-          
-        }, 1500);
-      });
+  `;
+  
+  const keyboard = getApartmentActionsKeyboard(apt.id);
+  
+  bot.sendMessage(chatId, message, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard
+  }).catch(err => {
+    console.error('Error sending apartment details:', err);
+  });
+  
+}, 1500);
       
       // Show search options after all apartments
       setTimeout(() => {
@@ -1429,6 +1429,7 @@ const scheduleDailySummary = () => {
 scheduleDailySummary();
 
 console.log('✅ Bot Ready - Fixed property_owners column name! 🏠');
+
 
 
 
