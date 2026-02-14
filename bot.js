@@ -381,10 +381,39 @@ function notifyAdminNewBooking(bookingInfo) {
   console.log('📢 Attempting to notify admin with ID:', ADMIN_IDS[0]);
   
   ADMIN_IDS.forEach(adminId => {
-    const message = `
-🔔 *NEW BOOKING ALERT!* 🔔
+    // Plain text version (no markdown) as fallback
+    const textMessage = 
+`🔔 NEW BOOKING ALERT! 🔔
 
-🔑 *Booking Code:* \`${bookingInfo.bookingCode}\`
+Booking Code: ${bookingInfo.bookingCode}
+Booking ID: ${bookingInfo.bookingId}
+
+Guest Details:
+• Name: ${bookingInfo.guestName}
+• Username: @${bookingInfo.guestUsername}
+• Phone: ${bookingInfo.guestPhone}
+
+Apartment Details:
+• Name: ${bookingInfo.apartmentName}
+• Location: ${bookingInfo.location}
+• Type: ${bookingInfo.type}
+• Price: ₦${bookingInfo.price}/night
+Owner ID: ${bookingInfo.ownerId || 'Not assigned'}
+
+Booking Time: ${new Date().toLocaleString()}
+Your Commission (10%): ₦${(bookingInfo.price * 0.1).toFixed(2)}
+
+━━━━━━━━━━━━━━━━
+Quick Actions:
+/check_subscription ${bookingInfo.ownerId || '?'}
+/commissions
+/dashboard`;
+    
+    // Markdown version
+    const markdownMessage = 
+`🔔 *NEW BOOKING ALERT!* 🔔
+
+🔑 *Booking Code:* ${bookingInfo.bookingCode}
 🆔 *Booking ID:* ${bookingInfo.bookingId}
 
 👤 *Guest Details:*
@@ -400,23 +429,37 @@ function notifyAdminNewBooking(bookingInfo) {
 • Owner ID: ${bookingInfo.ownerId || 'Not assigned'}
 
 📅 *Booking Time:* ${new Date().toLocaleString()}
-💰 *Your Commission (10%):* ₦${bookingInfo.price * 0.1}
+💰 *Your Commission (10%):* ₦${(bookingInfo.price * 0.1).toFixed(2)}
 
 ━━━━━━━━━━━━━━━━
 📊 *Quick Actions:*
 • Check owner subscription: /check_subscription ${bookingInfo.ownerId || '?'}
 • View all commissions: /commissions
-• Dashboard: /dashboard
-    `;
+• Dashboard: /dashboard`;
     
     const keyboard = getAdminActionsKeyboard(bookingInfo.bookingCode);
-    bot.sendMessage(adminId, message, {
+    
+    // Try with markdown first
+    bot.sendMessage(adminId, markdownMessage, {
       parse_mode: 'Markdown',
       reply_markup: keyboard
     }).then(() => {
       console.log(`✅ Admin notification sent successfully to ${adminId}`);
     }).catch(err => {
-      console.error(`❌ Error notifying admin ${adminId}:`, err.message);
+      console.error(`❌ Markdown failed, trying plain text:`, err.message);
+      
+      // Fallback to plain text
+      bot.sendMessage(adminId, textMessage, {
+        reply_markup: keyboard
+      }).catch(fallbackErr => {
+        console.error(`❌ Plain text also failed:`, fallbackErr.message);
+        
+        // Ultimate fallback - just the essentials
+        bot.sendMessage(adminId, 
+          `🔔 New Booking: ${bookingInfo.bookingCode}\nGuest: ${bookingInfo.guestName}\nApartment: ${bookingInfo.apartmentName}\nPrice: ₦${bookingInfo.price}`,
+          { reply_markup: keyboard }
+        );
+      });
     });
   });
 }
@@ -1346,3 +1389,4 @@ const scheduleDailySummary = () => {
 scheduleDailySummary();
 
 console.log('✅ Bot Ready - Fixed property_owners column name! 🏠');
+
