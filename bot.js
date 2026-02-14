@@ -27,6 +27,7 @@ app.listen(PORT, () => {
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./config/db');
 const path = require('path');
+const fs = require('fs');
 
 // Import from utils folder
 const { generateaccesspin, validatePIN, generateBookingCode } = require('./utils/pingenerator');
@@ -52,7 +53,7 @@ const bot = new TelegramBot(token, {
   }
 });
 
-// Admin IDs - Your correct Telegram ID
+// Admin IDs
 const ADMIN_IDS = [6947618479];
 
 // Store owner chat IDs
@@ -61,7 +62,7 @@ const ownerChatIds = {};
 // Store owner info from database
 let ownerInfo = {};
 
-// Log all incoming messages for debugging
+// Log all incoming messages
 bot.on('message', (msg) => {
   console.log('📨 Message received:', {
     chatId: msg.chat.id,
@@ -101,7 +102,7 @@ function saveUserInfo(msg) {
   });
 }
 
-// Load owner info from database on startup
+// Load owner info
 function loadOwnerInfo() {
   db.query('SELECT id, name, telegram_chat_id FROM property_owners', (err, results) => {
     if (err) {
@@ -118,10 +119,9 @@ function loadOwnerInfo() {
   });
 }
 
-// Call this when bot starts
 loadOwnerInfo();
 
-// Graceful shutdown handlers
+// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('🛑 SIGTERM received, stopping bot...');
   bot.stopPolling().then(() => {
@@ -207,41 +207,64 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       }
       
       results.forEach(apt => {
+        // Get photo paths from database
         let photoPaths = [];
         try {
           if (apt.photo_paths) {
             photoPaths = JSON.parse(apt.photo_paths);
+            console.log(`📸 ${apt.type} - Raw photo_paths from DB:`, apt.photo_paths);
           } else if (apt.photos) {
             photoPaths = apt.photos.split(',').map(p => p.trim());
+            console.log(`📸 ${apt.type} - Using photos field:`, apt.photos);
           }
         } catch (e) {
           console.error('Error parsing photos:', e);
           photoPaths = [];
         }
         
-        // SIMPLE FIX: Use the photo_paths directly from database
-        // They already contain the correct full paths
+        console.log(`📸 ${apt.type} - Final photo paths:`, photoPaths);
+        
+        // Send photos one by one
         if (photoPaths.length > 0) {
-          const mediaGroup = [];
-          const photosToSend = photoPaths.slice(0, 10);
+          // Send first photo with caption
+          const firstPhotoPath = path.join(__dirname, photoPaths[0]);
+          console.log(`📸 ${apt.type} - First photo full path:`, firstPhotoPath);
           
-          photosToSend.forEach((photoPath) => {
-            // If it's a full path from database, use it directly
-            const fullPath = path.join(__dirname, photoPath);
-            console.log('📸 Sending photo:', fullPath);
-            
-            mediaGroup.push({
-              type: 'photo',
-              media: fullPath
-            });
+          // Check if file exists
+          if (fs.existsSync(firstPhotoPath)) {
+            console.log(`✅ ${apt.type} - First photo exists`);
+          } else {
+            console.log(`❌ ${apt.type} - First photo NOT found at:`, firstPhotoPath);
+          }
+          
+          bot.sendPhoto(chatId, firstPhotoPath, {
+            caption: `📸 *${apt.name}* - Photo 1/${photoPaths.length}`,
+            parse_mode: 'Markdown'
+          }).catch(err => {
+            console.error(`Error sending first photo for ${apt.type}:`, err);
           });
           
-          bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
-            console.error('Error sending media group:', err);
-          });
+          // Send remaining photos after delay
+          if (photoPaths.length > 1) {
+            setTimeout(() => {
+              for (let i = 1; i < photoPaths.length; i++) {
+                const photoPath = path.join(__dirname, photoPaths[i]);
+                console.log(`📸 ${apt.type} - Photo ${i+1} path:`, photoPath);
+                
+                bot.sendPhoto(chatId, photoPath, {
+                  caption: `📸 *${apt.name}* - Photo ${i+1}/${photoPaths.length}`,
+                  parse_mode: 'Markdown'
+                }).catch(err => {
+                  console.error(`Error sending photo ${i+1} for ${apt.type}:`, err);
+                });
+              }
+            }, 1000);
+          }
+        } else {
+          bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
         }
         
-        // Send apartment details with Book Now button
+        // Send apartment details with Book Now button after photos
         setTimeout(() => {
           const message = `
 🏠 *Name:* ${apt.name}
@@ -263,16 +286,17 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
             console.error('Error sending apartment details:', err);
           });
           
-        }, 1000);
+        }, photoPaths.length * 1000 + 500);
       });
       
+      // Show search options after all apartments
       setTimeout(() => {
         const keyboard = getSearchOptionsKeyboard();
         bot.sendMessage(chatId, '🔍 *What would you like to do next?*', {
           parse_mode: 'Markdown',
           reply_markup: keyboard.reply_markup
         });
-      }, 2000);
+      }, 5000);
       
       delete selectedLocation[chatId];
     }
@@ -321,6 +345,8 @@ Please contact the guest to confirm their booking.
 
 /* ================= NOTIFY ADMIN ABOUT NEW BOOKING ================= */
 function notifyAdminNewBooking(bookingInfo) {
+  console.log('📢 Attempting to notify admin with ID:', ADMIN_IDS[0]);
+  
   ADMIN_IDS.forEach(adminId => {
     const message = `
 🔔 *NEW BOOKING ALERT!* 🔔
@@ -354,8 +380,10 @@ function notifyAdminNewBooking(bookingInfo) {
     bot.sendMessage(adminId, message, {
       parse_mode: 'Markdown',
       reply_markup: keyboard
+    }).then(() => {
+      console.log(`✅ Admin notification sent successfully to ${adminId}`);
     }).catch(err => {
-      console.error(`Error notifying admin:`, err.message);
+      console.error(`❌ Error notifying admin ${adminId}:`, err.message);
     });
   });
 }
@@ -422,6 +450,30 @@ bot.onText(/\/test_pin/, (msg) => {
   });
 });
 
+bot.onText(/\/test_notify/, (msg) => {
+  const chatId = msg.chat.id;
+  if (ADMIN_IDS.includes(chatId)) {
+    const testBooking = {
+      bookingCode: 'TEST' + Date.now().toString().slice(-8),
+      bookingId: 999,
+      guestName: 'Test User',
+      guestUsername: 'testuser',
+      guestPhone: '08000000000',
+      apartmentName: 'Test Apartment',
+      location: 'Test Location',
+      type: 'Test Type',
+      price: 50000,
+      ownerId: 1
+    };
+    notifyAdminNewBooking(testBooking);
+    bot.sendMessage(chatId, '📨 *Test notification sent!*\nCheck if you received it.', {
+      parse_mode: 'Markdown'
+    });
+  } else {
+    bot.sendMessage(chatId, '❌ Only admin can use this command.');
+  }
+});
+
 /* ================= START BOOKING PROCESS ================= */
 function startBooking(chatId, apartmentId) {
   db.query(
@@ -472,7 +524,6 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
   const pin = generateaccesspin();
   
   if (!validatePIN(pin)) {
-    console.error('❌ PIN validation failed:', pin);
     return bot.sendMessage(chatId, '❌ Error generating valid PIN. Please try again.');
   }
   
@@ -696,6 +747,102 @@ bot.onText(/\/expired_subs/, (msg) => {
   );
 });
 
+bot.onText(/\/commissions(?:\s+(\d+))?/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return bot.sendMessage(chatId, '❌ This command is for admins only.');
+  }
+  
+  const ownerId = match[1] ? parseInt(match[1]) : null;
+  
+  let query = `
+    SELECT 
+      o.name as owner_name,
+      COUNT(c.id) as total_bookings,
+      SUM(c.amount_paid) as total_revenue,
+      SUM(c.commission_amount) as total_commission,
+      SUM(CASE WHEN c.commission_status = 'paid' THEN c.commission_amount ELSE 0 END) as paid_commission,
+      SUM(CASE WHEN c.commission_status = 'pending' THEN c.commission_amount ELSE 0 END) as pending_commission
+    FROM commission_tracking c
+    JOIN property_owners o ON c.owner_id = o.id
+  `;
+  
+  const params = [];
+  if (ownerId) {
+    query += ' WHERE c.owner_id = ?';
+    params.push(ownerId);
+  }
+  
+  query += ' GROUP BY c.owner_id, o.name ORDER BY total_commission DESC';
+  
+  db.query(query, params, (err, results) => {
+    if (err) {
+      console.error('Error fetching commissions:', err);
+      return bot.sendMessage(chatId, '❌ Error fetching data.');
+    }
+    
+    if (results.length === 0) {
+      return bot.sendMessage(chatId, '📊 No commission data found.');
+    }
+    
+    let message = '💰 *COMMISSION REPORT*\n\n';
+    let grandTotal = 0;
+    let grandPaid = 0;
+    let grandPending = 0;
+    
+    results.forEach(row => {
+      message += `👤 *${row.owner_name}*\n`;
+      message += `📊 Bookings: ${row.total_bookings}\n`;
+      message += `💰 Revenue: ₦${parseFloat(row.total_revenue || 0).toLocaleString()}\n`;
+      message += `💵 Commission (10%): ₦${parseFloat(row.total_commission || 0).toLocaleString()}\n`;
+      message += `✅ Paid: ₦${parseFloat(row.paid_commission || 0).toLocaleString()}\n`;
+      message += `⏳ Pending: ₦${parseFloat(row.pending_commission || 0).toLocaleString()}\n\n`;
+      
+      grandTotal += parseFloat(row.total_commission || 0);
+      grandPaid += parseFloat(row.paid_commission || 0);
+      grandPending += parseFloat(row.pending_commission || 0);
+    });
+    
+    message += `━━━━━━━━━━━━━━━━\n`;
+    message += `📊 *TOTALS:*\n`;
+    message += `💰 Total Commission: ₦${grandTotal.toLocaleString()}\n`;
+    message += `✅ Total Paid: ₦${grandPaid.toLocaleString()}\n`;
+    message += `⏳ Total Pending: ₦${grandPending.toLocaleString()}`;
+    
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  });
+});
+
+bot.onText(/\/pay_commission (\d+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return bot.sendMessage(chatId, '❌ This command is for admins only.');
+  }
+  
+  const commissionId = parseInt(match[1]);
+  
+  db.query(
+    `UPDATE commission_tracking 
+     SET commission_status = 'paid', commission_paid_date = NOW() 
+     WHERE id = ?`,
+    [commissionId],
+    (err, result) => {
+      if (err) {
+        console.error('Error updating commission:', err);
+        return bot.sendMessage(chatId, '❌ Error updating commission.');
+      }
+      
+      if (result.affectedRows === 0) {
+        return bot.sendMessage(chatId, '❌ Commission ID not found.');
+      }
+      
+      bot.sendMessage(chatId, `✅ Commission ID ${commissionId} marked as paid.`);
+    }
+  );
+});
+
 bot.onText(/\/dashboard/, (msg) => {
   const chatId = msg.chat.id;
   
@@ -915,6 +1062,7 @@ bot.on('message', (msg) => {
 bot.on('callback_query', (cb) => {
   const chatId = cb.message.chat.id;
   const data = cb.data;
+  const messageId = cb.message.message_id;
 
   bot.answerCallbackQuery(cb.id);
 
@@ -936,6 +1084,15 @@ bot.on('callback_query', (cb) => {
         }
         
         bot.sendMessage(chatId, `✅ Booking ${bookingCode} confirmed. Commission will be processed.`);
+        
+        bot.editMessageText(
+          cb.message.text + '\n\n✅ *CONFIRMED BY OWNER*',
+          {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown'
+          }
+        ).catch(e => console.log('Error editing message:', e));
       }
     );
   }
@@ -943,10 +1100,50 @@ bot.on('callback_query', (cb) => {
   if (data.startsWith('contacted_')) {
     const bookingCode = data.replace('contacted_', '');
     bot.sendMessage(chatId, `✅ Marked booking ${bookingCode} as contacted.`);
+    
+    bot.editMessageText(
+      cb.message.text + '\n\n📞 *GUEST CONTACTED*',
+      {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: 'Markdown'
+      }
+    ).catch(e => console.log('Error editing message:', e));
   }
 
   if (data === 'admin_dashboard') {
     bot.sendMessage(chatId, '/dashboard');
+  }
+
+  if (data.startsWith('admin_commission_')) {
+    const bookingCode = data.replace('admin_commission_', '');
+    
+    db.query(
+      `SELECT b.*, a.owner_id, a.price, a.name as apartment_name
+       FROM bookings b
+       JOIN apartments a ON b.apartment_id = a.id
+       WHERE b.booking_code = ?`,
+      [bookingCode],
+      (err, results) => {
+        if (err || results.length === 0) {
+          return bot.sendMessage(chatId, '❌ Booking not found');
+        }
+        
+        const booking = results[0];
+        const commission = booking.amount * 0.1;
+        
+        bot.sendMessage(chatId, 
+          `💰 *Commission Details for ${bookingCode}*\n\n` +
+          `• Apartment: ${booking.apartment_name}\n` +
+          `• Amount: ₦${booking.amount}\n` +
+          `• Commission (10%): ₦${commission}\n` +
+          `• Owner ID: ${booking.owner_id || 'Not assigned'}\n` +
+          `• Status: ${booking.owner_confirmed ? '✅ Owner Confirmed' : '⏳ Pending'}\n\n` +
+          `Use /pay_commission [id] when paid`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+    );
   }
 
   if (data.startsWith('confirm_property_owner_')) {
@@ -997,7 +1194,7 @@ function verifyPin(chatId, bookingCode, pin) {
          SET pin_used=1, tenant_confirmed_at=NOW(), status=?
          WHERE booking_code=?`,
         ['completed', bookingCode],
-        (updateErr) => {
+        (updateErr, result) => {
           if (updateErr) {
             console.error('Error updating PIN status:', updateErr);
             return bot.sendMessage(chatId, '❌ *Error Confirming PIN* \nPlease contact admin.', {
@@ -1033,4 +1230,72 @@ function verifyPin(chatId, bookingCode, pin) {
   );
 }
 
-console.log('✅ Bot Ready - Simple and clean! 🏠');
+/* ================= SEND DAILY SUMMARY ================= */
+function sendDailySummary() {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  db.query(
+    `SELECT 
+      COUNT(*) as total_bookings,
+      SUM(amount) as total_revenue,
+      SUM(amount * 0.1) as total_commission
+     FROM bookings 
+     WHERE created_at BETWEEN ? AND ?`,
+    [startOfDay, endOfDay],
+    (err, results) => {
+      if (err) {
+        console.error('Error getting daily summary:', err);
+        return;
+      }
+      
+      const summary = results[0];
+      
+      ADMIN_IDS.forEach(adminId => {
+        const message = `
+📅 *Daily Summary - ${new Date().toLocaleDateString()}*
+
+📊 *Today's Stats:*
+• Bookings: ${summary.total_bookings || 0}
+• Revenue: ₦${(summary.total_revenue || 0).toLocaleString()}
+• Commission: ₦${(summary.total_commission || 0).toLocaleString()}
+
+━━━━━━━━━━━━━━━━
+Check /dashboard for more details
+        `;
+        
+        bot.sendMessage(adminId, message, { parse_mode: 'Markdown' });
+      });
+    }
+  );
+}
+
+// Schedule daily summary at 9 PM
+const scheduleDailySummary = () => {
+  const now = new Date();
+  const night = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    21, 0, 0
+  );
+  
+  let msUntilNight = night.getTime() - now.getTime();
+  if (msUntilNight < 0) {
+    msUntilNight += 24 * 60 * 60 * 1000;
+  }
+  
+  setTimeout(() => {
+    sendDailySummary();
+    setInterval(sendDailySummary, 24 * 60 * 60 * 1000);
+  }, msUntilNight);
+  
+  console.log('📅 Daily summary scheduled for 9:00 PM');
+};
+
+scheduleDailySummary();
+
+console.log('✅ Bot Ready - All features intact with photo fix! 🏠');
