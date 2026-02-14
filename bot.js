@@ -26,7 +26,7 @@ app.listen(PORT, () => {
 /* ================= TELEGRAM BOT ================= */
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./config/db');
-const { generateaccesspin } = require('./utils/pingenerator');
+const { generateaccesspin, validatePIN, generateBookingCode } = require('./utils/pingenerator');
 const path = require('path');
 
 const token = process.env.BOT_TOKEN;
@@ -511,19 +511,19 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
   const username = msg.from.username || 'No username';
   const fullName = `${firstName} ${lastName}`.trim();
   
-  const bookingCode = 'BOOK' + Date.now().toString().slice(-8);
+  // Use the pingenerator functions
+  const bookingCode = generateBookingCode();
   const amount = session.apartmentPrice;
   const commission = amount * 0.1; // 10% commission
-  
-  // Using the updated pingenerator
   const pin = generateaccesspin();
+  
   console.log('🔐 Generated PIN for booking:', pin);
   console.log('📏 PIN length:', pin.length);
   
-  // Validate PIN
-  if (pin.length !== 5) {
-    console.error('❌ PIN generation error: Generated PIN length is', pin.length);
-    return bot.sendMessage(chatId, '❌ Error generating PIN. Please try again.');
+  // Validate PIN using pingenerator
+  if (!validatePIN(pin)) {
+    console.error('❌ PIN validation failed:', pin);
+    return bot.sendMessage(chatId, '❌ Error generating valid PIN. Please try again.');
   }
   
   // Match exact table columns from your database
@@ -1205,6 +1205,13 @@ bot.on('callback_query', (cb) => {
 
 /* ================= VERIFY PIN ================= */
 function verifyPin(chatId, bookingCode, pin) {
+  // Validate PIN format first
+  if (!validatePIN(pin)) {
+    return bot.sendMessage(chatId, '❌ *Invalid PIN format*\nPIN must be 5 digits.', {
+      parse_mode: 'Markdown'
+    });
+  }
+  
   db.query(
     `SELECT b.*, a.owner_id, a.price 
      FROM bookings b
@@ -1341,4 +1348,4 @@ const scheduleDailySummary = () => {
 // Start the scheduler
 scheduleDailySummary();
 
-console.log('✅ Bot Ready - Complete with updated pingenerator and admin notifications! 🏠');
+console.log('✅ Bot Ready - Complete with separate pingenerator! 🏠');
