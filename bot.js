@@ -330,20 +330,28 @@ function notifyOwnerCommission(ownerId, bookingCode, amount) {
 function trackCommission(bookingId, bookingCode, ownerId, apartmentId, amount) {
   const commission = amount * 0.1; // 10%
   
-  db.query(
-    `INSERT INTO commission_tracking 
-     (booking_id, owner_id, apartment_id, booking_code, guest_name, amount_paid, commission_amount, commission_status)
-     SELECT ?, ?, ?, ?, user_name, ?, ?, 'pending'
-     FROM bookings WHERE id = ?`,
-    [bookingId, ownerId, apartmentId, bookingCode, amount, commission, bookingId],
-    (err) => {
-      if (err) {
-        console.error('Error tracking commission:', err);
-      } else {
-        console.log(`✅ Commission tracked: ₦${commission} for booking ${bookingCode}`);
-      }
+  // Check if commission_tracking table exists
+  db.query('SHOW TABLES LIKE "commission_tracking"', (err, tables) => {
+    if (err || tables.length === 0) {
+      console.log('Commission tracking table not yet created');
+      return;
     }
-  );
+    
+    db.query(
+      `INSERT INTO commission_tracking 
+       (booking_id, owner_id, apartment_id, booking_code, guest_name, amount_paid, commission_amount, commission_status)
+       SELECT ?, ?, ?, ?, user_name, ?, ?, 'pending'
+       FROM bookings WHERE id = ?`,
+      [bookingId, ownerId, apartmentId, bookingCode, amount, commission, bookingId],
+      (err) => {
+        if (err) {
+          console.error('Error tracking commission:', err);
+        } else {
+          console.log(`✅ Commission tracked: ₦${commission} for booking ${bookingCode}`);
+        }
+      }
+    );
+  });
 }
 
 /* ================= START BOOKING PROCESS ================= */
@@ -395,21 +403,22 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
   const bookingCode = 'BOOK' + Date.now().toString().slice(-8);
   const amount = session.apartmentPrice;
   const commission = amount * 0.1; // 10% commission
-  const pin = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit PIN
+  const pin = Math.floor(100000 + Math.random() * 900000).toString().slice(0, 5); // 5-digit PIN to match varchar(5)
   
+  // Match exact table columns from your database
   const query = `
     INSERT INTO bookings (
       apartment_id,
       user_id,
-      user_name,
-      username,
-      phone,
       amount,
       commission,
       booking_code,
-      access_pin,
       status,
+      access_pin,
       pin_used,
+      user_name,
+      username,
+      phone,
       created_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
   `;
@@ -417,40 +426,47 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
   const values = [
     session.apartmentId,
     userId,
-    fullName,
-    username,
-    phoneNumber,
     amount,
     commission,
     bookingCode,
-    pin,
     'pending',
-    false
+    pin,
+    0, // pin_used = false (0)
+    fullName,
+    username,
+    phoneNumber
   ];
+  
+  console.log('Executing query with values:', values);
   
   db.query(query, values, (err, result) => {
     if (err) {
       console.error('Error creating booking:', err);
       
+      // Send specific error message based on error code
       let errorMessage = '❌ Error creating booking. ';
+      
       if (err.code === 'ER_NO_SUCH_TABLE') {
         errorMessage += 'Bookings table does not exist.';
       } else if (err.code === 'ER_BAD_NULL_ERROR') {
-        errorMessage += 'Missing required field.';
+        errorMessage += `Missing required field: ${err.sqlMessage}`;
       } else if (err.code === 'ER_DUP_ENTRY') {
         errorMessage += 'Duplicate booking code. Please try again.';
+      } else if (err.code === 'ER_DATA_TOO_LONG') {
+        errorMessage += 'Data too long for field.';
       } else {
-        errorMessage += 'Please try again or contact admin.';
+        errorMessage += `Error: ${err.message}`;
       }
       
       return bot.sendMessage(chatId, errorMessage);
     }
     
+    // Success - send confirmation
     const message = `
 ✅ *Booking Request Received!*
 
 🔑 *Your Booking Code:* \`${bookingCode}\`
-🔐 *Your Payment PIN:* \`${pin}\`
+🔐 *Your PIN:* \`${pin}\`
 
 👤 *Your Details:*
 • Name: ${fullName}
@@ -461,8 +477,8 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
 
 📌 *Next Steps:*
 1. Our team will contact you shortly
-2. Make payment using the PIN above
-3. Send the PIN to confirm payment
+2. Use the PIN above for verification
+3. Send the PIN when asked to confirm
 
 Thank you for choosing Abuja Shortlet Apartments! 🏠
     `;
@@ -478,6 +494,7 @@ Thank you for choosing Abuja Shortlet Apartments! 🏠
       }
     });
     
+    // Prepare booking info for owner notification
     const bookingInfo = {
       bookingCode: bookingCode,
       guestName: fullName,
@@ -490,6 +507,7 @@ Thank you for choosing Abuja Shortlet Apartments! 🏠
       bookingId: result.insertId
     };
     
+    // Notify owner if exists
     if (session.ownerId) {
       notifyOwner(session.ownerId, bookingInfo);
     }
@@ -880,6 +898,7 @@ bot.on('message', (msg) => {
 
   if (!text) return;
 
+  // Check if user is in booking flow and waiting for phone number
   if (userSessions[chatId] && userSessions[chatId].step === 'awaiting_phone') {
     if (text.length < 10) {
       return bot.sendMessage(chatId, '❌ Please enter a valid phone number (at least 10 digits)');
@@ -887,12 +906,14 @@ bot.on('message', (msg) => {
     return processBookingWithUserInfo(chatId, text, msg);
   }
 
+  // Check if user is in PIN verification flow
   if (awaitingPin[chatId]) {
     const bookingCode = awaitingPin[chatId];
     delete awaitingPin[chatId];
     return verifyPin(chatId, bookingCode, text.trim());
   }
 
+  // Handle menu navigation
   switch(text) {
     case '/start':
       showMainMenu(chatId);
@@ -915,6 +936,7 @@ bot.on('message', (msg) => {
       aboutUs(chatId);
       break;
       
+    // Apartment type selections
     case '🛏️ Self Contain':
     case '🛏️ 1-Bedroom':
     case '🛏️ 2-Bedroom':
@@ -922,6 +944,7 @@ bot.on('message', (msg) => {
       showApartmentsByLocationAndType(chatId, text);
       break;
       
+    // All locations
     case '🏛️ Maitama':
     case '🏛️ Asokoro':
     case '🏛️ Wuse':
@@ -966,7 +989,7 @@ bot.on('callback_query', (cb) => {
     const bookingCode = data.replace('confirm_owner_', '');
     
     db.query(
-      'UPDATE bookings SET owner_confirmed = true, owner_confirmed_at = NOW(), status = ? WHERE booking_code = ?',
+      'UPDATE bookings SET owner_confirmed = 1, owner_confirmed_at = NOW(), status = ? WHERE booking_code = ?',
       ['confirmed', bookingCode],
       (err) => {
         if (err) {
@@ -1021,7 +1044,7 @@ function verifyPin(chatId, bookingCode, pin) {
     `SELECT b.*, a.owner_id, a.price 
      FROM bookings b
      JOIN apartments a ON b.apartment_id = a.id
-     WHERE b.booking_code=? AND b.access_pin=? AND b.pin_used=false`,
+     WHERE b.booking_code=? AND b.access_pin=? AND b.pin_used=0`,
     [bookingCode, pin],
     (err, rows) => {
       if (err) {
@@ -1041,7 +1064,7 @@ function verifyPin(chatId, bookingCode, pin) {
       
       db.query(
         `UPDATE bookings 
-         SET pin_used=true, tenant_confirmed_at=NOW(), status=?
+         SET pin_used=1, tenant_confirmed_at=NOW(), status=?
          WHERE booking_code=?`,
         ['completed', bookingCode],
         (updateErr, result) => {
@@ -1058,7 +1081,7 @@ function verifyPin(chatId, bookingCode, pin) {
             bookingCode,
             booking.owner_id,
             booking.apartment_id,
-            booking.amount || booking.price
+            booking.amount
           );
           
           bot.sendMessage(chatId, '✅ *Payment Confirmed!* 🎉\n\nYour booking is complete.\nThank you for choosing Abuja Shortlet Apartments! 🏠', {
@@ -1076,7 +1099,7 @@ function verifyPin(chatId, bookingCode, pin) {
           
           // Notify owner that commission is due
           if (booking.owner_id) {
-            notifyOwnerCommission(booking.owner_id, bookingCode, booking.amount || booking.price);
+            notifyOwnerCommission(booking.owner_id, bookingCode, booking.amount);
           }
         }
       );
@@ -1084,4 +1107,4 @@ function verifyPin(chatId, bookingCode, pin) {
   );
 }
 
-console.log('✅ Bot Ready - Complete with admin tracking and commission system! 🏠');
+console.log('✅ Bot Ready - Complete with matching database structure! 🏠');
