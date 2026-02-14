@@ -207,47 +207,74 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       }
       
       results.forEach(apt => {
-        // Get photo paths from database
+        // IMPROVED: Better photo paths handling with error recovery
         let photoPaths = [];
+        
         try {
           if (apt.photo_paths) {
-            photoPaths = JSON.parse(apt.photo_paths);
-            console.log(`📸 ${apt.type} - Raw photo_paths from DB:`, apt.photo_paths);
+            // Check if it's a string that looks like JSON
+            if (typeof apt.photo_paths === 'string') {
+              // If it's the string "NULL" or empty, treat as empty array
+              if (apt.photo_paths === 'NULL' || apt.photo_paths === 'null' || apt.photo_paths === '') {
+                photoPaths = [];
+                console.log(`⚠️ ${apt.type} - photo_paths is string NULL`);
+              } else {
+                // Try to parse as JSON
+                try {
+                  photoPaths = JSON.parse(apt.photo_paths);
+                  console.log(`📸 ${apt.type} - Parsed JSON:`, photoPaths);
+                } catch (e) {
+                  console.log(`⚠️ ${apt.type} - Failed to parse JSON:`, apt.photo_paths.substring(0, 50));
+                  // If it's a comma-separated string, split it
+                  if (apt.photo_paths.includes(',')) {
+                    photoPaths = apt.photo_paths.split(',').map(p => p.trim().replace(/^"|"$/g, ''));
+                    console.log(`📸 ${apt.type} - Split comma-separated:`, photoPaths);
+                  } else {
+                    photoPaths = [];
+                  }
+                }
+              }
+            } else if (Array.isArray(apt.photo_paths)) {
+              photoPaths = apt.photo_paths;
+            }
           } else if (apt.photos) {
             photoPaths = apt.photos.split(',').map(p => p.trim());
             console.log(`📸 ${apt.type} - Using photos field:`, apt.photos);
           }
         } catch (e) {
-          console.error('Error parsing photos:', e);
+          console.error('Error processing photos:', e);
           photoPaths = [];
         }
         
-        console.log(`📸 ${apt.type} - Final photo paths:`, photoPaths);
+        console.log(`📸 ${apt.type} - Final photo paths (${photoPaths.length} photos):`, photoPaths);
         
-        // FIXED: Don't add extra slash - use paths directly from database
+        // Send photos if available
         if (photoPaths.length > 0) {
-          // Send photos one by one with proper path handling
+          // Send photos one by one with delay
           photoPaths.forEach((photoPath, index) => {
-            // Use path.join which handles slashes correctly
-            const fullPath = path.join(__dirname, photoPath);
+            // Clean the path - remove any quotes if present
+            const cleanPath = photoPath.replace(/^"|"$/g, '');
+            
+            // Construct full path
+            const fullPath = path.join(__dirname, cleanPath);
             console.log(`📸 ${apt.type} - Photo ${index + 1} full path:`, fullPath);
             
             // Check if file exists
             if (fs.existsSync(fullPath)) {
               console.log(`✅ ${apt.type} - Photo ${index + 1} exists`);
+              
+              // Send with delay
+              setTimeout(() => {
+                bot.sendPhoto(chatId, fullPath, {
+                  caption: index === 0 ? `📸 *${apt.name}*` : undefined,
+                  parse_mode: 'Markdown'
+                }).catch(err => {
+                  console.error(`Error sending photo ${index + 1}:`, err.message);
+                });
+              }, index * 500);
             } else {
               console.log(`❌ ${apt.type} - Photo ${index + 1} NOT found at:`, fullPath);
             }
-            
-            // Add delay between photos to avoid flooding
-            setTimeout(() => {
-              bot.sendPhoto(chatId, fullPath, {
-                caption: index === 0 ? `📸 *${apt.name}*` : undefined,
-                parse_mode: 'Markdown'
-              }).catch(err => {
-                console.error(`Error sending photo ${index + 1} for ${apt.type}:`, err.message);
-              });
-            }, index * 500); // 500ms delay between each photo
           });
         } else {
           bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
@@ -291,8 +318,6 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
     }
   );
 }
-
-// ... rest of your code remains exactly the same ...
 
 /* ================= SEND NOTIFICATION TO OWNER ================= */
 function notifyOwner(ownerId, bookingInfo) {
