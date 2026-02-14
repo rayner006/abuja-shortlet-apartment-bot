@@ -40,6 +40,36 @@ const bot = new TelegramBot(token, {
   }
 });
 
+// Store owner chat IDs (you'll need to get these from owners)
+// Format: { apartment_id: owner_chat_id }
+const ownerChatIds = {
+  // Add owner chat IDs here when they start the bot
+  // Example: 1: 123456789, // Rayner's chat ID for apartment id 1
+};
+
+// Store owner info from database
+let ownerInfo = {};
+
+// Load owner info from database on startup
+function loadOwnerInfo() {
+  db.query('SELECT id, name, telegram_chat_id FROM property_owners', (err, results) => {
+    if (err) {
+      console.error('Error loading owner info:', err);
+    } else {
+      results.forEach(owner => {
+        if (owner.telegram_chat_id) {
+          ownerChatIds[owner.id] = owner.telegram_chat_id;
+        }
+        ownerInfo[owner.id] = owner;
+      });
+      console.log('✅ Owner info loaded:', Object.keys(ownerInfo).length, 'owners');
+    }
+  });
+}
+
+// Call this when bot starts
+loadOwnerInfo();
+
 // Graceful shutdown handlers
 process.on('SIGTERM', () => {
   console.log('🛑 SIGTERM received, stopping bot...');
@@ -254,6 +284,47 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
   );
 }
 
+/* ================= SEND NOTIFICATION TO OWNER ================= */
+function notifyOwner(ownerId, bookingInfo) {
+  const ownerChatId = ownerChatIds[ownerId];
+  if (!ownerChatId) {
+    console.log(`Owner ${ownerId} has no chat ID registered`);
+    return;
+  }
+  
+  const message = `
+🏠 *NEW BOOKING REQUEST!* 🏠
+
+🔑 *Booking Code:* \`${bookingInfo.bookingCode}\`
+
+👤 *Guest Details:*
+• Name: ${bookingInfo.guestName}
+• Username: @${bookingInfo.guestUsername}
+• Phone: ${bookingInfo.guestPhone}
+
+🏠 *Apartment Details:*
+• Name: ${bookingInfo.apartmentName}
+• Location: ${bookingInfo.location}
+• Type: ${bookingInfo.type}
+• Price: ₦${bookingInfo.price}/night
+
+📅 *Booking Date:* ${new Date().toLocaleString()}
+
+Please contact the guest to confirm their booking.
+  `;
+  
+  bot.sendMessage(ownerChatId, message, {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: '✅ Mark as Contacted', callback_data: `contacted_${bookingInfo.bookingCode}` }]
+      ]
+    }
+  }).catch(err => {
+    console.error('Error notifying owner:', err);
+  });
+}
+
 /* ================= START BOOKING PROCESS ================= */
 function startBooking(chatId, apartmentId) {
   // Get apartment details first
@@ -272,6 +343,9 @@ function startBooking(chatId, apartmentId) {
         apartmentId, 
         apartmentName: apt.name,
         apartmentPrice: apt.price,
+        apartmentLocation: apt.location,
+        apartmentType: apt.type,
+        ownerId: apt.owner_id,
         step: 'awaiting_phone'
       };
       
@@ -303,33 +377,66 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
   
   // Generate booking code
   const bookingCode = 'BOOK' + Date.now().toString().slice(-8);
+  const pin = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit PIN
   
-  // Insert booking into database
-  db.query(
-    `INSERT INTO bookings (
-      booking_code, 
-      apartment_id, 
-      user_id, 
-      user_name, 
-      username, 
-      phone, 
-      check_in, 
-      check_out, 
-      access_pin, 
-      pin_used
-    ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, false)`,
-    [
-      bookingCode, 
-      session.apartmentId, 
-      userId, 
-      fullName, 
-      username, 
-      phoneNumber
-    ],
-    (err) => {
+  // First, let's check what columns exist
+  db.query('DESCRIBE bookings', (err, columns) => {
+    if (err) {
+      console.error('Error describing table:', err);
+      return bot.sendMessage(chatId, '❌ Database error. Please contact admin.');
+    }
+    
+    // Log columns for debugging
+    console.log('Bookings table columns:', columns.map(c => c.Field));
+    
+    // Build dynamic query based on existing columns
+    let query = 'INSERT INTO bookings (';
+    let values = [];
+    let placeholders = [];
+    
+    // Common columns that might exist
+    const possibleColumns = [
+      { name: 'booking_code', value: bookingCode },
+      { name: 'apartment_id', value: session.apartmentId },
+      { name: 'user_id', value: userId },
+      { name: 'user_name', value: fullName },
+      { name: 'username', value: username },
+      { name: 'phone', value: phoneNumber },
+      { name: 'access_pin', value: pin },
+      { name: 'pin_used', value: false },
+      { name: 'created_at', value: new Date() }
+    ];
+    
+    // Only include columns that exist in the table
+    possibleColumns.forEach(col => {
+      if (columns.some(c => c.Field === col.name)) {
+        query += col.name + ',';
+        placeholders.push('?');
+        values.push(col.value);
+      }
+    });
+    
+    // Remove trailing comma and close parentheses
+    query = query.slice(0, -1) + ') VALUES (' + placeholders.join(',') + ')';
+    
+    console.log('Executing query:', query);
+    console.log('With values:', values);
+    
+    db.query(query, values, (err) => {
       if (err) {
         console.error('Error creating booking:', err);
-        return bot.sendMessage(chatId, '❌ Error creating booking. Please try again.');
+        
+        // Send more specific error message
+        let errorMessage = '❌ Error creating booking. ';
+        if (err.code === 'ER_NO_SUCH_TABLE') {
+          errorMessage += 'Bookings table does not exist.';
+        } else if (err.code === 'ER_BAD_NULL_ERROR') {
+          errorMessage += 'Missing required field.';
+        } else {
+          errorMessage += 'Please try again or contact admin.';
+        }
+        
+        return bot.sendMessage(chatId, errorMessage);
       }
       
       // Send confirmation to user
@@ -361,13 +468,32 @@ Thank you for choosing Abuja Shortlet Apartments! 🏠
         }
       });
       
+      // Prepare booking info for owner notification
+      const bookingInfo = {
+        bookingCode: bookingCode,
+        guestName: fullName,
+        guestUsername: username,
+        guestPhone: phoneNumber,
+        apartmentName: session.apartmentName,
+        location: session.apartmentLocation,
+        type: session.apartmentType,
+        price: session.apartmentPrice
+      };
+      
+      // Notify the apartment owner
+      if (session.ownerId) {
+        notifyOwner(session.ownerId, bookingInfo);
+      } else {
+        console.log('No owner ID for this apartment');
+      }
+      
       // Notify admin about new booking
       notifyAdminOfNewBooking(bookingCode, fullName, username, phoneNumber, session.apartmentName);
       
       // Clear session
       delete userSessions[chatId];
-    }
-  );
+    });
+  });
 }
 
 /* ================= NOTIFY ADMIN ABOUT NEW BOOKING ================= */
@@ -378,6 +504,29 @@ function notifyAdminOfNewBooking(bookingCode, name, username, phone, apartmentNa
   // TODO: Send to admin Telegram chat
   // bot.sendMessage(ADMIN_CHAT_ID, `📢 New Booking!\n\nCode: ${bookingCode}\nName: ${name}\nUsername: @${username}\nPhone: ${phone}\nApartment: ${apartmentName}`);
 }
+
+/* ================= OWNER REGISTRATION ================= */
+// Add this for owners to register their chat ID
+bot.onText(/\/register_owner (\d+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  const ownerId = parseInt(match[1]);
+  
+  db.query(
+    'UPDATE property_owners SET telegram_chat_id = ? WHERE id = ?',
+    [chatId, ownerId],
+    (err) => {
+      if (err) {
+        console.error('Error registering owner:', err);
+        return bot.sendMessage(chatId, '❌ Error registering. Please check owner ID.');
+      }
+      
+      bot.sendMessage(chatId, `✅ Successfully registered as owner ID: ${ownerId}\nYou will now receive booking notifications.`);
+      
+      // Update in-memory cache
+      ownerChatIds[ownerId] = chatId;
+    }
+  );
+});
 
 /* ================= CONTACT ADMIN ================= */
 function contactAdmin(chatId) {
@@ -536,6 +685,12 @@ bot.on('callback_query', (cb) => {
     startBooking(chatId, apartmentId);
   }
 
+  if (data.startsWith('contacted_')) {
+    const bookingCode = data.replace('contacted_', '');
+    bot.sendMessage(chatId, `✅ Marked booking ${bookingCode} as contacted.`);
+    // You could update a database field here
+  }
+
   if (data.startsWith('confirm_property_owner_')) {
     const bookingCode = data.replace('confirm_property_owner_', '');
     awaitingPin[chatId] = bookingCode;
@@ -603,4 +758,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Enhanced booking with user info collection! 🏠');
+console.log('✅ Bot Ready - Enhanced booking with owner notifications! 🏠');
