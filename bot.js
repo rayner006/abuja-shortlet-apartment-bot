@@ -304,11 +304,10 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
             // Check if file exists
             if (fs.existsSync(fullPath)) {
               mediaGroup.push({
-                type: 'photo',
-                media: fullPath,
-                caption: index === 0 ? `📸 *${apt.name}* (${photoPaths.length} photos)` : undefined,
-                parse_mode: 'Markdown'
-              });
+              type: 'photo',
+              media: fullPath
+           // No caption - completely removed
+            });
             } else {
               console.log(`❌ ${apt.type} - Photo not found for album:`, fullPath);
             }
@@ -1430,5 +1429,6 @@ const scheduleDailySummary = () => {
 scheduleDailySummary();
 
 console.log('✅ Bot Ready - Fixed property_owners column name! 🏠');
+
 
 
