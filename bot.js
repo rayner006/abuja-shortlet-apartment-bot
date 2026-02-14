@@ -49,6 +49,16 @@ const ownerChatIds = {};
 // Store owner info from database
 let ownerInfo = {};
 
+// Log all incoming messages for debugging
+bot.on('message', (msg) => {
+  console.log('📨 Message received:', {
+    chatId: msg.chat.id,
+    from: msg.from.username || msg.from.first_name,
+    text: msg.text,
+    isAdmin: ADMIN_IDS.includes(msg.chat.id) ? '✅ ADMIN' : '❌ Not Admin'
+  });
+});
+
 // Load owner info from database on startup
 function loadOwnerInfo() {
   db.query('SELECT id, name, telegram_chat_id FROM property_owners', (err, results) => {
@@ -315,7 +325,8 @@ Please contact the guest to confirm their booking.
 
 /* ================= NOTIFY ADMIN ABOUT NEW BOOKING ================= */
 function notifyAdminNewBooking(bookingInfo) {
-  // Send to all admin IDs (just you)
+  console.log('📢 Attempting to notify admin with ID:', ADMIN_IDS[0]);
+  
   ADMIN_IDS.forEach(adminId => {
     const message = `
 🔔 *NEW BOOKING ALERT!* 🔔
@@ -353,12 +364,13 @@ function notifyAdminNewBooking(bookingInfo) {
           [{ text: '💰 Check Commission', callback_data: `admin_commission_${bookingInfo.bookingCode}` }]
         ]
       }
+    }).then(() => {
+      console.log(`✅ Admin notification sent successfully to ${adminId}`);
     }).catch(err => {
-      console.error(`Error notifying admin ${adminId}:`, err);
+      console.error(`❌ Error notifying admin ${adminId}:`, err.message);
+      console.log('💡 Make sure you have started a chat with the bot first!');
     });
   });
-  
-  console.log(`📢 Admin notified about booking ${bookingInfo.bookingCode}`);
 }
 
 /* ================= NOTIFY OWNER ABOUT COMMISSION ================= */
@@ -401,6 +413,57 @@ function trackCommission(bookingId, bookingCode, ownerId, apartmentId, amount) {
     );
   });
 }
+
+/* ================= TEST COMMANDS ================= */
+
+// Test admin recognition
+bot.onText(/\/test_admin/, (msg) => {
+  const chatId = msg.chat.id;
+  console.log('🔍 Test admin command from:', chatId);
+  
+  if (ADMIN_IDS.includes(chatId)) {
+    bot.sendMessage(chatId, '✅ *You are recognized as admin!*\n\nNotifications will work.', {
+      parse_mode: 'Markdown'
+    });
+  } else {
+    bot.sendMessage(chatId, '❌ *You are NOT in admin list*\n\nContact the bot owner.', {
+      parse_mode: 'Markdown'
+    });
+  }
+});
+
+// Test PIN generation
+bot.onText(/\/test_pin/, (msg) => {
+  const testPin = generateaccesspin();
+  bot.sendMessage(msg.chat.id, `🔐 *Test PIN:* \`${testPin}\`\n📏 *Length:* ${testPin.length}`, {
+    parse_mode: 'Markdown'
+  });
+});
+
+// Test notification manually
+bot.onText(/\/test_notify/, (msg) => {
+  const chatId = msg.chat.id;
+  if (ADMIN_IDS.includes(chatId)) {
+    const testBooking = {
+      bookingCode: 'TEST' + Date.now().toString().slice(-8),
+      bookingId: 999,
+      guestName: 'Test User',
+      guestUsername: 'testuser',
+      guestPhone: '08000000000',
+      apartmentName: 'Test Apartment',
+      location: 'Test Location',
+      type: 'Test Type',
+      price: 50000,
+      ownerId: 1
+    };
+    notifyAdminNewBooking(testBooking);
+    bot.sendMessage(chatId, '📨 *Test notification sent!*\nCheck if you received it.', {
+      parse_mode: 'Markdown'
+    });
+  } else {
+    bot.sendMessage(chatId, '❌ Only admin can use this command.');
+  }
+});
 
 /* ================= START BOOKING PROCESS ================= */
 function startBooking(chatId, apartmentId) {
@@ -451,7 +514,17 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
   const bookingCode = 'BOOK' + Date.now().toString().slice(-8);
   const amount = session.apartmentPrice;
   const commission = amount * 0.1; // 10% commission
-  const pin = Math.floor(100000 + Math.random() * 900000).toString().slice(0, 5); // 5-digit PIN to match varchar(5)
+  
+  // Using the updated pingenerator
+  const pin = generateaccesspin();
+  console.log('🔐 Generated PIN for booking:', pin);
+  console.log('📏 PIN length:', pin.length);
+  
+  // Validate PIN
+  if (pin.length !== 5) {
+    console.error('❌ PIN generation error: Generated PIN length is', pin.length);
+    return bot.sendMessage(chatId, '❌ Error generating PIN. Please try again.');
+  }
   
   // Match exact table columns from your database
   const query = `
@@ -485,11 +558,11 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
     phoneNumber
   ];
   
-  console.log('Executing query with values:', values);
+  console.log('📝 Executing query with values:', values);
   
   db.query(query, values, (err, result) => {
     if (err) {
-      console.error('Error creating booking:', err);
+      console.error('❌ Error creating booking:', err);
       
       // Send specific error message based on error code
       let errorMessage = '❌ Error creating booking. ';
@@ -501,13 +574,16 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
       } else if (err.code === 'ER_DUP_ENTRY') {
         errorMessage += 'Duplicate booking code. Please try again.';
       } else if (err.code === 'ER_DATA_TOO_LONG') {
-        errorMessage += 'Data too long for field.';
+        errorMessage += `Data too long for field: ${err.sqlMessage}`;
+        console.error('❌ Data too long - PIN length:', pin.length, 'PIN value:', pin);
       } else {
         errorMessage += `Error: ${err.message}`;
       }
       
       return bot.sendMessage(chatId, errorMessage);
     }
+    
+    console.log('✅ Booking created successfully with ID:', result.insertId);
     
     // Success - send confirmation
     const message = `
@@ -561,7 +637,8 @@ Thank you for choosing Abuja Shortlet Apartments! 🏠
       notifyOwner(session.ownerId, bookingInfo);
     }
     
-    // ALWAYS notify admin (you)
+    // Notify admin
+    console.log('📢 Attempting to notify admin about new booking');
     notifyAdminNewBooking(bookingInfo);
     
     console.log(`📢 NEW BOOKING: ${bookingCode} - ${fullName} (@${username}) - ${phoneNumber} - ${session.apartmentName}`);
@@ -1264,4 +1341,4 @@ const scheduleDailySummary = () => {
 // Start the scheduler
 scheduleDailySummary();
 
-console.log('✅ Bot Ready - Complete with admin notifications for ID: 6947618479 🏠');
+console.log('✅ Bot Ready - Complete with updated pingenerator and admin notifications! 🏠');
