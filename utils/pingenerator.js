@@ -1,27 +1,39 @@
-// In your processBookingWithUserInfo function, replace the PIN generation line:
+// PIN Generator Utility
+// This file handles all PIN generation for the bot
 
-// Old line (problematic):
-// const pin = Math.floor(100000 + Math.random() * 900000).toString().slice(0, 5);
-
-// New improved PIN generation:
-function generateSecurePIN() {
+/**
+ * Generate a 5-digit access PIN
+ * @returns {string} 5-digit PIN as string
+ */
+function generateaccesspin() {
   // Generate a random 5-digit number (10000-99999)
   const pin = Math.floor(10000 + Math.random() * 90000).toString();
-  console.log('🔐 Generated PIN:', pin);
+  
+  // Log for debugging (can be removed in production)
+  console.log('🔐 Generated PIN:', pin, 'Length:', pin.length);
+  
   return pin;
 }
 
-// Then use it in your query:
-const pin = generateSecurePIN();
-
-// Also add PIN validation
-function isValidPIN(pin) {
-  return /^\d{5}$/.test(pin); // Exactly 5 digits
+/**
+ * Validate if a PIN is correctly formatted
+ * @param {string} pin - The PIN to validate
+ * @returns {boolean} True if valid 5-digit PIN
+ */
+function validatePIN(pin) {
+  return /^\d{5}$/.test(pin);
 }
 
-// When verifying PIN, add validation
-bot.onText(/\/verify_pin (\d{5})/, (msg, match) => {
-  const pin = match[1];
-  console.log('🔍 Verifying PIN:', pin);
-  // Your verification logic here
-});
+/**
+ * Generate a unique booking code
+ * @returns {string} Unique booking code
+ */
+function generateBookingCode() {
+  return 'BOOK' + Date.now().toString().slice(-8);
+}
+
+module.exports = { 
+  generateaccesspin,
+  validatePIN,
+  generateBookingCode
+};
