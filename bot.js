@@ -26,8 +26,20 @@ app.listen(PORT, () => {
 /* ================= TELEGRAM BOT ================= */
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./config/db');
-const { generateaccesspin, validatePIN, generateBookingCode } = require('./utils/pingenerator');
 const path = require('path');
+
+// Import utilities
+const { generateaccesspin, validatePIN, generateBookingCode } = require('./utils/pingenerator');
+const {
+  getMainMenuKeyboard,
+  getLocationsKeyboard,
+  getApartmentTypesKeyboard,
+  getApartmentActionsKeyboard,
+  getOwnerActionsKeyboard,
+  getAdminActionsKeyboard,
+  getBackKeyboard,
+  getSearchOptionsKeyboard
+} = require('./utils/keyboard');
 
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { 
@@ -110,37 +122,14 @@ console.log(`${process.env.BOT_NAME || 'Abuja Shortlet Bot'} is running...`);
 
 /* ================= MAIN MENU ================= */
 function showMainMenu(chatId, text = 'Welcome To\nAbuja Shortlet Apartments 🏠,\nClick On Any Menu Below 👇👇👇') {
-  bot.sendMessage(chatId, text, {
-    reply_markup: {
-      keyboard: [
-        ['🏠 View Apartments'],
-        ['📞 Contact Admin'],
-        ['ℹ️ About Us']
-      ],
-      resize_keyboard: true
-    }
-  });
+  bot.sendMessage(chatId, text, getMainMenuKeyboard());
 }
 
 /* ================= SHOW LOCATIONS ================= */
 function showLocations(chatId) {
   bot.sendMessage(chatId, '📍 *Select a location:*', {
     parse_mode: 'Markdown',
-    reply_markup: {
-      keyboard: [
-        ['🏛️ Maitama', '🏛️ Asokoro'],
-        ['🏛️ Wuse', '🏛️ Jabi'],
-        ['🏛️ Garki', '🏘️ Gwarinpa'],
-        ['🏛️ Guzape', '🏛️ Katampe'],
-        ['🏘️ Jahi', '💰 Utako'],
-        ['🏘️ Wuye', '🏘️ Life Camp'],
-        ['🏘️ Apo', '🏘️ Lokogoma'],
-        ['🏘️ Kubwa', '🏘️ Lugbe'],
-        ['🏘️ Durumi', '🏭 Gwagwalada'],
-        ['⬅️ Back to Main Menu']
-      ],
-      resize_keyboard: true
-    }
+    ...getLocationsKeyboard()
   });
 }
 
@@ -150,14 +139,7 @@ function showApartmentTypes(chatId, location) {
   
   bot.sendMessage(chatId, `📍 *Location:* ${location.replace(/[🏛️🏘️💰🏭]/g, '').trim()}\n\n🏠 *Select Apartment Type:*`, {
     parse_mode: 'Markdown',
-    reply_markup: {
-      keyboard: [
-        ['🛏️ Self Contain', '🛏️ 1-Bedroom'],
-        ['🛏️ 2-Bedroom', '🛏️ 3-Bedroom'],
-        ['🔍 Search Again', '⬅️ Back to Main Menu']
-      ],
-      resize_keyboard: true
-    }
+    ...getApartmentTypesKeyboard(location)
   });
 }
 
@@ -181,15 +163,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       }
       
       if (results.length === 0) {
-        return bot.sendMessage(chatId, `😔 No ${cleanType} apartments available in ${cleanLocation} right now.\nTry another apartment type or location!`, {
-          reply_markup: {
-            keyboard: [
-              ['🔍 Search Again'],
-              ['⬅️ Back to Main Menu']
-            ],
-            resize_keyboard: true
-          }
-        });
+        return bot.sendMessage(chatId, `😔 No ${cleanType} apartments available in ${cleanLocation} right now.\nTry another apartment type or location!`, getSearchOptionsKeyboard());
       }
       
       results.forEach(apt => {
@@ -252,11 +226,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           
           bot.sendMessage(chatId, message, {
             parse_mode: 'Markdown',
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }]
-              ]
-            }
+            ...getApartmentActionsKeyboard(apt.id)
           });
         }, 1000);
       });
@@ -264,13 +234,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       setTimeout(() => {
         bot.sendMessage(chatId, '🔍 *What would you like to do next?*', {
           parse_mode: 'Markdown',
-          reply_markup: {
-            keyboard: [
-              ['🔍 Search Again'],
-              ['⬅️ Back to Main Menu']
-            ],
-            resize_keyboard: true
-          }
+          ...getSearchOptionsKeyboard()
         });
       }, 2000);
       
@@ -312,12 +276,7 @@ Please contact the guest to confirm their booking.
   
   bot.sendMessage(ownerChatId, message, {
     parse_mode: 'Markdown',
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: '✅ Confirm Booking', callback_data: `confirm_owner_${bookingInfo.bookingCode}` }],
-        [{ text: '📞 Guest Contacted', callback_data: `contacted_${bookingInfo.bookingCode}` }]
-      ]
-    }
+    ...getOwnerActionsKeyboard(bookingInfo.bookingCode)
   }).catch(err => {
     console.error('Error notifying owner:', err);
   });
@@ -358,12 +317,7 @@ function notifyAdminNewBooking(bookingInfo) {
     
     bot.sendMessage(adminId, message, {
       parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '📊 View Dashboard', callback_data: 'admin_dashboard' }],
-          [{ text: '💰 Check Commission', callback_data: `admin_commission_${bookingInfo.bookingCode}` }]
-        ]
-      }
+      ...getAdminActionsKeyboard(bookingInfo.bookingCode)
     }).then(() => {
       console.log(`✅ Admin notification sent successfully to ${adminId}`);
     }).catch(err => {
@@ -889,463 +843,4 @@ bot.onText(/\/dashboard/, (msg) => {
     `SELECT COUNT(*) as total FROM property_owners`,
     `SELECT COUNT(*) as expired FROM property_owners WHERE subscription_expiry < CURDATE() OR subscription_status = 'expired'`,
     `SELECT SUM(commission_amount) as pending FROM commission_tracking WHERE commission_status = 'pending'`,
-    `SELECT SUM(commission_amount) as paid FROM commission_tracking WHERE commission_status = 'paid'`,
-    `SELECT COUNT(*) as bookings FROM bookings WHERE created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)`
-  ];
-  
-  let results = {};
-  let completed = 0;
-  
-  queries.forEach((query, index) => {
-    db.query(query, (err, rows) => {
-      if (!err && rows.length > 0) {
-        if (index === 0) results.totalOwners = rows[0].total;
-        if (index === 1) results.expiredOwners = rows[0].expired;
-        if (index === 2) results.pendingCommission = rows[0].pending || 0;
-        if (index === 3) results.paidCommission = rows[0].paid || 0;
-        if (index === 4) results.recentBookings = rows[0].bookings;
-      }
-      
-      completed++;
-      if (completed === queries.length) {
-        const message = `
-📊 *ADMIN DASHBOARD*
-
-👥 *Owners:*
-• Total: ${results.totalOwners || 0}
-• Expired: ${results.expiredOwners || 0}
-• Active: ${(results.totalOwners || 0) - (results.expiredOwners || 0)}
-
-💰 *Commissions:*
-• Pending: ₦${(results.pendingCommission || 0).toLocaleString()}
-• Paid: ₦${(results.paidCommission || 0).toLocaleString()}
-• Total: ₦${((results.pendingCommission || 0) + (results.paidCommission || 0)).toLocaleString()}
-
-📅 *Last 30 Days:*
-• Bookings: ${results.recentBookings || 0}
-
-━━━━━━━━━━━━━━━━
-Use:
-/commissions - Detailed report
-/expired_subs - Expired subscriptions
-        `;
-        
-        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
-      }
-    });
-  });
-});
-
-// Owner registration
-bot.onText(/\/register_owner (\d+)/, (msg, match) => {
-  const chatId = msg.chat.id;
-  const ownerId = parseInt(match[1]);
-  
-  db.query(
-    'UPDATE property_owners SET telegram_chat_id = ? WHERE id = ?',
-    [chatId, ownerId],
-    (err) => {
-      if (err) {
-        console.error('Error registering owner:', err);
-        return bot.sendMessage(chatId, '❌ Error registering. Please check owner ID.');
-      }
-      
-      bot.sendMessage(chatId, `✅ Successfully registered as owner ID: ${ownerId}\nYou will now receive booking notifications.`);
-      
-      ownerChatIds[ownerId] = chatId;
-    }
-  );
-});
-
-/* ================= CONTACT ADMIN ================= */
-function contactAdmin(chatId) {
-  const message = `
-📞 *Contact Admin*
-
-For inquiries and bookings:
-📱 *Phone:* +234 800 000 0000
-📧 *Email:* admin@abujashortlet.com
-💬 *WhatsApp:* +234 800 000 0000
-
-🌟 Our team is available 24/7 to assist you!
-  `;
-  
-  bot.sendMessage(chatId, message, {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      keyboard: [
-        ['⬅️ Back to Main Menu']
-      ],
-      resize_keyboard: true
-    }
-  });
-}
-
-/* ================= ABOUT US ================= */
-function aboutUs(chatId) {
-  const message = `
-ℹ️ *About Abuja Shortlet Apartments*
-
-We provide premium short-let apartments across Abuja's finest locations:
-
-🏛️ *Our Locations:*
-Maitama • Asokoro • Wuse • Jabi • Garki • Gwarinpa
-Guzape • Katampe • Jahi • Utako • Wuye • Life Camp
-Apo • Lokogoma • Kubwa • Lugbe • Durumi • Gwagwalada
-
-🏠 *Apartment Types:*
-Self Contain • 1-Bedroom • 2-Bedroom • 3-Bedroom
-
-👤 *Featured Owners:*
-Rayner in Kubwa • More owners coming soon!
-
-✨ *Why choose us?*
-• Verified properties ✅
-• Secure payments 🔒
-• 24/7 customer support 🎧
-• Best price guarantee 💰
-
-Book your stay today! 🏠
-  `;
-  
-  bot.sendMessage(chatId, message, {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      keyboard: [
-        ['🏠 View Apartments'],
-        ['⬅️ Back to Main Menu']
-      ],
-      resize_keyboard: true
-    }
-  });
-}
-
-/* ================= MESSAGE HANDLER ================= */
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
-
-  if (!text) return;
-
-  // Check if user is in booking flow and waiting for phone number
-  if (userSessions[chatId] && userSessions[chatId].step === 'awaiting_phone') {
-    if (text.length < 10) {
-      return bot.sendMessage(chatId, '❌ Please enter a valid phone number (at least 10 digits)');
-    }
-    return processBookingWithUserInfo(chatId, text, msg);
-  }
-
-  // Check if user is in PIN verification flow
-  if (awaitingPin[chatId]) {
-    const bookingCode = awaitingPin[chatId];
-    delete awaitingPin[chatId];
-    return verifyPin(chatId, bookingCode, text.trim());
-  }
-
-  // Handle menu navigation
-  switch(text) {
-    case '/start':
-      showMainMenu(chatId);
-      break;
-      
-    case '⬅️ Back to Main Menu':
-      showMainMenu(chatId);
-      break;
-      
-    case '🏠 View Apartments':
-    case '🔍 Search Again':
-      showLocations(chatId);
-      break;
-      
-    case '📞 Contact Admin':
-      contactAdmin(chatId);
-      break;
-      
-    case 'ℹ️ About Us':
-      aboutUs(chatId);
-      break;
-      
-    // Apartment type selections
-    case '🛏️ Self Contain':
-    case '🛏️ 1-Bedroom':
-    case '🛏️ 2-Bedroom':
-    case '🛏️ 3-Bedroom':
-      showApartmentsByLocationAndType(chatId, text);
-      break;
-      
-    // All locations
-    case '🏛️ Maitama':
-    case '🏛️ Asokoro':
-    case '🏛️ Wuse':
-    case '🏛️ Jabi':
-    case '🏛️ Garki':
-    case '🏘️ Gwarinpa':
-    case '🏛️ Guzape':
-    case '🏛️ Katampe':
-    case '🏘️ Jahi':
-    case '💰 Utako':
-    case '🏘️ Wuye':
-    case '🏘️ Life Camp':
-    case '🏘️ Apo':
-    case '🏘️ Lokogoma':
-    case '🏘️ Kubwa':
-    case '🏘️ Lugbe':
-    case '🏘️ Durumi':
-    case '🏭 Gwagwalada':
-      showApartmentTypes(chatId, text);
-      break;
-      
-    default:
-      showMainMenu(chatId, 'Welcome Back! 👋\n\nAbuja Shortlet Apartments 🏠,\nClick On Any Menu Below 👇👇👇');
-      break;
-  }
-});
-
-/* ================= CALLBACK QUERY HANDLER ================= */
-bot.on('callback_query', (cb) => {
-  const chatId = cb.message.chat.id;
-  const data = cb.data;
-  const messageId = cb.message.message_id;
-
-  bot.answerCallbackQuery(cb.id);
-
-  if (data.startsWith('book_')) {
-    const apartmentId = data.replace('book_', '');
-    startBooking(chatId, apartmentId);
-  }
-
-  if (data.startsWith('confirm_owner_')) {
-    const bookingCode = data.replace('confirm_owner_', '');
-    
-    db.query(
-      'UPDATE bookings SET owner_confirmed = 1, owner_confirmed_at = NOW(), status = ? WHERE booking_code = ?',
-      ['confirmed', bookingCode],
-      (err) => {
-        if (err) {
-          console.error('Error confirming booking:', err);
-          return bot.sendMessage(chatId, '❌ Error confirming booking');
-        }
-        
-        bot.sendMessage(chatId, `✅ Booking ${bookingCode} confirmed. Commission will be processed.`);
-        
-        bot.editMessageText(
-          cb.message.text + '\n\n✅ *CONFIRMED BY OWNER*',
-          {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown'
-          }
-        ).catch(e => console.log('Error editing message:', e));
-      }
-    );
-  }
-
-  if (data.startsWith('contacted_')) {
-    const bookingCode = data.replace('contacted_', '');
-    bot.sendMessage(chatId, `✅ Marked booking ${bookingCode} as contacted.`);
-    
-    bot.editMessageText(
-      cb.message.text + '\n\n📞 *GUEST CONTACTED*',
-      {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown'
-      }
-    ).catch(e => console.log('Error editing message:', e));
-  }
-
-  if (data === 'admin_dashboard') {
-    // Trigger the dashboard command
-    bot.sendMessage(chatId, '/dashboard');
-  }
-
-  if (data.startsWith('admin_commission_')) {
-    const bookingCode = data.replace('admin_commission_', '');
-    
-    db.query(
-      `SELECT b.*, a.owner_id, a.price, a.name as apartment_name
-       FROM bookings b
-       JOIN apartments a ON b.apartment_id = a.id
-       WHERE b.booking_code = ?`,
-      [bookingCode],
-      (err, results) => {
-        if (err || results.length === 0) {
-          return bot.sendMessage(chatId, '❌ Booking not found');
-        }
-        
-        const booking = results[0];
-        const commission = booking.amount * 0.1;
-        
-        bot.sendMessage(chatId, 
-          `💰 *Commission Details for ${bookingCode}*\n\n` +
-          `• Apartment: ${booking.apartment_name}\n` +
-          `• Amount: ₦${booking.amount}\n` +
-          `• Commission (10%): ₦${commission}\n` +
-          `• Owner ID: ${booking.owner_id || 'Not assigned'}\n` +
-          `• Status: ${booking.owner_confirmed ? '✅ Owner Confirmed' : '⏳ Pending'}\n\n` +
-          `Use /pay_commission [id] when paid`,
-          { parse_mode: 'Markdown' }
-        );
-      }
-    );
-  }
-
-  if (data.startsWith('confirm_property_owner_')) {
-    const bookingCode = data.replace('confirm_property_owner_', '');
-    awaitingPin[chatId] = bookingCode;
-    return bot.sendMessage(chatId, '🔐 *Enter tenant PIN:*', {
-      parse_mode: 'Markdown'
-    });
-  }
-  
-  if (data === 'search_again') {
-    showLocations(chatId);
-  }
-});
-
-/* ================= VERIFY PIN ================= */
-function verifyPin(chatId, bookingCode, pin) {
-  // Validate PIN format first
-  if (!validatePIN(pin)) {
-    return bot.sendMessage(chatId, '❌ *Invalid PIN format*\nPIN must be 5 digits.', {
-      parse_mode: 'Markdown'
-    });
-  }
-  
-  db.query(
-    `SELECT b.*, a.owner_id, a.price 
-     FROM bookings b
-     JOIN apartments a ON b.apartment_id = a.id
-     WHERE b.booking_code=? AND b.access_pin=? AND b.pin_used=0`,
-    [bookingCode, pin],
-    (err, rows) => {
-      if (err) {
-        console.error('Database error in verifyPin:', err);
-        return bot.sendMessage(chatId, '❌ *Database Error* \nPlease try again later.', {
-          parse_mode: 'Markdown'
-        });
-      }
-
-      if (rows.length === 0) {
-        return bot.sendMessage(chatId, '❌ *Invalid or Used PIN* \nPlease check and try again.', {
-          parse_mode: 'Markdown'
-        });
-      }
-
-      const booking = rows[0];
-      
-      db.query(
-        `UPDATE bookings 
-         SET pin_used=1, tenant_confirmed_at=NOW(), status=?
-         WHERE booking_code=?`,
-        ['completed', bookingCode],
-        (updateErr, result) => {
-          if (updateErr) {
-            console.error('Error updating PIN status:', updateErr);
-            return bot.sendMessage(chatId, '❌ *Error Confirming PIN* \nPlease contact admin.', {
-              parse_mode: 'Markdown'
-            });
-          }
-          
-          // Track commission for this booking
-          trackCommission(
-            booking.id,
-            bookingCode,
-            booking.owner_id,
-            booking.apartment_id,
-            booking.amount
-          );
-          
-          bot.sendMessage(chatId, '✅ *Payment Confirmed!* 🎉\n\nYour booking is complete.\nThank you for choosing Abuja Shortlet Apartments! 🏠', {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              keyboard: [
-                ['🏠 View Apartments'],
-                ['📞 Contact Admin']
-              ],
-              resize_keyboard: true
-            }
-          });
-          
-          console.log(`📢 Booking ${bookingCode} confirmed - Commission tracked`);
-          
-          // Notify owner that commission is due
-          if (booking.owner_id) {
-            notifyOwnerCommission(booking.owner_id, bookingCode, booking.amount);
-          }
-        }
-      );
-    }
-  );
-}
-
-/* ================= SEND DAILY SUMMARY ================= */
-function sendDailySummary() {
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
-  
-  const endOfDay = new Date();
-  endOfDay.setHours(23, 59, 59, 999);
-  
-  db.query(
-    `SELECT 
-      COUNT(*) as total_bookings,
-      SUM(amount) as total_revenue,
-      SUM(amount * 0.1) as total_commission
-     FROM bookings 
-     WHERE created_at BETWEEN ? AND ?`,
-    [startOfDay, endOfDay],
-    (err, results) => {
-      if (err) {
-        console.error('Error getting daily summary:', err);
-        return;
-      }
-      
-      const summary = results[0];
-      
-      ADMIN_IDS.forEach(adminId => {
-        const message = `
-📅 *Daily Summary - ${new Date().toLocaleDateString()}*
-
-📊 *Today's Stats:*
-• Bookings: ${summary.total_bookings || 0}
-• Revenue: ₦${(summary.total_revenue || 0).toLocaleString()}
-• Commission: ₦${(summary.total_commission || 0).toLocaleString()}
-
-━━━━━━━━━━━━━━━━
-Check /dashboard for more details
-        `;
-        
-        bot.sendMessage(adminId, message, { parse_mode: 'Markdown' });
-      });
-    }
-  );
-}
-
-// Schedule daily summary at 9 PM
-const scheduleDailySummary = () => {
-  const now = new Date();
-  const night = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-    21, 0, 0 // 9:00 PM
-  );
-  
-  let msUntilNight = night.getTime() - now.getTime();
-  if (msUntilNight < 0) {
-    msUntilNight += 24 * 60 * 60 * 1000; // Next day
-  }
-  
-  setTimeout(() => {
-    sendDailySummary();
-    setInterval(sendDailySummary, 24 * 60 * 60 * 1000); // Repeat every 24 hours
-  }, msUntilNight);
-  
-  console.log('📅 Daily summary scheduled for 9:00 PM');
-};
-
-// Start the scheduler
-scheduleDailySummary();
-
-console.log('✅ Bot Ready - Complete with separate pingenerator! 🏠');
+    `SELECT SUM(
