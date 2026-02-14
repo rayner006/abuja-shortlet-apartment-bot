@@ -1020,4 +1020,68 @@ function verifyPin(chatId, bookingCode, pin) {
   db.query(
     `SELECT b.*, a.owner_id, a.price 
      FROM bookings b
-     JOIN apartments
+     JOIN apartments a ON b.apartment_id = a.id
+     WHERE b.booking_code=? AND b.access_pin=? AND b.pin_used=false`,
+    [bookingCode, pin],
+    (err, rows) => {
+      if (err) {
+        console.error('Database error in verifyPin:', err);
+        return bot.sendMessage(chatId, '❌ *Database Error* \nPlease try again later.', {
+          parse_mode: 'Markdown'
+        });
+      }
+
+      if (rows.length === 0) {
+        return bot.sendMessage(chatId, '❌ *Invalid or Used PIN* \nPlease check and try again.', {
+          parse_mode: 'Markdown'
+        });
+      }
+
+      const booking = rows[0];
+      
+      db.query(
+        `UPDATE bookings 
+         SET pin_used=true, tenant_confirmed_at=NOW(), status=?
+         WHERE booking_code=?`,
+        ['completed', bookingCode],
+        (updateErr, result) => {
+          if (updateErr) {
+            console.error('Error updating PIN status:', updateErr);
+            return bot.sendMessage(chatId, '❌ *Error Confirming PIN* \nPlease contact admin.', {
+              parse_mode: 'Markdown'
+            });
+          }
+          
+          // Track commission for this booking
+          trackCommission(
+            booking.id,
+            bookingCode,
+            booking.owner_id,
+            booking.apartment_id,
+            booking.amount || booking.price
+          );
+          
+          bot.sendMessage(chatId, '✅ *Payment Confirmed!* 🎉\n\nYour booking is complete.\nThank you for choosing Abuja Shortlet Apartments! 🏠', {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              keyboard: [
+                ['🏠 View Apartments'],
+                ['📞 Contact Admin']
+              ],
+              resize_keyboard: true
+            }
+          });
+          
+          console.log(`📢 Booking ${bookingCode} confirmed - Commission tracked`);
+          
+          // Notify owner that commission is due
+          if (booking.owner_id) {
+            notifyOwnerCommission(booking.owner_id, bookingCode, booking.amount || booking.price);
+          }
+        }
+      );
+    }
+  );
+}
+
+console.log('✅ Bot Ready - Complete with admin tracking and commission system! 🏠');
