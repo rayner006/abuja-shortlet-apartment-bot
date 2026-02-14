@@ -221,7 +221,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           photoPaths = [];
         }
         
-        // Determine folder path based on apartment type
+        // FIXED: Determine folder path based on apartment type
         let typeFolder = '';
         if (apt.type === 'Self Contain') {
           typeFolder = 'self-contain';
@@ -235,40 +235,75 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           typeFolder = apt.type.toLowerCase().replace(' ', '-');
         }
         
+        console.log(`🏠 Processing apartment: ${apt.name} (${apt.type})`);
+        console.log(`📁 Type folder: ${typeFolder}`);
+        console.log(`📸 Photo paths from DB:`, photoPaths);
+        
         if (photoPaths.length > 0) {
           const mediaGroup = [];
           const photosToSend = photoPaths.slice(0, 10);
           
-          photosToSend.forEach((photoPath) => {
-            // Check if photoPath already has full path or just filename
+          photosToSend.forEach((photoPath, index) => {
+            // FIXED: Better path construction
             let fullPath;
+            
+            // Case 1: If photoPath already has full path
             if (photoPath.startsWith('/') || photoPath.startsWith('http')) {
               fullPath = path.join(__dirname, photoPath);
-            } else if (apt.folder_path) {
+            } 
+            // Case 2: If folder_path exists in database
+            else if (apt.folder_path) {
               fullPath = path.join(__dirname, apt.folder_path, photoPath);
-            } else {
-              fullPath = path.join(__dirname, 'uploads', apt.location.toLowerCase(), 'rayner_apt', typeFolder, photoPath);
+            } 
+            // Case 3: Construct path manually based on location and type
+            else {
+              // For Rayner's apartments in Kubwa
+              if (apt.location.toLowerCase() === 'kubwa' && apt.owner_id === 1) {
+                fullPath = path.join(__dirname, 'uploads', 'kubwa', 'rayner_apt', typeFolder, photoPath);
+              } else {
+                // Generic path for other apartments
+                fullPath = path.join(__dirname, 'uploads', apt.location.toLowerCase(), typeFolder, photoPath);
+              }
             }
             
-            console.log('📸 Attempting to send photo from:', fullPath);
+            console.log(`📸 Photo ${index + 1} path:`, fullPath);
             
             // Check if file exists before adding to media group
             if (fs.existsSync(fullPath)) {
+              console.log(`✅ Photo found: ${fullPath}`);
               mediaGroup.push({
                 type: 'photo',
                 media: fullPath
               });
             } else {
-              console.error('❌ Photo not found:', fullPath);
+              console.error(`❌ Photo not found: ${fullPath}`);
+              
+              // Try alternative path without 'rayner_apt' in the path
+              if (apt.location.toLowerCase() === 'kubwa') {
+                const altPath = path.join(__dirname, 'uploads', 'kubwa', typeFolder, photoPath);
+                console.log(`🔄 Trying alternative path:`, altPath);
+                
+                if (fs.existsSync(altPath)) {
+                  console.log(`✅ Photo found at alternative path: ${altPath}`);
+                  mediaGroup.push({
+                    type: 'photo',
+                    media: altPath
+                  });
+                } else {
+                  console.error(`❌ Alternative path also not found`);
+                }
+              }
             }
           });
           
           if (mediaGroup.length > 0) {
+            console.log(`📤 Sending ${mediaGroup.length} photos for apartment ${apt.id}`);
             bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
               console.error('Error sending media group:', err);
             });
           } else {
             console.log('⚠️ No valid photos found for apartment:', apt.id);
+            bot.sendMessage(chatId, '📸 No photos available for this apartment');
           }
         }
         
@@ -296,7 +331,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
             console.error('Error sending apartment details:', err);
           });
           
-        }, 1000);
+        }, 1500); // Increased timeout to ensure photos are sent first
       });
       
       setTimeout(() => {
@@ -305,7 +340,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           parse_mode: 'Markdown',
           reply_markup: keyboard.reply_markup
         });
-      }, 2000);
+      }, 3000);
       
       delete selectedLocation[chatId];
     }
