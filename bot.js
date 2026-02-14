@@ -28,7 +28,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const db = require('./config/db');
 const path = require('path');
 
-// Import utilities
+// Import from utils folder
 const { generateaccesspin, validatePIN, generateBookingCode } = require('./utils/pingenerator');
 const {
   getMainMenuKeyboard,
@@ -1297,4 +1297,4 @@ const scheduleDailySummary = () => {
 // Start the scheduler
 scheduleDailySummary();
 
-console.log('✅ Bot Ready - Complete with separate utilities! 🏠');
+console.log('✅ Bot Ready - Complete with utils folder imports! 🏠');
