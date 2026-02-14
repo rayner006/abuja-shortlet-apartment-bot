@@ -122,14 +122,19 @@ console.log(`${process.env.BOT_NAME || 'Abuja Shortlet Bot'} is running...`);
 
 /* ================= MAIN MENU ================= */
 function showMainMenu(chatId, text = 'Welcome To\nAbuja Shortlet Apartments 🏠,\nClick On Any Menu Below 👇👇👇') {
-  bot.sendMessage(chatId, text, getMainMenuKeyboard());
+  const keyboard = getMainMenuKeyboard();
+  bot.sendMessage(chatId, text, {
+    parse_mode: 'Markdown',
+    reply_markup: keyboard.reply_markup
+  });
 }
 
 /* ================= SHOW LOCATIONS ================= */
 function showLocations(chatId) {
+  const keyboard = getLocationsKeyboard();
   bot.sendMessage(chatId, '📍 *Select a location:*', {
     parse_mode: 'Markdown',
-    ...getLocationsKeyboard()
+    reply_markup: keyboard.reply_markup
   });
 }
 
@@ -137,9 +142,10 @@ function showLocations(chatId) {
 function showApartmentTypes(chatId, location) {
   selectedLocation[chatId] = location;
   
+  const keyboard = getApartmentTypesKeyboard(location);
   bot.sendMessage(chatId, `📍 *Location:* ${location.replace(/[🏛️🏘️💰🏭]/g, '').trim()}\n\n🏠 *Select Apartment Type:*`, {
     parse_mode: 'Markdown',
-    ...getApartmentTypesKeyboard(location)
+    reply_markup: keyboard.reply_markup
   });
 }
 
@@ -163,7 +169,11 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       }
       
       if (results.length === 0) {
-        return bot.sendMessage(chatId, `😔 No ${cleanType} apartments available in ${cleanLocation} right now.\nTry another apartment type or location!`, getSearchOptionsKeyboard());
+        const keyboard = getSearchOptionsKeyboard();
+        return bot.sendMessage(chatId, `😔 No ${cleanType} apartments available in ${cleanLocation} right now.\nTry another apartment type or location!`, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard.reply_markup
+        });
       }
       
       results.forEach(apt => {
@@ -212,6 +222,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           });
         }
         
+        // Send apartment details with Book Now button
         setTimeout(() => {
           const message = `
 🏠 *Name:* ${apt.name}
@@ -224,17 +235,25 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
 📝 *Description:* ${apt.description}
           `;
           
+          // Get the apartment actions keyboard (Book Now button)
+          const keyboard = getApartmentActionsKeyboard(apt.id);
+          
+          // Send message with inline keyboard
           bot.sendMessage(chatId, message, {
             parse_mode: 'Markdown',
-            ...getApartmentActionsKeyboard(apt.id)
+            reply_markup: keyboard  // keyboard already has the correct structure
+          }).catch(err => {
+            console.error('Error sending apartment details:', err);
           });
+          
         }, 1000);
       });
       
       setTimeout(() => {
+        const keyboard = getSearchOptionsKeyboard();
         bot.sendMessage(chatId, '🔍 *What would you like to do next?*', {
           parse_mode: 'Markdown',
-          ...getSearchOptionsKeyboard()
+          reply_markup: keyboard.reply_markup
         });
       }, 2000);
       
@@ -274,9 +293,10 @@ function notifyOwner(ownerId, bookingInfo) {
 Please contact the guest to confirm their booking.
   `;
   
+  const keyboard = getOwnerActionsKeyboard(bookingInfo.bookingCode);
   bot.sendMessage(ownerChatId, message, {
     parse_mode: 'Markdown',
-    ...getOwnerActionsKeyboard(bookingInfo.bookingCode)
+    reply_markup: keyboard
   }).catch(err => {
     console.error('Error notifying owner:', err);
   });
@@ -315,9 +335,10 @@ function notifyAdminNewBooking(bookingInfo) {
 • Dashboard: /dashboard
     `;
     
+    const keyboard = getAdminActionsKeyboard(bookingInfo.bookingCode);
     bot.sendMessage(adminId, message, {
       parse_mode: 'Markdown',
-      ...getAdminActionsKeyboard(bookingInfo.bookingCode)
+      reply_markup: keyboard
     }).then(() => {
       console.log(`✅ Admin notification sent successfully to ${adminId}`);
     }).catch(err => {
@@ -924,9 +945,10 @@ For inquiries and bookings:
 🌟 Our team is available 24/7 to assist you!
   `;
   
+  const keyboard = getBackKeyboard();
   bot.sendMessage(chatId, message, {
     parse_mode: 'Markdown',
-    ...getBackKeyboard()
+    reply_markup: keyboard.reply_markup
   });
 }
 
@@ -1060,6 +1082,7 @@ bot.on('callback_query', (cb) => {
 
   if (data.startsWith('book_')) {
     const apartmentId = data.replace('book_', '');
+    console.log('📚 Book now clicked for apartment:', apartmentId);
     startBooking(chatId, apartmentId);
   }
 
