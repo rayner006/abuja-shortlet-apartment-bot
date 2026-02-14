@@ -27,6 +27,7 @@ app.listen(PORT, () => {
 const TelegramBot = require('node-telegram-bot-api');
 const db = require('./config/db');
 const path = require('path');
+const fs = require('fs'); // Add this for file checking
 
 // Import from utils folder
 const { generateaccesspin, validatePIN, generateBookingCode } = require('./utils/pingenerator');
@@ -189,6 +190,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           photoPaths = [];
         }
         
+        // FIXED: Determine folder path based on apartment type
         let typeFolder = '';
         if (apt.type === 'Self Contain') {
           typeFolder = 'self-contain';
@@ -202,24 +204,45 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           typeFolder = apt.type.toLowerCase().replace(' ', '-');
         }
         
+        // FIXED: Construct correct path based on database values
         if (photoPaths.length > 0) {
           const mediaGroup = [];
           const photosToSend = photoPaths.slice(0, 10);
           
           photosToSend.forEach((photoPath) => {
-            const fullPath = photoPath.startsWith('/') 
-              ? photoPath 
-              : `/uploads/${apt.location.toLowerCase()}/rayner_apt/${typeFolder}/${photoPath}`;
+            // Check if photoPath already has full path or just filename
+            let fullPath;
+            if (photoPath.startsWith('/') || photoPath.startsWith('http')) {
+              // Already has full path
+              fullPath = path.join(__dirname, photoPath);
+            } else if (apt.folder_path) {
+              // Use folder_path from database
+              fullPath = path.join(__dirname, apt.folder_path, photoPath);
+            } else {
+              // Construct path manually
+              fullPath = path.join(__dirname, 'uploads', apt.location.toLowerCase(), 'rayner_apt', typeFolder, photoPath);
+            }
             
-            mediaGroup.push({
-              type: 'photo',
-              media: path.join(__dirname, fullPath)
-            });
+            console.log('📸 Attempting to send photo from:', fullPath);
+            
+            // Check if file exists before adding to media group
+            if (fs.existsSync(fullPath)) {
+              mediaGroup.push({
+                type: 'photo',
+                media: fullPath
+              });
+            } else {
+              console.error('❌ Photo not found:', fullPath);
+            }
           });
           
-          bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
-            console.error('Error sending media group:', err);
-          });
+          if (mediaGroup.length > 0) {
+            bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
+              console.error('Error sending media group:', err);
+            });
+          } else {
+            console.log('⚠️ No valid photos found for apartment:', apt.id);
+          }
         }
         
         // Send apartment details with Book Now button
@@ -241,7 +264,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           // Send message with inline keyboard
           bot.sendMessage(chatId, message, {
             parse_mode: 'Markdown',
-            reply_markup: keyboard  // keyboard already has the correct structure
+            reply_markup: keyboard
           }).catch(err => {
             console.error('Error sending apartment details:', err);
           });
