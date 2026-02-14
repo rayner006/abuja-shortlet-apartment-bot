@@ -40,6 +40,9 @@ const bot = new TelegramBot(token, {
   }
 });
 
+// Admin IDs - Replace with your Telegram IDs
+const ADMIN_IDS = [123456789, 987654321]; // TODO: Replace with your actual Telegram user IDs
+
 // Store owner chat IDs
 const ownerChatIds = {};
 
@@ -310,6 +313,39 @@ Please contact the guest to confirm their booking.
   });
 }
 
+/* ================= NOTIFY OWNER ABOUT COMMISSION ================= */
+function notifyOwnerCommission(ownerId, bookingCode, amount) {
+  const ownerChatId = ownerChatIds[ownerId];
+  if (!ownerChatId) return;
+  
+  const commission = amount * 0.1;
+  
+  bot.sendMessage(ownerChatId, 
+    `💰 *Commission Update*\n\nBooking ${bookingCode} is confirmed.\nYour commission: ₦${commission}\nThis will be settled according to your agreement.`,
+    { parse_mode: 'Markdown' }
+  ).catch(err => console.error('Error notifying owner:', err));
+}
+
+/* ================= TRACK COMMISSION ================= */
+function trackCommission(bookingId, bookingCode, ownerId, apartmentId, amount) {
+  const commission = amount * 0.1; // 10%
+  
+  db.query(
+    `INSERT INTO commission_tracking 
+     (booking_id, owner_id, apartment_id, booking_code, guest_name, amount_paid, commission_amount, commission_status)
+     SELECT ?, ?, ?, ?, user_name, ?, ?, 'pending'
+     FROM bookings WHERE id = ?`,
+    [bookingId, ownerId, apartmentId, bookingCode, amount, commission, bookingId],
+    (err) => {
+      if (err) {
+        console.error('Error tracking commission:', err);
+      } else {
+        console.log(`✅ Commission tracked: ₦${commission} for booking ${bookingCode}`);
+      }
+    }
+  );
+}
+
 /* ================= START BOOKING PROCESS ================= */
 function startBooking(chatId, apartmentId) {
   db.query(
@@ -359,6 +395,7 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
   const bookingCode = 'BOOK' + Date.now().toString().slice(-8);
   const amount = session.apartmentPrice;
   const commission = amount * 0.1; // 10% commission
+  const pin = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit PIN
   
   const query = `
     INSERT INTO bookings (
@@ -370,10 +407,11 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
       amount,
       commission,
       booking_code,
+      access_pin,
       status,
       pin_used,
       created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
   `;
   
   const values = [
@@ -385,6 +423,7 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
     amount,
     commission,
     bookingCode,
+    pin,
     'pending',
     false
   ];
@@ -411,6 +450,7 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
 ✅ *Booking Request Received!*
 
 🔑 *Your Booking Code:* \`${bookingCode}\`
+🔐 *Your Payment PIN:* \`${pin}\`
 
 👤 *Your Details:*
 • Name: ${fullName}
@@ -420,7 +460,9 @@ function processBookingWithUserInfo(chatId, phoneNumber, msg) {
 • Amount: ₦${amount}
 
 📌 *Next Steps:*
-Our team will contact you shortly via phone or Telegram to confirm your booking and provide payment details.
+1. Our team will contact you shortly
+2. Make payment using the PIN above
+3. Send the PIN to confirm payment
 
 Thank you for choosing Abuja Shortlet Apartments! 🏠
     `;
@@ -458,7 +500,296 @@ Thank you for choosing Abuja Shortlet Apartments! 🏠
   });
 }
 
-/* ================= OWNER REGISTRATION ================= */
+/* ================= ADMIN COMMANDS ================= */
+
+// Middleware to check if user is admin
+function isAdmin(chatId) {
+  return ADMIN_IDS.includes(chatId);
+}
+
+// Add subscription for an owner
+bot.onText(/\/add_subscription (\d+) (\d{4}-\d{2}-\d{2}) (\d+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return bot.sendMessage(chatId, '❌ This command is for admins only.');
+  }
+  
+  const ownerId = parseInt(match[1]);
+  const endDate = match[2];
+  const amount = parseFloat(match[3]);
+  const startDate = new Date().toISOString().split('T')[0];
+  
+  db.query(
+    `INSERT INTO owner_subscriptions 
+     (owner_id, owner_name, subscription_start, subscription_end, amount, payment_status) 
+     SELECT ?, name, ?, ?, ?, 'paid'
+     FROM property_owners WHERE id = ?`,
+    [ownerId, startDate, endDate, amount, ownerId],
+    (err) => {
+      if (err) {
+        console.error('Error adding subscription:', err);
+        return bot.sendMessage(chatId, '❌ Error adding subscription.');
+      }
+      
+      // Update owner's subscription status
+      db.query(
+        `UPDATE property_owners 
+         SET subscription_status = 'active', subscription_expiry = ? 
+         WHERE id = ?`,
+        [endDate, ownerId],
+        (updateErr) => {
+          if (updateErr) console.error('Error updating owner status:', updateErr);
+        }
+      );
+      
+      bot.sendMessage(chatId, `✅ Subscription added for owner ID ${ownerId}\n📅 Expires: ${endDate}\n💰 Amount: ₦${amount}`);
+    }
+  );
+});
+
+// Check subscription status
+bot.onText(/\/check_subscription (\d+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return bot.sendMessage(chatId, '❌ This command is for admins only.');
+  }
+  
+  const ownerId = parseInt(match[1]);
+  
+  db.query(
+    `SELECT o.name, o.subscription_status, o.subscription_expiry, 
+            COUNT(s.id) as total_payments,
+            SUM(s.amount) as total_paid
+     FROM property_owners o
+     LEFT JOIN owner_subscriptions s ON o.id = s.owner_id
+     WHERE o.id = ?
+     GROUP BY o.id`,
+    [ownerId],
+    (err, results) => {
+      if (err || results.length === 0) {
+        return bot.sendMessage(chatId, '❌ Owner not found.');
+      }
+      
+      const owner = results[0];
+      const today = new Date();
+      const expiry = owner.subscription_expiry ? new Date(owner.subscription_expiry) : null;
+      let statusEmoji = '✅';
+      
+      if (owner.subscription_status === 'expired') statusEmoji = '❌';
+      else if (expiry && expiry < today) statusEmoji = '⚠️';
+      
+      const message = `
+👤 *Owner:* ${owner.name}
+🆔 *ID:* ${ownerId}
+${statusEmoji} *Status:* ${owner.subscription_status || 'pending'}
+📅 *Expiry:* ${owner.subscription_expiry || 'Not set'}
+💰 *Total Paid:* ₦${owner.total_paid || 0}
+📊 *Payments:* ${owner.total_payments || 0}
+
+${expiry && expiry < today ? '⚠️ *SUBSCRIPTION EXPIRED*' : ''}
+      `;
+      
+      bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    }
+  );
+});
+
+// List all owners with expired subscriptions
+bot.onText(/\/expired_subs/, (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return bot.sendMessage(chatId, '❌ This command is for admins only.');
+  }
+  
+  const today = new Date().toISOString().split('T')[0];
+  
+  db.query(
+    `SELECT id, name, subscription_expiry 
+     FROM property_owners 
+     WHERE subscription_expiry < ? OR subscription_status = 'expired'`,
+    [today],
+    (err, results) => {
+      if (err) {
+        console.error('Error fetching expired subs:', err);
+        return bot.sendMessage(chatId, '❌ Error fetching data.');
+      }
+      
+      if (results.length === 0) {
+        return bot.sendMessage(chatId, '✅ All subscriptions are active!');
+      }
+      
+      let message = '⚠️ *EXPIRED SUBSCRIPTIONS:*\n\n';
+      results.forEach(owner => {
+        message += `👤 ${owner.name} (ID: ${owner.id})\n`;
+        message += `📅 Expired: ${owner.subscription_expiry}\n\n`;
+      });
+      
+      bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+    }
+  );
+});
+
+// View commission report
+bot.onText(/\/commissions(?:\s+(\d+))?/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return bot.sendMessage(chatId, '❌ This command is for admins only.');
+  }
+  
+  const ownerId = match[1] ? parseInt(match[1]) : null;
+  
+  let query = `
+    SELECT 
+      o.name as owner_name,
+      COUNT(c.id) as total_bookings,
+      SUM(c.amount_paid) as total_revenue,
+      SUM(c.commission_amount) as total_commission,
+      SUM(CASE WHEN c.commission_status = 'paid' THEN c.commission_amount ELSE 0 END) as paid_commission,
+      SUM(CASE WHEN c.commission_status = 'pending' THEN c.commission_amount ELSE 0 END) as pending_commission
+    FROM commission_tracking c
+    JOIN property_owners o ON c.owner_id = o.id
+  `;
+  
+  const params = [];
+  if (ownerId) {
+    query += ' WHERE c.owner_id = ?';
+    params.push(ownerId);
+  }
+  
+  query += ' GROUP BY c.owner_id, o.name ORDER BY total_commission DESC';
+  
+  db.query(query, params, (err, results) => {
+    if (err) {
+      console.error('Error fetching commissions:', err);
+      return bot.sendMessage(chatId, '❌ Error fetching data.');
+    }
+    
+    if (results.length === 0) {
+      return bot.sendMessage(chatId, '📊 No commission data found.');
+    }
+    
+    let message = '💰 *COMMISSION REPORT*\n\n';
+    let grandTotal = 0;
+    let grandPaid = 0;
+    let grandPending = 0;
+    
+    results.forEach(row => {
+      message += `👤 *${row.owner_name}*\n`;
+      message += `📊 Bookings: ${row.total_bookings}\n`;
+      message += `💰 Revenue: ₦${parseFloat(row.total_revenue || 0).toLocaleString()}\n`;
+      message += `💵 Commission (10%): ₦${parseFloat(row.total_commission || 0).toLocaleString()}\n`;
+      message += `✅ Paid: ₦${parseFloat(row.paid_commission || 0).toLocaleString()}\n`;
+      message += `⏳ Pending: ₦${parseFloat(row.pending_commission || 0).toLocaleString()}\n\n`;
+      
+      grandTotal += parseFloat(row.total_commission || 0);
+      grandPaid += parseFloat(row.paid_commission || 0);
+      grandPending += parseFloat(row.pending_commission || 0);
+    });
+    
+    message += `━━━━━━━━━━━━━━━━\n`;
+    message += `📊 *TOTALS:*\n`;
+    message += `💰 Total Commission: ₦${grandTotal.toLocaleString()}\n`;
+    message += `✅ Total Paid: ₦${grandPaid.toLocaleString()}\n`;
+    message += `⏳ Total Pending: ₦${grandPending.toLocaleString()}`;
+    
+    bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+  });
+});
+
+// Mark commission as paid
+bot.onText(/\/pay_commission (\d+)/, (msg, match) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return bot.sendMessage(chatId, '❌ This command is for admins only.');
+  }
+  
+  const commissionId = parseInt(match[1]);
+  
+  db.query(
+    `UPDATE commission_tracking 
+     SET commission_status = 'paid', commission_paid_date = NOW() 
+     WHERE id = ?`,
+    [commissionId],
+    (err, result) => {
+      if (err) {
+        console.error('Error updating commission:', err);
+        return bot.sendMessage(chatId, '❌ Error updating commission.');
+      }
+      
+      if (result.affectedRows === 0) {
+        return bot.sendMessage(chatId, '❌ Commission ID not found.');
+      }
+      
+      bot.sendMessage(chatId, `✅ Commission ID ${commissionId} marked as paid.`);
+    }
+  );
+});
+
+// Admin dashboard
+bot.onText(/\/dashboard/, (msg) => {
+  const chatId = msg.chat.id;
+  
+  if (!isAdmin(chatId)) {
+    return bot.sendMessage(chatId, '❌ This command is for admins only.');
+  }
+  
+  const queries = [
+    `SELECT COUNT(*) as total FROM property_owners`,
+    `SELECT COUNT(*) as expired FROM property_owners WHERE subscription_expiry < CURDATE() OR subscription_status = 'expired'`,
+    `SELECT SUM(commission_amount) as pending FROM commission_tracking WHERE commission_status = 'pending'`,
+    `SELECT SUM(commission_amount) as paid FROM commission_tracking WHERE commission_status = 'paid'`,
+    `SELECT COUNT(*) as bookings FROM bookings WHERE created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)`
+  ];
+  
+  let results = {};
+  let completed = 0;
+  
+  queries.forEach((query, index) => {
+    db.query(query, (err, rows) => {
+      if (!err && rows.length > 0) {
+        if (index === 0) results.totalOwners = rows[0].total;
+        if (index === 1) results.expiredOwners = rows[0].expired;
+        if (index === 2) results.pendingCommission = rows[0].pending || 0;
+        if (index === 3) results.paidCommission = rows[0].paid || 0;
+        if (index === 4) results.recentBookings = rows[0].bookings;
+      }
+      
+      completed++;
+      if (completed === queries.length) {
+        const message = `
+📊 *ADMIN DASHBOARD*
+
+👥 *Owners:*
+• Total: ${results.totalOwners || 0}
+• Expired: ${results.expiredOwners || 0}
+• Active: ${(results.totalOwners || 0) - (results.expiredOwners || 0)}
+
+💰 *Commissions:*
+• Pending: ₦${(results.pendingCommission || 0).toLocaleString()}
+• Paid: ₦${(results.paidCommission || 0).toLocaleString()}
+• Total: ₦${((results.pendingCommission || 0) + (results.paidCommission || 0)).toLocaleString()}
+
+📅 *Last 30 Days:*
+• Bookings: ${results.recentBookings || 0}
+
+━━━━━━━━━━━━━━━━
+Use:
+/commissions - Detailed report
+/expired_subs - Expired subscriptions
+        `;
+        
+        bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+      }
+    });
+  });
+});
+
+// Owner registration
 bot.onText(/\/register_owner (\d+)/, (msg, match) => {
   const chatId = msg.chat.id;
   const ownerId = parseInt(match[1]);
@@ -687,50 +1018,6 @@ bot.on('callback_query', (cb) => {
 /* ================= VERIFY PIN ================= */
 function verifyPin(chatId, bookingCode, pin) {
   db.query(
-    `SELECT * FROM bookings 
-     WHERE booking_code=? AND access_pin=? AND pin_used=false`,
-    [bookingCode, pin],
-    (err, rows) => {
-      if (err) {
-        console.error('Database error in verifyPin:', err);
-        return bot.sendMessage(chatId, '❌ *Database Error* \nPlease try again later.', {
-          parse_mode: 'Markdown'
-        });
-      }
-
-      if (rows.length === 0) {
-        return bot.sendMessage(chatId, '❌ *Invalid or Used PIN* \nPlease check and try again.', {
-          parse_mode: 'Markdown'
-        });
-      }
-
-      db.query(
-        `UPDATE bookings SET pin_used=true, tenant_confirmed_at=NOW(), status=? WHERE booking_code=?`,
-        ['completed', bookingCode],
-        (updateErr) => {
-          if (updateErr) {
-            console.error('Error updating PIN status:', updateErr);
-            return bot.sendMessage(chatId, '❌ *Error Confirming PIN* \nPlease contact admin.', {
-              parse_mode: 'Markdown'
-            });
-          }
-          
-          bot.sendMessage(chatId, '✅ *Payment Confirmed!* 🎉\n\nYour booking is complete.\nThank you for choosing Abuja Shortlet Apartments! 🏠', {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              keyboard: [
-                ['🏠 View Apartments'],
-                ['📞 Contact Admin']
-              ],
-              resize_keyboard: true
-            }
-          });
-          
-          console.log(`📢 Booking ${bookingCode} confirmed by tenant`);
-        }
-      );
-    }
-  );
-}
-
-console.log('✅ Bot Ready - Fully matched with your database structure! 🏠');
+    `SELECT b.*, a.owner_id, a.price 
+     FROM bookings b
+     JOIN apartments
