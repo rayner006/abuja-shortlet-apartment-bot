@@ -1,14 +1,52 @@
 require('dotenv').config();
 
+// Suppress Bluebird promise warnings
+process.env.BLUEBIRD_DEBUG = 0;
+process.env.BLUEBIRD_WARNINGS = 0;
+process.env.BLUEBIRD_LONG_STACK_TRACES = 0;
+
+// Optional: Silence Bluebird completely
+const Bluebird = require('bluebird');
+if (Bluebird) {
+  Bluebird.config({
+    warnings: false,
+    longStackTraces: false,
+    cancellation: false,
+    monitoring: false
+  });
+}
+
 // Error handlers
 process.on('unhandledRejection', (reason, promise) => {
+  // Filter out Bluebird errors
+  if (reason && reason.message && reason.message.includes('bluebird')) {
+    return;
+  }
   console.error('❌ Unhandled Rejection at:', promise);
   console.error('💥 Reason:', reason);
 });
 
 process.on('uncaughtException', (error) => {
+  // Filter out Bluebird errors
+  if (error && error.message && error.message.includes('bluebird')) {
+    return;
+  }
   console.error('💥 Uncaught Exception:', error);
 });
+
+// Override console methods to filter Bluebird noise
+const originalConsoleError = console.error;
+console.error = function(...args) {
+  // Filter out Bluebird-specific errors
+  if (args[0] && typeof args[0] === 'string') {
+    if (args[0].includes('bluebird') || 
+        args[0].includes('Promise') ||
+        args[0].includes('drainQueue')) {
+      return;
+    }
+  }
+  originalConsoleError.apply(console, args);
+};
 
 /* ================= KEEP ALIVE SERVER ================= */
 const express = require('express');
@@ -22,6 +60,9 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`🌍 Web server running on port ${PORT}`);
 });
+
+// ... rest of your code continues
+
 
 /* ================= TELEGRAM BOT ================= */
 const TelegramBot = require('node-telegram-bot-api');
@@ -1389,4 +1430,5 @@ const scheduleDailySummary = () => {
 scheduleDailySummary();
 
 console.log('✅ Bot Ready - Fixed property_owners column name! 🏠');
+
 
