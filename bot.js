@@ -338,9 +338,9 @@ if (photoPaths.length > 0) {
   bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
 }
 
-// Send apartment details with Book Now button after photos
-setTimeout(() => {
-  const message = `
+      // Send apartment details with Book Now button after photos
+      setTimeout(() => {
+        const message = `
 🏠 *Name:* ${apt.name}
 📍 *Location:* ${apt.location}
 📌 *Address:* ${apt.address || 'Contact admin for address'}
@@ -349,32 +349,32 @@ setTimeout(() => {
 🛏️ *Bedrooms:* ${apt.bedrooms || 0}
 🚿 *Bathrooms:* ${apt.bathrooms || 1}
 📝 *Description:* ${apt.description}
-  `;
-  
-  const keyboard = getApartmentActionsKeyboard(apt.id);
-  
-  bot.sendMessage(chatId, message, {
-    parse_mode: 'Markdown',
-    reply_markup: keyboard
-  }).catch(err => {
-    console.error('Error sending apartment details:', err);
-  });
-  
-}, 1500);
-      
-      // Show search options after all apartments
-      setTimeout(() => {
-        const keyboard = getSearchOptionsKeyboard();
-        bot.sendMessage(chatId, '🔍 *What would you like to do next?*', {
+        `;
+        
+        const keyboard = getApartmentActionsKeyboard(apt.id);
+        
+        bot.sendMessage(chatId, message, {
           parse_mode: 'Markdown',
-          reply_markup: keyboard.reply_markup
+          reply_markup: keyboard
+        }).catch(err => {
+          console.error('Error sending apartment details:', err);
         });
-      }, 3000);
+        
+      }, 1500);
+    }); // ← THIS WAS MISSING! Close the results.forEach loop
       
-      delete selectedLocation[chatId];
-    }
-  );
-}
+    // Show search options after all apartments
+    setTimeout(() => {
+      const keyboard = getSearchOptionsKeyboard();
+      bot.sendMessage(chatId, '🔍 *What would you like to do next?*', {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard.reply_markup
+      });
+    }, 3000);
+    
+    delete selectedLocation[chatId];
+  }
+); // ← Close the db.query callback
 
 /* ================= SEND NOTIFICATION TO OWNER ================= */
 function notifyOwner(ownerId, bookingInfo) {
@@ -1429,6 +1429,7 @@ const scheduleDailySummary = () => {
 scheduleDailySummary();
 
 console.log('✅ Bot Ready - Fixed property_owners column name! 🏠');
+
 
 
 
