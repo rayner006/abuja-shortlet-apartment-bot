@@ -61,6 +61,7 @@ process.on('SIGINT', () => {
 const awaitingPin = {};
 const userSessions = {}; // Store user booking data
 const selectedLocation = {}; // Store selected location for filtering
+const awaitingPhone = {}; // Store users waiting to input phone number
 
 /* ================= ERROR HANDLING ================= */
 bot.on('polling_error', (error) => {
@@ -255,61 +256,127 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
 
 /* ================= START BOOKING PROCESS ================= */
 function startBooking(chatId, apartmentId) {
-  // Store apartment ID in session
-  userSessions[chatId] = { apartmentId, step: 'awaiting_checkin' };
-  
-  bot.sendMessage(chatId, '📅 Please enter your *check-in date* (DD/MM/YYYY):', {
-    parse_mode: 'Markdown',
-    reply_markup: {
-      force_reply: true,
-      selective: true
+  // Get apartment details first
+  db.query(
+    'SELECT * FROM apartments WHERE id = ?',
+    [apartmentId],
+    (err, results) => {
+      if (err || results.length === 0) {
+        return bot.sendMessage(chatId, '❌ Apartment not found');
+      }
+      
+      const apt = results[0];
+      
+      // Store apartment details in session
+      userSessions[chatId] = { 
+        apartmentId, 
+        apartmentName: apt.name,
+        apartmentPrice: apt.price,
+        step: 'awaiting_phone'
+      };
+      
+      // Ask for phone number
+      bot.sendMessage(chatId, '📱 *Please enter your phone number:*\n\nWe will contact you shortly to confirm your booking.', {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          force_reply: true,
+          selective: true
+        }
+      });
     }
-  });
+  );
 }
 
-/* ================= GENERATE PIN FOR BOOKING ================= */
-function generatePinForBooking(chatId, checkin, checkout) {
-  const bookingCode = 'BOOK' + Date.now().toString().slice(-8);
-  const pin = Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit PIN
-  
+/* ================= PROCESS BOOKING WITH USER INFO ================= */
+function processBookingWithUserInfo(chatId, phoneNumber, msg) {
   const session = userSessions[chatId];
+  if (!session) {
+    return showMainMenu(chatId);
+  }
   
+  // Get user info from message
+  const userId = msg.from.id;
+  const firstName = msg.from.first_name || '';
+  const lastName = msg.from.last_name || '';
+  const username = msg.from.username || 'No username';
+  const fullName = `${firstName} ${lastName}`.trim();
+  
+  // Generate booking code
+  const bookingCode = 'BOOK' + Date.now().toString().slice(-8);
+  
+  // Insert booking into database
   db.query(
-    `INSERT INTO bookings (booking_code, apartment_id, user_id, check_in, check_out, access_pin, pin_used) 
-     VALUES (?, ?, ?, ?, ?, ?, false)`,
-    [bookingCode, session.apartmentId, chatId, checkin, checkout, pin],
+    `INSERT INTO bookings (
+      booking_code, 
+      apartment_id, 
+      user_id, 
+      user_name, 
+      username, 
+      phone, 
+      check_in, 
+      check_out, 
+      access_pin, 
+      pin_used
+    ) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, NULL, false)`,
+    [
+      bookingCode, 
+      session.apartmentId, 
+      userId, 
+      fullName, 
+      username, 
+      phoneNumber
+    ],
     (err) => {
       if (err) {
         console.error('Error creating booking:', err);
-        return bot.sendMessage(chatId, '❌ Error creating booking');
+        return bot.sendMessage(chatId, '❌ Error creating booking. Please try again.');
       }
       
-      // Store PIN temporarily for verification
-      awaitingPin[chatId] = bookingCode;
-      
+      // Send confirmation to user
       const message = `
-✅ *Booking Initiated!*
+✅ *Booking Request Received!*
 
 🔑 *Your Booking Code:* \`${bookingCode}\`
-🔐 *Your Payment PIN:* \`${pin}\`
 
-💰 *Amount to pay:* ₦${session.price || 'To be calculated'}
+👤 *Your Details:*
+• Name: ${fullName}
+• Username: @${username}
+• Phone: ${phoneNumber}
+• Apartment: ${session.apartmentName}
 
-🏦 *Bank Details:*
-Bank: Access Bank
-Account: 1234567890
-Name: Abuja Shortlet Ltd
+📌 *Next Steps:*
+Our team will contact you shortly via phone or Telegram to confirm your booking and provide payment details.
 
-📌 *Next Step:*
-After making payment, simply send the PIN to confirm your booking.
+Thank you for choosing Abuja Shortlet Apartments! 🏠
       `;
       
-      bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+      bot.sendMessage(chatId, message, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          keyboard: [
+            ['🏠 View Apartments'],
+            ['📞 Contact Admin']
+          ],
+          resize_keyboard: true
+        }
+      });
+      
+      // Notify admin about new booking
+      notifyAdminOfNewBooking(bookingCode, fullName, username, phoneNumber, session.apartmentName);
       
       // Clear session
       delete userSessions[chatId];
     }
   );
+}
+
+/* ================= NOTIFY ADMIN ABOUT NEW BOOKING ================= */
+function notifyAdminOfNewBooking(bookingCode, name, username, phone, apartmentName) {
+  // You can implement this to send a message to an admin group or channel
+  console.log(`📢 NEW BOOKING: ${bookingCode} - ${name} (@${username}) - ${phone} - ${apartmentName}`);
+  
+  // TODO: Send to admin Telegram chat
+  // bot.sendMessage(ADMIN_CHAT_ID, `📢 New Booking!\n\nCode: ${bookingCode}\nName: ${name}\nUsername: @${username}\nPhone: ${phone}\nApartment: ${apartmentName}`);
 }
 
 /* ================= CONTACT ADMIN ================= */
@@ -382,33 +449,16 @@ bot.on('message', (msg) => {
 
   if (!text) return;
 
-  // Check if user is in booking flow
-  if (userSessions[chatId]) {
-    const session = userSessions[chatId];
-    
-    if (session.step === 'awaiting_checkin') {
-      // Validate date format
-      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
-        return bot.sendMessage(chatId, '❌ Invalid format. Please use DD/MM/YYYY');
-      }
-      session.checkin = text;
-      session.step = 'awaiting_checkout';
-      return bot.sendMessage(chatId, '📅 Please enter your *check-out date* (DD/MM/YYYY):', {
-        parse_mode: 'Markdown'
-      });
+  // Check if user is in booking flow and waiting for phone number
+  if (userSessions[chatId] && userSessions[chatId].step === 'awaiting_phone') {
+    // Validate phone number (basic validation - can be improved)
+    if (text.length < 10) {
+      return bot.sendMessage(chatId, '❌ Please enter a valid phone number (at least 10 digits)');
     }
-    
-    if (session.step === 'awaiting_checkout') {
-      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(text)) {
-        return bot.sendMessage(chatId, '❌ Invalid format. Please use DD/MM/YYYY');
-      }
-      // Calculate price (simplified - you'd want actual logic)
-      session.price = '150,000'; // Placeholder
-      return generatePinForBooking(chatId, session.checkin, text);
-    }
+    return processBookingWithUserInfo(chatId, text, msg);
   }
 
-  // Check for PIN verification
+  // Check if user is in PIN verification flow
   if (awaitingPin[chatId]) {
     const bookingCode = awaitingPin[chatId];
     delete awaitingPin[chatId];
@@ -553,4 +603,4 @@ function notifyAdminOfConfirmedBooking(bookingCode) {
   console.log(`📢 Booking ${bookingCode} confirmed - would notify admin here`);
 }
 
-console.log('✅ Bot Ready - Clean album with no extra text! 🏠');
+console.log('✅ Bot Ready - Enhanced booking with user info collection! 🏠');
