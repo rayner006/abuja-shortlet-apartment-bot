@@ -102,9 +102,10 @@ function saveUserInfo(msg) {
   });
 }
 
-// Load owner info
+// ================= FIXED: Load owner info with correct column name =================
 function loadOwnerInfo() {
-  db.query('SELECT id, name, telegram_chat_id FROM property_owners', (err, results) => {
+  // Use business_name instead of name
+  db.query('SELECT id, business_name as name, telegram_chat_id FROM property_owners', (err, results) => {
     if (err) {
       console.error('Error loading owner info:', err);
     } else {
@@ -244,7 +245,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
         
         console.log(`📸 ${apt.type} - Final photo paths (${photoPaths.length} photos):`, photoPaths);
         
-        // ===== UPDATED: Send all photos in ONE album =====
+        // Send all photos in ONE album
         if (photoPaths.length > 0) {
           const mediaGroup = [];
           
@@ -318,7 +319,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
             console.error('Error sending apartment details:', err);
           });
           
-        }, 1500); // Delay after album
+        }, 1500);
       });
       
       // Show search options after all apartments
@@ -656,11 +657,12 @@ Thank you for choosing Abuja Shortlet Apartments! 🏠
   });
 }
 
-/* ================= ADMIN COMMANDS ================= */
+/* ================= FIXED: ADMIN COMMANDS with business_name ================= */
 function isAdmin(chatId) {
   return ADMIN_IDS.includes(chatId);
 }
 
+// Add subscription for an owner
 bot.onText(/\/add_subscription (\d+) (\d{4}-\d{2}-\d{2}) (\d+)/, (msg, match) => {
   const chatId = msg.chat.id;
   
@@ -676,7 +678,7 @@ bot.onText(/\/add_subscription (\d+) (\d{4}-\d{2}-\d{2}) (\d+)/, (msg, match) =>
   db.query(
     `INSERT INTO owner_subscriptions 
      (owner_id, owner_name, subscription_start, subscription_end, amount, payment_status) 
-     SELECT ?, name, ?, ?, ?, 'paid'
+     SELECT ?, business_name, ?, ?, ?, 'paid'
      FROM property_owners WHERE id = ?`,
     [ownerId, startDate, endDate, amount, ownerId],
     (err) => {
@@ -697,6 +699,7 @@ bot.onText(/\/add_subscription (\d+) (\d{4}-\d{2}-\d{2}) (\d+)/, (msg, match) =>
   );
 });
 
+// Check subscription status
 bot.onText(/\/check_subscription (\d+)/, (msg, match) => {
   const chatId = msg.chat.id;
   
@@ -707,7 +710,7 @@ bot.onText(/\/check_subscription (\d+)/, (msg, match) => {
   const ownerId = parseInt(match[1]);
   
   db.query(
-    `SELECT o.name, o.subscription_status, o.subscription_expiry, 
+    `SELECT o.business_name as name, o.subscription_status, o.subscription_expiry, 
             COUNT(s.id) as total_payments,
             SUM(s.amount) as total_paid
      FROM property_owners o
@@ -744,6 +747,7 @@ ${expiry && expiry < today ? '⚠️ *SUBSCRIPTION EXPIRED*' : ''}
   );
 });
 
+// List all owners with expired subscriptions
 bot.onText(/\/expired_subs/, (msg) => {
   const chatId = msg.chat.id;
   
@@ -754,7 +758,7 @@ bot.onText(/\/expired_subs/, (msg) => {
   const today = new Date().toISOString().split('T')[0];
   
   db.query(
-    `SELECT id, name, subscription_expiry 
+    `SELECT id, business_name as name, subscription_expiry 
      FROM property_owners 
      WHERE subscription_expiry < ? OR subscription_status = 'expired'`,
     [today],
@@ -779,6 +783,7 @@ bot.onText(/\/expired_subs/, (msg) => {
   );
 });
 
+// View commission report
 bot.onText(/\/commissions(?:\s+(\d+))?/, (msg, match) => {
   const chatId = msg.chat.id;
   
@@ -790,7 +795,7 @@ bot.onText(/\/commissions(?:\s+(\d+))?/, (msg, match) => {
   
   let query = `
     SELECT 
-      o.name as owner_name,
+      o.business_name as owner_name,
       COUNT(c.id) as total_bookings,
       SUM(c.amount_paid) as total_revenue,
       SUM(c.commission_amount) as total_commission,
@@ -806,7 +811,7 @@ bot.onText(/\/commissions(?:\s+(\d+))?/, (msg, match) => {
     params.push(ownerId);
   }
   
-  query += ' GROUP BY c.owner_id, o.name ORDER BY total_commission DESC';
+  query += ' GROUP BY c.owner_id, o.business_name ORDER BY total_commission DESC';
   
   db.query(query, params, (err, results) => {
     if (err) {
@@ -846,6 +851,7 @@ bot.onText(/\/commissions(?:\s+(\d+))?/, (msg, match) => {
   });
 });
 
+// Mark commission as paid
 bot.onText(/\/pay_commission (\d+)/, (msg, match) => {
   const chatId = msg.chat.id;
   
@@ -875,6 +881,7 @@ bot.onText(/\/pay_commission (\d+)/, (msg, match) => {
   );
 });
 
+// Admin dashboard
 bot.onText(/\/dashboard/, (msg) => {
   const chatId = msg.chat.id;
   
@@ -933,6 +940,7 @@ Use:
   });
 });
 
+// ================= FIXED: Owner registration with business_name =================
 bot.onText(/\/register_owner (\d+)/, (msg, match) => {
   const chatId = msg.chat.id;
   const ownerId = parseInt(match[1]);
@@ -946,7 +954,14 @@ bot.onText(/\/register_owner (\d+)/, (msg, match) => {
         return bot.sendMessage(chatId, '❌ Error registering. Please check owner ID.');
       }
       
-      bot.sendMessage(chatId, `✅ Successfully registered as owner ID: ${ownerId}\nYou will now receive booking notifications.`);
+      // Fetch owner's business name for confirmation
+      db.query('SELECT business_name FROM property_owners WHERE id = ?', [ownerId], (err, results) => {
+        if (!err && results.length > 0) {
+          bot.sendMessage(chatId, `✅ Successfully registered as owner: ${results[0].business_name}\nYou will now receive booking notifications.`);
+        } else {
+          bot.sendMessage(chatId, `✅ Successfully registered as owner ID: ${ownerId}\nYou will now receive booking notifications.`);
+        }
+      });
       
       ownerChatIds[ownerId] = chatId;
     }
@@ -1330,4 +1345,4 @@ const scheduleDailySummary = () => {
 
 scheduleDailySummary();
 
-console.log('✅ Bot Ready - Photos in albums! 🏠');
+console.log('✅ Bot Ready - Fixed property_owners column name! 🏠');
