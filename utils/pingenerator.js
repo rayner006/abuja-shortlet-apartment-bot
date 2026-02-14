@@ -1,60 +1,27 @@
-// generate 5-digit pin for tenant verification
-function generateaccesspin() {
-  return Math.floor(10000 + Math.random() * 90000).toString();
+// In your processBookingWithUserInfo function, replace the PIN generation line:
+
+// Old line (problematic):
+// const pin = Math.floor(100000 + Math.random() * 900000).toString().slice(0, 5);
+
+// New improved PIN generation:
+function generateSecurePIN() {
+  // Generate a random 5-digit number (10000-99999)
+  const pin = Math.floor(10000 + Math.random() * 90000).toString();
+  console.log('🔐 Generated PIN:', pin);
+  return pin;
 }
 
-// Tenant confirmation button
-function tenantConfirmKeyboard(bookingCode) {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { 
-            text: "💰 I Have Paid the Owner", 
-            callback_data: `confirm_tenant_${bookingCode}` 
-          }
-        ]
-      ]
-    }
-  };
+// Then use it in your query:
+const pin = generateSecurePIN();
+
+// Also add PIN validation
+function isValidPIN(pin) {
+  return /^\d{5}$/.test(pin); // Exactly 5 digits
 }
 
-// Owner confirmation button
-function ownerConfirmKeyboard(bookingCode) {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { 
-            text: "✅ Owner Confirms Payment", 
-            callback_data: `confirm_owner_${bookingCode}` 
-          }
-        ]
-      ]
-    }
-  };
-}
-
-// Commission payment button
-function payCommissionKeyboard(bookingCode, amount) {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { 
-            text: `💵 Pay ₦${Number(amount).toLocaleString()} Commission`, 
-            callback_data: `pay_commission_${bookingCode}` 
-          }
-        ]
-      ]
-    }
-  };
-}
-
-// ONE export at the bottom - ALL functions together!
-module.exports = {
-  generateaccesspin,
-  tenantConfirmKeyboard,
-  ownerConfirmKeyboard,
-  payCommissionKeyboard
-};
+// When verifying PIN, add validation
+bot.onText(/\/verify_pin (\d{5})/, (msg, match) => {
+  const pin = match[1];
+  console.log('🔍 Verifying PIN:', pin);
+  // Your verification logic here
+});
