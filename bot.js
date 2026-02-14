@@ -224,42 +224,36 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
         
         console.log(`📸 ${apt.type} - Final photo paths:`, photoPaths);
         
-        // Send photos one by one
+        // FIXED: Handle paths correctly (with or without leading slash)
         if (photoPaths.length > 0) {
-          // Send first photo with caption
-          const firstPhotoPath = path.join(__dirname, photoPaths[0]);
-          console.log(`📸 ${apt.type} - First photo full path:`, firstPhotoPath);
-          
-          // Check if file exists
-          if (fs.existsSync(firstPhotoPath)) {
-            console.log(`✅ ${apt.type} - First photo exists`);
-          } else {
-            console.log(`❌ ${apt.type} - First photo NOT found at:`, firstPhotoPath);
-          }
-          
-          bot.sendPhoto(chatId, firstPhotoPath, {
-            caption: `📸 *${apt.name}* - Photo 1/${photoPaths.length}`,
-            parse_mode: 'Markdown'
-          }).catch(err => {
-            console.error(`Error sending first photo for ${apt.type}:`, err);
-          });
-          
-          // Send remaining photos after delay
-          if (photoPaths.length > 1) {
+          // Send photos one by one with proper path handling
+          photoPaths.forEach((photoPath, index) => {
+            // Fix the path if it doesn't start with a slash
+            let fixedPath = photoPath;
+            if (!fixedPath.startsWith('/') && !fixedPath.startsWith('http')) {
+              fixedPath = '/' + fixedPath;
+            }
+            
+            const fullPath = path.join(__dirname, fixedPath);
+            console.log(`📸 ${apt.type} - Photo ${index + 1} full path:`, fullPath);
+            
+            // Check if file exists
+            if (fs.existsSync(fullPath)) {
+              console.log(`✅ ${apt.type} - Photo ${index + 1} exists`);
+            } else {
+              console.log(`❌ ${apt.type} - Photo ${index + 1} NOT found at:`, fullPath);
+            }
+            
+            // Add delay between photos to avoid flooding
             setTimeout(() => {
-              for (let i = 1; i < photoPaths.length; i++) {
-                const photoPath = path.join(__dirname, photoPaths[i]);
-                console.log(`📸 ${apt.type} - Photo ${i+1} path:`, photoPath);
-                
-                bot.sendPhoto(chatId, photoPath, {
-                  caption: `📸 *${apt.name}* - Photo ${i+1}/${photoPaths.length}`,
-                  parse_mode: 'Markdown'
-                }).catch(err => {
-                  console.error(`Error sending photo ${i+1} for ${apt.type}:`, err);
-                });
-              }
-            }, 1000);
-          }
+              bot.sendPhoto(chatId, fullPath, {
+                caption: index === 0 ? `📸 *${apt.name}*` : undefined,
+                parse_mode: 'Markdown'
+              }).catch(err => {
+                console.error(`Error sending photo ${index + 1} for ${apt.type}:`, err.message);
+              });
+            }, index * 500); // 500ms delay between each photo
+          });
         } else {
           bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
         }
@@ -286,7 +280,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
             console.error('Error sending apartment details:', err);
           });
           
-        }, photoPaths.length * 1000 + 500);
+        }, photoPaths.length * 500 + 1000);
       });
       
       // Show search options after all apartments
@@ -1298,4 +1292,4 @@ const scheduleDailySummary = () => {
 
 scheduleDailySummary();
 
-console.log('✅ Bot Ready - All features intact with photo fix! 🏠');
+console.log('✅ Bot Ready - Photos fixed with path handling! 🏠');
