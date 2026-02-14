@@ -40,8 +40,8 @@ const bot = new TelegramBot(token, {
   }
 });
 
-// Admin IDs - Replace with your Telegram IDs
-const ADMIN_IDS = [123456789, 987654321]; // TODO: Replace with your actual Telegram user IDs
+// Admin IDs - Your correct Telegram ID
+const ADMIN_IDS = [6947618479]; // Your admin ID
 
 // Store owner chat IDs
 const ownerChatIds = {};
@@ -313,6 +313,54 @@ Please contact the guest to confirm their booking.
   });
 }
 
+/* ================= NOTIFY ADMIN ABOUT NEW BOOKING ================= */
+function notifyAdminNewBooking(bookingInfo) {
+  // Send to all admin IDs (just you)
+  ADMIN_IDS.forEach(adminId => {
+    const message = `
+🔔 *NEW BOOKING ALERT!* 🔔
+
+🔑 *Booking Code:* \`${bookingInfo.bookingCode}\`
+🆔 *Booking ID:* ${bookingInfo.bookingId}
+
+👤 *Guest Details:*
+• Name: ${bookingInfo.guestName}
+• Username: @${bookingInfo.guestUsername}
+• Phone: ${bookingInfo.guestPhone}
+
+🏠 *Apartment Details:*
+• Name: ${bookingInfo.apartmentName}
+• Location: ${bookingInfo.location}
+• Type: ${bookingInfo.type}
+• Price: ₦${bookingInfo.price}/night
+• Owner ID: ${bookingInfo.ownerId || 'Not assigned'}
+
+📅 *Booking Time:* ${new Date().toLocaleString()}
+💰 *Your Commission (10%):* ₦${bookingInfo.price * 0.1}
+
+━━━━━━━━━━━━━━━━
+📊 *Quick Actions:*
+• Check owner subscription: /check_subscription ${bookingInfo.ownerId || '?'}
+• View all commissions: /commissions
+• Dashboard: /dashboard
+    `;
+    
+    bot.sendMessage(adminId, message, {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📊 View Dashboard', callback_data: 'admin_dashboard' }],
+          [{ text: '💰 Check Commission', callback_data: `admin_commission_${bookingInfo.bookingCode}` }]
+        ]
+      }
+    }).catch(err => {
+      console.error(`Error notifying admin ${adminId}:`, err);
+    });
+  });
+  
+  console.log(`📢 Admin notified about booking ${bookingInfo.bookingCode}`);
+}
+
 /* ================= NOTIFY OWNER ABOUT COMMISSION ================= */
 function notifyOwnerCommission(ownerId, bookingCode, amount) {
   const ownerChatId = ownerChatIds[ownerId];
@@ -494,7 +542,7 @@ Thank you for choosing Abuja Shortlet Apartments! 🏠
       }
     });
     
-    // Prepare booking info for owner notification
+    // Prepare booking info for notifications
     const bookingInfo = {
       bookingCode: bookingCode,
       guestName: fullName,
@@ -504,13 +552,17 @@ Thank you for choosing Abuja Shortlet Apartments! 🏠
       location: session.apartmentLocation,
       type: session.apartmentType,
       price: amount,
-      bookingId: result.insertId
+      bookingId: result.insertId,
+      ownerId: session.ownerId
     };
     
     // Notify owner if exists
     if (session.ownerId) {
       notifyOwner(session.ownerId, bookingInfo);
     }
+    
+    // ALWAYS notify admin (you)
+    notifyAdminNewBooking(bookingInfo);
     
     console.log(`📢 NEW BOOKING: ${bookingCode} - ${fullName} (@${username}) - ${phoneNumber} - ${session.apartmentName}`);
     
@@ -1025,6 +1077,42 @@ bot.on('callback_query', (cb) => {
     ).catch(e => console.log('Error editing message:', e));
   }
 
+  if (data === 'admin_dashboard') {
+    // Trigger the dashboard command
+    bot.sendMessage(chatId, '/dashboard');
+  }
+
+  if (data.startsWith('admin_commission_')) {
+    const bookingCode = data.replace('admin_commission_', '');
+    
+    db.query(
+      `SELECT b.*, a.owner_id, a.price, a.name as apartment_name
+       FROM bookings b
+       JOIN apartments a ON b.apartment_id = a.id
+       WHERE b.booking_code = ?`,
+      [bookingCode],
+      (err, results) => {
+        if (err || results.length === 0) {
+          return bot.sendMessage(chatId, '❌ Booking not found');
+        }
+        
+        const booking = results[0];
+        const commission = booking.amount * 0.1;
+        
+        bot.sendMessage(chatId, 
+          `💰 *Commission Details for ${bookingCode}*\n\n` +
+          `• Apartment: ${booking.apartment_name}\n` +
+          `• Amount: ₦${booking.amount}\n` +
+          `• Commission (10%): ₦${commission}\n` +
+          `• Owner ID: ${booking.owner_id || 'Not assigned'}\n` +
+          `• Status: ${booking.owner_confirmed ? '✅ Owner Confirmed' : '⏳ Pending'}\n\n` +
+          `Use /pay_commission [id] when paid`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+    );
+  }
+
   if (data.startsWith('confirm_property_owner_')) {
     const bookingCode = data.replace('confirm_property_owner_', '');
     awaitingPin[chatId] = bookingCode;
@@ -1107,4 +1195,73 @@ function verifyPin(chatId, bookingCode, pin) {
   );
 }
 
-console.log('✅ Bot Ready - Complete with matching database structure! 🏠');
+/* ================= SEND DAILY SUMMARY ================= */
+function sendDailySummary() {
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+  
+  const endOfDay = new Date();
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  db.query(
+    `SELECT 
+      COUNT(*) as total_bookings,
+      SUM(amount) as total_revenue,
+      SUM(amount * 0.1) as total_commission
+     FROM bookings 
+     WHERE created_at BETWEEN ? AND ?`,
+    [startOfDay, endOfDay],
+    (err, results) => {
+      if (err) {
+        console.error('Error getting daily summary:', err);
+        return;
+      }
+      
+      const summary = results[0];
+      
+      ADMIN_IDS.forEach(adminId => {
+        const message = `
+📅 *Daily Summary - ${new Date().toLocaleDateString()}*
+
+📊 *Today's Stats:*
+• Bookings: ${summary.total_bookings || 0}
+• Revenue: ₦${(summary.total_revenue || 0).toLocaleString()}
+• Commission: ₦${(summary.total_commission || 0).toLocaleString()}
+
+━━━━━━━━━━━━━━━━
+Check /dashboard for more details
+        `;
+        
+        bot.sendMessage(adminId, message, { parse_mode: 'Markdown' });
+      });
+    }
+  );
+}
+
+// Schedule daily summary at 9 PM
+const scheduleDailySummary = () => {
+  const now = new Date();
+  const night = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    21, 0, 0 // 9:00 PM
+  );
+  
+  let msUntilNight = night.getTime() - now.getTime();
+  if (msUntilNight < 0) {
+    msUntilNight += 24 * 60 * 60 * 1000; // Next day
+  }
+  
+  setTimeout(() => {
+    sendDailySummary();
+    setInterval(sendDailySummary, 24 * 60 * 60 * 1000); // Repeat every 24 hours
+  }, msUntilNight);
+  
+  console.log('📅 Daily summary scheduled for 9:00 PM');
+};
+
+// Start the scheduler
+scheduleDailySummary();
+
+console.log('✅ Bot Ready - Complete with admin notifications for ID: 6947618479 🏠');
