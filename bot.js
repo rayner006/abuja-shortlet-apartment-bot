@@ -207,25 +207,21 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
       }
       
       results.forEach(apt => {
-        // IMPROVED: Better photo paths handling with error recovery
+        // Get photo paths from database
         let photoPaths = [];
         
         try {
           if (apt.photo_paths) {
-            // Check if it's a string that looks like JSON
             if (typeof apt.photo_paths === 'string') {
-              // If it's the string "NULL" or empty, treat as empty array
               if (apt.photo_paths === 'NULL' || apt.photo_paths === 'null' || apt.photo_paths === '') {
                 photoPaths = [];
                 console.log(`⚠️ ${apt.type} - photo_paths is string NULL`);
               } else {
-                // Try to parse as JSON
                 try {
                   photoPaths = JSON.parse(apt.photo_paths);
                   console.log(`📸 ${apt.type} - Parsed JSON:`, photoPaths);
                 } catch (e) {
                   console.log(`⚠️ ${apt.type} - Failed to parse JSON:`, apt.photo_paths.substring(0, 50));
-                  // If it's a comma-separated string, split it
                   if (apt.photo_paths.includes(',')) {
                     photoPaths = apt.photo_paths.split(',').map(p => p.trim().replace(/^"|"$/g, ''));
                     console.log(`📸 ${apt.type} - Split comma-separated:`, photoPaths);
@@ -248,34 +244,54 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
         
         console.log(`📸 ${apt.type} - Final photo paths (${photoPaths.length} photos):`, photoPaths);
         
-        // Send photos if available
+        // ===== UPDATED: Send all photos in ONE album =====
         if (photoPaths.length > 0) {
-          // Send photos one by one with delay
-          photoPaths.forEach((photoPath, index) => {
+          const mediaGroup = [];
+          
+          // Take up to 10 photos (Telegram's limit per album)
+          const photosToSend = photoPaths.slice(0, 10);
+          
+          photosToSend.forEach((photoPath, index) => {
             // Clean the path - remove any quotes if present
             const cleanPath = photoPath.replace(/^"|"$/g, '');
             
             // Construct full path
             const fullPath = path.join(__dirname, cleanPath);
-            console.log(`📸 ${apt.type} - Photo ${index + 1} full path:`, fullPath);
+            console.log(`📸 ${apt.type} - Adding to album:`, fullPath);
             
             // Check if file exists
             if (fs.existsSync(fullPath)) {
-              console.log(`✅ ${apt.type} - Photo ${index + 1} exists`);
-              
-              // Send with delay
-              setTimeout(() => {
-                bot.sendPhoto(chatId, fullPath, {
-                  caption: index === 0 ? `📸 *${apt.name}*` : undefined,
-                  parse_mode: 'Markdown'
-                }).catch(err => {
-                  console.error(`Error sending photo ${index + 1}:`, err.message);
-                });
-              }, index * 500);
+              mediaGroup.push({
+                type: 'photo',
+                media: fullPath,
+                caption: index === 0 ? `📸 *${apt.name}* (${photoPaths.length} photos)` : undefined,
+                parse_mode: 'Markdown'
+              });
             } else {
-              console.log(`❌ ${apt.type} - Photo ${index + 1} NOT found at:`, fullPath);
+              console.log(`❌ ${apt.type} - Photo not found for album:`, fullPath);
             }
           });
+          
+          // Send as single album if we have photos
+          if (mediaGroup.length > 0) {
+            bot.sendMediaGroup(chatId, mediaGroup).catch(err => {
+              console.error('Error sending media group:', err);
+              // Fallback to individual photos if album fails
+              photoPaths.forEach((photoPath, idx) => {
+                const cleanPath = photoPath.replace(/^"|"$/g, '');
+                const fullPath = path.join(__dirname, cleanPath);
+                
+                setTimeout(() => {
+                  bot.sendPhoto(chatId, fullPath, {
+                    caption: idx === 0 ? `📸 *${apt.name}*` : undefined,
+                    parse_mode: 'Markdown'
+                  }).catch(e => console.error(`Error sending photo ${idx + 1}:`, e.message));
+                }, idx * 500);
+              });
+            });
+          } else {
+            bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
+          }
         } else {
           bot.sendMessage(chatId, `📸 No photos available for ${apt.name}`);
         }
@@ -302,7 +318,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
             console.error('Error sending apartment details:', err);
           });
           
-        }, photoPaths.length * 500 + 1000);
+        }, 1500); // Delay after album
       });
       
       // Show search options after all apartments
@@ -312,7 +328,7 @@ function showApartmentsByLocationAndType(chatId, apartmentType) {
           parse_mode: 'Markdown',
           reply_markup: keyboard.reply_markup
         });
-      }, 5000);
+      }, 3000);
       
       delete selectedLocation[chatId];
     }
@@ -1314,4 +1330,4 @@ const scheduleDailySummary = () => {
 
 scheduleDailySummary();
 
-console.log('✅ Bot Ready - Photos fixed with path handling! 🏠');
+console.log('✅ Bot Ready - Photos in albums! 🏠');
