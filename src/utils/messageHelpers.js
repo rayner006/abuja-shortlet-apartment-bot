@@ -41,7 +41,15 @@ async function showApartmentTypes(bot, chatId, location) {
 
 async function showApartmentsByLocationAndType(bot, chatId, location, apartmentType) {
   try {
+    // Log what we're searching for
+    console.log('🔍 Searching apartments:', { 
+      location: location.replace(/[🏛️🏘️💰🏭]/g, '').trim(), 
+      apartmentType: apartmentType.replace('🛏️ ', '').trim() 
+    });
+    
     const apartments = await Apartment.findByLocationAndType(location, apartmentType, true);
+    
+    console.log(`📊 Found ${apartments.length} apartments`);
     
     if (apartments.length === 0) {
       const keyboard = getSearchOptionsKeyboard();
@@ -70,6 +78,7 @@ async function showApartmentsByLocationAndType(bot, chatId, location, apartmentT
 }
 
 async function sendApartmentWithPhotos(bot, chatId, apt) {
+  console.log('📸 Sending apartment:', apt.name);
   const photoPaths = Apartment.processPhotos(apt);
   
   if (photoPaths.length > 0) {
@@ -112,6 +121,8 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
         }
       }
     }
+  } else {
+    console.log('📸 No photos for this apartment');
   }
   
   setTimeout(async () => {
