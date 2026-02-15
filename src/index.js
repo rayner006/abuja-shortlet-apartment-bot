@@ -6,11 +6,40 @@ const { connectRedis } = require('./config/redis');
 const bot = require('./bot');
 const config = require('./config/environment');
 
+// ========== GLOBAL ERROR HANDLERS (ADD THIS AT THE TOP) ==========
+process.on('uncaughtException', (error) => {
+  console.error('💥 UNCAUGHT EXCEPTION:');
+  console.error(error);
+  console.error(error.stack);
+  // Log to file if possible
+  try {
+    logger.error('UNCAUGHT EXCEPTION:', error);
+  } catch (e) {}
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('💥 UNHANDLED REJECTION:');
+  console.error(reason);
+  if (reason && reason.stack) console.error(reason.stack);
+  // Log to file if possible
+  try {
+    logger.error('UNHANDLED REJECTION:', reason);
+  } catch (e) {}
+  process.exit(1);
+});
+// =============================================================
+
 const app = express();
 app.use(express.json());
 
 // Import webhook handler
-require('./webhook')(app, bot);
+try {
+  require('./webhook')(app, bot);
+  console.log('✅ Webhook handler loaded');
+} catch (err) {
+  console.error('❌ Failed to load webhook:', err);
+}
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -22,125 +51,68 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Import all handlers with error handling
-try {
-  require('./handlers/commands/start')(bot);
-  logger.info('✅ Loaded: start handler');
-} catch (err) {
-  logger.error('Failed to load start handler:', err.message);
-}
+// Import all handlers with detailed error logging
+const handlers = [
+  { name: 'start handler', path: './handlers/commands/start' },
+  { name: 'admin handler', path: './handlers/commands/admin' },
+  { name: 'owner handler', path: './handlers/commands/owner' },
+  { name: 'test handler', path: './handlers/commands/test' },
+  { name: 'locations handler', path: './handlers/messages/locations' },
+  { name: 'apartmentTypes handler', path: './handlers/messages/apartmentTypes' },
+  { name: 'booking handler', path: './handlers/messages/booking' },
+  { name: 'menu handler', path: './handlers/messages/menu' },
+  { name: 'booking callback handler', path: './handlers/callbacks/booking' },
+  { name: 'admin callback handler', path: './handlers/callbacks/admin' },
+  { name: 'owner callback handler', path: './handlers/callbacks/owner' },
+  { name: 'navigation callback handler', path: './handlers/callbacks/navigation' }
+];
 
-try {
-  require('./handlers/commands/admin')(bot);
-  logger.info('✅ Loaded: admin handler');
-} catch (err) {
-  logger.error('Failed to load admin handler:', err.message);
-}
-
-try {
-  require('./handlers/commands/owner')(bot);
-  logger.info('✅ Loaded: owner handler');
-} catch (err) {
-  logger.error('Failed to load owner handler:', err.message);
-}
-
-try {
-  require('./handlers/commands/test')(bot);
-  logger.info('✅ Loaded: test handler');
-} catch (err) {
-  logger.error('Failed to load test handler:', err.message);
-}
-
-try {
-  require('./handlers/messages/locations')(bot);
-  logger.info('✅ Loaded: locations handler');
-} catch (err) {
-  logger.error('Failed to load locations handler:', err.message);
-}
-
-try {
-  require('./handlers/messages/apartmentTypes')(bot);
-  logger.info('✅ Loaded: apartmentTypes handler');
-} catch (err) {
-  logger.error('Failed to load apartmentTypes handler:', err.message);
-}
-
-try {
-  require('./handlers/messages/booking')(bot);
-  logger.info('✅ Loaded: booking handler');
-} catch (err) {
-  logger.error('Failed to load booking handler:', err.message);
-}
-
-try {
-  require('./handlers/messages/menu')(bot);
-  logger.info('✅ Loaded: menu handler');
-} catch (err) {
-  logger.error('Failed to load menu handler:', err.message);
-}
-
-try {
-  require('./handlers/callbacks/booking')(bot);
-  logger.info('✅ Loaded: booking callback handler');
-} catch (err) {
-  logger.error('Failed to load booking callback handler:', err.message);
-}
-
-try {
-  require('./handlers/callbacks/admin')(bot);
-  logger.info('✅ Loaded: admin callback handler');
-} catch (err) {
-  logger.error('Failed to load admin callback handler:', err.message);
-}
-
-try {
-  require('./handlers/callbacks/owner')(bot);
-  logger.info('✅ Loaded: owner callback handler');
-} catch (err) {
-  logger.error('Failed to load owner callback handler:', err.message);
-}
-
-try {
-  require('./handlers/callbacks/navigation')(bot);
-  logger.info('✅ Loaded: navigation callback handler');
-} catch (err) {
-  logger.error('Failed to load navigation callback handler:', err.message);
-}
+handlers.forEach(handler => {
+  try {
+    require(handler.path)(bot);
+    console.log(`✅ Loaded: ${handler.name}`);
+  } catch (err) {
+    console.error(`❌ Failed to load ${handler.name}:`, err);
+    console.error(err.stack);
+  }
+});
 
 // Schedule daily summary
 try {
   const { scheduleDailySummary } = require('./services/schedulerService');
   scheduleDailySummary();
-  logger.info('✅ Daily summary scheduled');
+  console.log('✅ Daily summary scheduled');
 } catch (err) {
-  logger.error('Failed to schedule daily summary:', err.message);
+  console.error('❌ Failed to schedule daily summary:', err);
 }
 
 async function start() {
   try {
-    // Connect to database
+    console.log('📡 Connecting to database...');
     await connectDatabase();
-    logger.info('✅ Database connected');
+    console.log('✅ Database connected');
     
-    // Connect to Redis
+    console.log('📡 Connecting to Redis...');
     await connectRedis();
-    logger.info('✅ Redis connected');
+    console.log('✅ Redis connected');
     
     // Start server
     const PORT = config.port || 3000;
     app.listen(PORT, () => {
-      logger.info(`🚀 Server running on port ${PORT}`);
+      console.log(`🚀 Server running on port ${PORT}`);
       
       // Log bot info
       bot.getMe().then(botInfo => {
-        logger.info(`🤖 Bot @${botInfo.username} is running`);
+        console.log(`🤖 Bot @${botInfo.username} is running`);
+        console.log(`🌐 Environment: ${config.nodeEnv}`);
       }).catch(err => {
-        logger.error('Could not get bot info:', err.message);
+        console.error('Could not get bot info:', err);
       });
     });
     
   } catch (error) {
-    logger.error('❌ Failed to start:', error);
+    console.error('❌ FAILED TO START:', error);
+    console.error(error.stack);
     process.exit(1);
   }
 }
@@ -150,16 +122,18 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 async function shutdown() {
-  logger.info('Received shutdown signal, cleaning up...');
+  console.log('Received shutdown signal, cleaning up...');
   
   try {
     await bot.stopPolling();
-    logger.info('Bot polling stopped');
+    console.log('Bot polling stopped');
   } catch (err) {
-    logger.error('Error stopping bot:', err);
+    console.error('Error stopping bot:', err);
   }
   
   process.exit(0);
 }
 
+// START THE BOT
+console.log('🚀 Starting bot...');
 start();
