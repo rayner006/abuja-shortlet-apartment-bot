@@ -25,6 +25,19 @@ if (config.nodeEnv === 'production') {
   logger.info('Bot initialized in polling mode');
 }
 
+// Clear any existing webhooks to prevent conflicts
+// This ensures clean startup regardless of environment
+bot.deleteWebHook()
+  .then(() => logger.info('✅ Existing webhook cleared'))
+  .catch(err => {
+    // 404 means no webhook was set, which is fine
+    if (err.response && err.response.statusCode === 404) {
+      logger.info('ℹ️ No existing webhook to clear');
+    } else {
+      logger.warn('⚠️ Error clearing webhook:', err.message);
+    }
+  });
+
 // Global error handlers
 bot.on('polling_error', (error) => {
   if (error.code === 'EFATAL') {
@@ -41,8 +54,9 @@ bot.on('webhook_error', (error) => {
 // Track bot info
 bot.getMe().then(botInfo => {
   bot.botInfo = botInfo;
+  logger.info(`✅ Bot authenticated as @${botInfo.username}`);
 }).catch(err => {
-  logger.error('Failed to get bot info:', err);
+  logger.error('❌ Failed to get bot info - invalid token?', err);
 });
 
 module.exports = bot;
