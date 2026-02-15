@@ -1,4 +1,4 @@
-const config = require('./config/environment');
+const config = require('./config/environment');  // ← YOU NEED THIS LINE!
 const logger = require('./middleware/logger');
 
 module.exports = (app, bot) => {
