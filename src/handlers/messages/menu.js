@@ -1,4 +1,4 @@
-const { showMainMenu } = require('../../utils/messageHelpers');
+const { showMainMenu, showWelcomeBack } = require('../../utils/messageHelpers');
 const { contactAdmin, aboutUs } = require('../../utils/messageHelpers');
 const { getRedis } = require('../../config/redis');
 const logger = require('../../middleware/logger');
@@ -33,13 +33,34 @@ module.exports = (bot) => {
   });
   
   // Handle any message that might indicate they're returning
+  // This should be LAST and very selective
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
     
-    // Skip if no text, command, or already handled
+    // Skip if no text or command
     if (!text || text.startsWith('/')) return;
     
+    // 🚫 IMPORTANT: Skip ALL menu commands (let other handlers process them)
+    const menuCommands = ['🏠 View Apartments', '📞 Contact Admin', 'ℹ️ About Us', '⬅️ Back to Main Menu', '🔍 Search Again'];
+    if (menuCommands.includes(text)) {
+      console.log('📋 Menu command detected, skipping:', text);
+      return; // Let specific handlers process these
+    }
+    
+    // 🚫 Skip location selections (start with location emojis)
+    if (text.match(/^[🏛️🏘️💰🏭]/)) {
+      console.log('📍 Location selection detected, skipping:', text);
+      return; // Let locations.js handle these
+    }
+    
+    // 🚫 Skip apartment type selections (start with bed emoji)
+    if (text.match(/^🛏️/)) {
+      console.log('🏠 Apartment type detected, skipping:', text);
+      return; // Let apartmentTypes.js handle these
+    }
+    
+    // Only now check for returning users with no session
     try {
       const redis = getRedis();
       
@@ -48,7 +69,7 @@ module.exports = (bot) => {
       const locationData = await redis.get(`selected_location:${chatId}`);
       
       // If no active session and not a menu command, they might be returning
-      if (!sessionData && !locationData && !text.match(/^(🏠|📞|ℹ️|⬅️|🔍)/)) {
+      if (!sessionData && !locationData) {
         logger.info(`User ${chatId} appears to be returning, showing welcome back message`);
         
         // Show welcome back message with emojis
