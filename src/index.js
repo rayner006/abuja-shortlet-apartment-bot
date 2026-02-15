@@ -22,23 +22,99 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Import all handlers (they'll attach to bot)
-require('./handlers/commands/start')(bot);
-require('./handlers/commands/admin')(bot);
-require('./handlers/commands/owner')(bot);
-require('./handlers/commands/test')(bot);
-require('./handlers/messages/locations')(bot);
-require('./handlers/messages/apartmentTypes')(bot);
-require('./handlers/messages/booking')(bot);
-require('./handlers/messages/menu')(bot);
-require('./handlers/callbacks/booking')(bot);
-require('./handlers/callbacks/admin')(bot);
-require('./handlers/callbacks/owner')(bot);
-require('./handlers/callbacks/navigation')(bot);
+// Import all handlers with error handling
+try {
+  require('./handlers/commands/start')(bot);
+  logger.info('✅ Loaded: start handler');
+} catch (err) {
+  logger.error('Failed to load start handler:', err.message);
+}
+
+try {
+  require('./handlers/commands/admin')(bot);
+  logger.info('✅ Loaded: admin handler');
+} catch (err) {
+  logger.error('Failed to load admin handler:', err.message);
+}
+
+try {
+  require('./handlers/commands/owner')(bot);
+  logger.info('✅ Loaded: owner handler');
+} catch (err) {
+  logger.error('Failed to load owner handler:', err.message);
+}
+
+try {
+  require('./handlers/commands/test')(bot);
+  logger.info('✅ Loaded: test handler');
+} catch (err) {
+  logger.error('Failed to load test handler:', err.message);
+}
+
+try {
+  require('./handlers/messages/locations')(bot);
+  logger.info('✅ Loaded: locations handler');
+} catch (err) {
+  logger.error('Failed to load locations handler:', err.message);
+}
+
+try {
+  require('./handlers/messages/apartmentTypes')(bot);
+  logger.info('✅ Loaded: apartmentTypes handler');
+} catch (err) {
+  logger.error('Failed to load apartmentTypes handler:', err.message);
+}
+
+try {
+  require('./handlers/messages/booking')(bot);
+  logger.info('✅ Loaded: booking handler');
+} catch (err) {
+  logger.error('Failed to load booking handler:', err.message);
+}
+
+try {
+  require('./handlers/messages/menu')(bot);
+  logger.info('✅ Loaded: menu handler');
+} catch (err) {
+  logger.error('Failed to load menu handler:', err.message);
+}
+
+try {
+  require('./handlers/callbacks/booking')(bot);
+  logger.info('✅ Loaded: booking callback handler');
+} catch (err) {
+  logger.error('Failed to load booking callback handler:', err.message);
+}
+
+try {
+  require('./handlers/callbacks/admin')(bot);
+  logger.info('✅ Loaded: admin callback handler');
+} catch (err) {
+  logger.error('Failed to load admin callback handler:', err.message);
+}
+
+try {
+  require('./handlers/callbacks/owner')(bot);
+  logger.info('✅ Loaded: owner callback handler');
+} catch (err) {
+  logger.error('Failed to load owner callback handler:', err.message);
+}
+
+try {
+  require('./handlers/callbacks/navigation')(bot);
+  logger.info('✅ Loaded: navigation callback handler');
+} catch (err) {
+  logger.error('Failed to load navigation callback handler:', err.message);
+}
 
 // Schedule daily summary
-const { scheduleDailySummary } = require('./services/schedulerService');
-scheduleDailySummary();
+try {
+  const { scheduleDailySummary } = require('./services/schedulerService');
+  scheduleDailySummary();
+  logger.info('✅ Daily summary scheduled');
+} catch (err) {
+  logger.error('Failed to schedule daily summary:', err.message);
+}
 
 async function start() {
   try {
@@ -51,18 +127,20 @@ async function start() {
     logger.info('✅ Redis connected');
     
     // Start server
-    const PORT = config.port;
+    const PORT = config.port || 3000;
     app.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT}`);
       
       // Log bot info
       bot.getMe().then(botInfo => {
         logger.info(`🤖 Bot @${botInfo.username} is running`);
+      }).catch(err => {
+        logger.error('Could not get bot info:', err.message);
       });
     });
     
   } catch (error) {
-    logger.error('Failed to start:', error);
+    logger.error('❌ Failed to start:', error);
     process.exit(1);
   }
 }
