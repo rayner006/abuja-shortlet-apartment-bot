@@ -15,6 +15,11 @@ async function showMainMenu(bot, chatId, text = 'Welcome To\nAbuja Shortlet Apar
   });
 }
 
+async function showWelcomeBack(bot, chatId) {
+  const welcomeBackText = 'Welcome Back! 👋\n\nAbuja Shortlet Apartments 🏠\nClick Any Menu Below To Continue 👇👇👇';
+  await showMainMenu(bot, chatId, welcomeBackText);
+}
+
 async function showLocations(bot, chatId) {
   const keyboard = getLocationsKeyboard();
   await bot.sendMessage(chatId, '📍 *Select a location:*', {
@@ -72,7 +77,6 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
     const photosToSend = photoPaths.slice(0, 10);
     
     for (let i = 0; i < photosToSend.length; i++) {
-      // ✅ USE THE NEW UPLOADS CONFIG
       const fullPath = getUploadPath(photosToSend[i]);
       
       if (fullPath && fs.existsSync(fullPath)) {
@@ -187,6 +191,7 @@ Book your stay today! 🏠
 
 module.exports = {
   showMainMenu,
+  showWelcomeBack,
   showLocations,
   showApartmentTypes,
   showApartmentsByLocationAndType,
