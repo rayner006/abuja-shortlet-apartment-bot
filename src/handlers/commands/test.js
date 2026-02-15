@@ -1,4 +1,4 @@
-const { generateaccesspin, validatePIN } = require('../../utils/pinGenerator');
+const { generateaccesspin, validatePIN } = require('../../utils/pingenerator');  // ← lowercase g
 const NotificationService = require('../../services/notificationService');
 const { isAdmin } = require('../../middleware/auth');
 
