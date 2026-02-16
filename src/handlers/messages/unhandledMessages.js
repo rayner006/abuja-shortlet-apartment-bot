@@ -10,6 +10,32 @@ module.exports = (bot) => {
     // Ignore commands
     if (msg.text && msg.text.startsWith('/')) return;
     
+    // 🚫 IMPORTANT: Skip ALL menu commands - let specific handlers process them
+    const menuCommands = [
+      '🏠 View Apartments', 
+      '📞 Contact Admin', 
+      'ℹ️ About Us', 
+      '⬅️ Back to Main Menu', 
+      '🔍 Search Again'
+    ];
+    
+    if (msg.text && menuCommands.includes(msg.text)) {
+      console.log('📋 Menu command detected in unhandledMessages, skipping:', msg.text);
+      return; // Let specific handlers (like locations.js) process these
+    }
+    
+    // 🚫 Skip location selections (start with location emojis)
+    if (msg.text && msg.text.match(/^[🏛️🏘️💰🏭]/)) {
+      console.log('📍 Location selection detected in unhandledMessages, skipping:', msg.text);
+      return; // Let locations.js handle these
+    }
+    
+    // 🚫 Skip apartment type selections (start with bed emoji)
+    if (msg.text && msg.text.match(/^🛏️/)) {
+      console.log('🏠 Apartment type detected in unhandledMessages, skipping:', msg.text);
+      return; // Let apartmentTypes.js handle these
+    }
+    
     // Ignore common callback-related texts
     const callbackPatterns = ['✅', '❌', '💰', '📅', '🔍', '📞', 'ℹ️', '⬅️'];
     if (msg.text && callbackPatterns.some(pattern => msg.text.includes(pattern))) return;
