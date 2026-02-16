@@ -65,8 +65,9 @@ const handlers = [
   { name: 'admin callback handler', path: './handlers/callbacks/admin' },
   { name: 'owner callback handler', path: './handlers/callbacks/owner' },
   { name: 'navigation callback handler', path: './handlers/callbacks/navigation' },
-  // NEW: Session callback handler
-  { name: 'session callback handler', path: './handlers/callbacks/session' }
+  { name: 'session callback handler', path: './handlers/callbacks/session' },
+  // CATCH-ALL HANDLER - MUST BE LAST
+  { name: 'unhandled messages handler', path: './handlers/messages/unhandledMessages' }
 ];
 
 handlers.forEach(handler => {
