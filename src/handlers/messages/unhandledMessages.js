@@ -1,4 +1,4 @@
-const { showMainMenu, showWelcomeBack } = require('../../utils/messageHelpers');
+const { showMainMenu } = require('../../utils/messageHelpers');
 const SessionManager = require('../../services/sessionManager');
 const logger = require('../../middleware/logger');
 
@@ -43,12 +43,17 @@ module.exports = (bot) => {
           }
         });
         messageCooldown.set(chatId, Date.now());
-      } else if (action === 'show_main_menu') {
-        await showMainMenu(bot, chatId);
-        messageCooldown.set(chatId, Date.now());
       } else {
-        // Only send ONE message
-        await bot.sendMessage(chatId, message || "Welcome back! 👋 Use the menu to continue.");
+        // THIS IS THE WELCOME MESSAGE FOR USERS WITH CLEARED HISTORY
+        const welcomeMessage = `
+👋 *Welcome Back!*
+
+🏠 *Abuja Shortlet Apartments*
+
+👇 *Click On Any Menu Below To Continue*
+        `;
+        
+        await showMainMenu(bot, chatId, welcomeMessage);
         messageCooldown.set(chatId, Date.now());
       }
       
