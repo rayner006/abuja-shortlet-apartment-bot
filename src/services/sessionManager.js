@@ -2,41 +2,49 @@ const { getRedis } = require('../config/redis');
 const logger = require('../middleware/logger');
 
 class SessionManager {
-  // Check if user has an active session
   static async hasActiveSession(chatId) {
     try {
       const redis = getRedis();
       
-      // Check for any active session keys
-      const sessionKeys = await redis.keys(`*:${chatId}`);
-      return sessionKeys.length > 0;
+      // Check for booking session
+      const bookingSession = await redis.get(`session:${chatId}`);
+      if (bookingSession) return true;
+      
+      // Check for location selection
+      const locationData = await redis.get(`selected_location:${chatId}`);
+      if (locationData) return true;
+      
+      return false;
     } catch (error) {
       logger.error('Session check failed:', error);
       return false;
     }
   }
 
-  // Get user's current context/state
   static async getUserContext(chatId) {
     try {
       const redis = getRedis();
       
-      // Check different possible session states
-      const contexts = [
-        { key: `selected_location:${chatId}`, type: 'location_selection' },
-        { key: `booking:${chatId}`, type: 'booking_flow' },
-        { key: `admin_action:${chatId}`, type: 'admin_action' }
-      ];
+      // Check booking session first
+      const sessionData = await redis.get(`session:${chatId}`);
+      if (sessionData) {
+        const session = JSON.parse(sessionData);
+        return {
+          hasSession: true,
+          context: 'booking_flow',
+          step: session.step,
+          data: session
+        };
+      }
       
-      for (const ctx of contexts) {
-        const data = await redis.get(ctx.key);
-        if (data) {
-          return {
-            hasSession: true,
-            context: ctx.type,
-            data: JSON.parse(data)
-          };
-        }
+      // Check location selection
+      const locationData = await redis.get(`selected_location:${chatId}`);
+      if (locationData) {
+        return {
+          hasSession: true,
+          context: 'location_selection',
+          data: JSON.parse(locationData)
+        };
       }
       
       return { hasSession: false };
@@ -46,20 +54,30 @@ class SessionManager {
     }
   }
 
-  // Welcome back message based on user history
-  static async getWelcomeBackMessage(chatId, userInput) {
+  static async getWelcomeBackMessage(chatId) {
     const context = await this.getUserContext(chatId);
     
     if (context.hasSession) {
       // User has session but sent something unexpected
-      return {
-        message: "👋 I see you're in the middle of something. Would you like to continue or start over?",
-        action: 'show_resume_options'
-      };
+      if (context.context === 'booking_flow') {
+        // For booking flow, return a more specific message
+        return {
+          hasSession: true,
+          message: "👋 I see you're in the middle of booking. Would you like to continue or start over?",
+          action: 'show_resume_options'
+        };
+      } else {
+        return {
+          hasSession: true,
+          message: "👋 I see you're in the middle of something. Would you like to continue or start over?",
+          action: 'show_resume_options'
+        };
+      }
     } else {
       // New or returning user with cleared history
       return {
-        message: "Welcome back! 👋\n\nIt looks like we lost track of our conversation. Let's start fresh!",
+        hasSession: false,
+        message: "👋 *Welcome Back!*\n\n🏠 *Abuja Shortlet Apartments*\n\n👇 *Click On Any Menu Below To Continue*",
         action: 'show_main_menu'
       };
     }
