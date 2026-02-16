@@ -139,7 +139,21 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
 📝 *Description:* ${apt.description}
   `;
   
+  // ========== ADD THIS DEBUG BLOCK ==========
+  console.log('🔍 BOOK NOW BUTTON DEBUG:');
+  console.log('📋 Apartment object:', {
+    id: apt.id,
+    name: apt.name,
+    hasId: !!apt.id,
+    idType: typeof apt.id,
+    idValue: apt.id
+  });
+  
   const keyboard = getApartmentActionsKeyboard(apt.id);
+  console.log('📋 Keyboard from getApartmentActionsKeyboard:', JSON.stringify(keyboard, null, 2));
+  console.log('📋 Does keyboard have inline_keyboard?', !!(keyboard.reply_markup && keyboard.reply_markup.inline_keyboard));
+  console.log('📋 Inline keyboard content:', keyboard.reply_markup?.inline_keyboard);
+  // ==========================================
   
   try {
     const sent = await bot.sendMessage(chatId, message, {
