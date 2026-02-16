@@ -54,7 +54,14 @@ function getDatePickerKeyboard(year, month, selectedDate = null, highlightDate =
     keyboard.push(row);
   }
   
-  // Add month navigation
+  // Add year navigation row
+  keyboard.push([
+    { text: '⏪ Year -', callback_data: `year_prev_${year}_${month}` },
+    { text: `📅 ${year}`, callback_data: 'ignore' },
+    { text: 'Year + ⏩', callback_data: `year_next_${year}_${month}` }
+  ]);
+  
+  // Add month navigation row
   const prevMonth = month === 0 ? 11 : month - 1;
   const prevYear = month === 0 ? year - 1 : year;
   const nextMonth = month === 11 ? 0 : month + 1;
