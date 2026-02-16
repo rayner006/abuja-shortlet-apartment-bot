@@ -1,59 +1,44 @@
 const { showMainMenu, showWelcomeBack } = require('../../utils/messageHelpers');
-const SessionManager = require('../../services/sessionManager');
+const { getRedis } = require('../../config/redis');
 const logger = require('../../middleware/logger');
 
-// Add cooldown map to prevent duplicates
-const messageCooldown = new Map();
-
 module.exports = (bot) => {
-  bot.on('message', async (msg) => {
-    // Ignore commands
-    if (msg.text && msg.text.startsWith('/')) return;
-    
-    // Ignore common callback-related texts
-    const callbackPatterns = ['✅', '❌', '💰', '📅', '🔍', '📞', 'ℹ️', '⬅️'];
-    if (msg.text && callbackPatterns.some(pattern => msg.text.includes(pattern))) return;
+  bot.on('callback_query', async (query) => {
+    const chatId = query.message.chat.id;
+    const data = query.data;
     
     try {
-      const chatId = msg.chat.id;
-      
-      // Check cooldown - prevent duplicate messages within 5 seconds
-      const lastMessage = messageCooldown.get(chatId);
-      if (lastMessage && Date.now() - lastMessage < 5000) {
-        logger.info(`⏱️ Cooldown active for ${chatId} - skipping duplicate`);
-        return;
-      }
-      
-      const userInput = msg.text;
-      logger.info(`Unhandled message from ${chatId}: "${userInput}"`);
-      
-      const { hasSession, message, action } = await SessionManager.getWelcomeBackMessage(chatId);
-      
-      // Send appropriate response based on session state
-      if (action === 'show_resume_options') {
-        await bot.sendMessage(chatId, message, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '🔄 Continue where I left off', callback_data: 'resume_session' },
-                { text: '🆕 Start fresh', callback_data: 'start_fresh' }
-              ]
-            ]
-          }
-        });
-        messageCooldown.set(chatId, Date.now());
-      } else if (action === 'show_main_menu') {
-        await showMainMenu(bot, chatId);
-        messageCooldown.set(chatId, Date.now());
-      } else {
-        // Only send ONE message
-        await bot.sendMessage(chatId, message || "Welcome back! 👋 Use the menu to continue.");
-        messageCooldown.set(chatId, Date.now());
+      if (data === 'resume_session') {
+        await bot.answerCallbackQuery(query.id, { text: 'Resuming your session...' });
+        
+        // Check what session they had and redirect accordingly
+        const redis = getRedis();
+        const locationData = await redis.get(`selected_location:${chatId}`);
+        
+        if (locationData) {
+          const { location } = JSON.parse(locationData);
+          const { showApartmentTypes } = require('../../utils/messageHelpers');
+          await showApartmentTypes(bot, chatId, location);
+        } else {
+          await showMainMenu(bot, chatId);
+        }
+        
+      } else if (data === 'start_fresh') {
+        await bot.answerCallbackQuery(query.id, { text: 'Starting fresh...' });
+        
+        // Clear any existing sessions
+        const redis = getRedis();
+        const keys = await redis.keys(`*:${chatId}`);
+        for (const key of keys) {
+          await redis.del(key);
+        }
+        
+        await showWelcomeBack(bot, chatId);
       }
       
     } catch (error) {
-      logger.error('Error in unhandled messages handler:', error);
+      logger.error('Error in session callback:', error);
+      await bot.answerCallbackQuery(query.id, { text: 'Error processing request' });
     }
   });
 };
