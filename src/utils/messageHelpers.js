@@ -139,21 +139,16 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
 📝 *Description:* ${apt.description}
   `;
   
-  // ========== ADD THIS DEBUG BLOCK ==========
+  // ========== SAFER DEBUG BLOCK ==========
   console.log('🔍 BOOK NOW BUTTON DEBUG:');
-  console.log('📋 Apartment object:', {
-    id: apt.id,
-    name: apt.name,
-    hasId: !!apt.id,
-    idType: typeof apt.id,
-    idValue: apt.id
-  });
+  console.log('📋 Apartment ID:', apt.id ? apt.id.toString() : 'UNDEFINED');
+  console.log('📋 Apartment ID type:', typeof apt.id);
+  console.log('📋 Apartment name:', apt.name);
   
   const keyboard = getApartmentActionsKeyboard(apt.id);
-  console.log('📋 Keyboard from getApartmentActionsKeyboard:', JSON.stringify(keyboard, null, 2));
-  console.log('📋 Does keyboard have inline_keyboard?', !!(keyboard.reply_markup && keyboard.reply_markup.inline_keyboard));
-  console.log('📋 Inline keyboard content:', keyboard.reply_markup?.inline_keyboard);
-  // ==========================================
+  console.log('📋 Keyboard reply_markup exists:', keyboard && keyboard.reply_markup ? 'YES' : 'NO');
+  console.log('📋 Inline keyboard exists:', keyboard && keyboard.reply_markup && keyboard.reply_markup.inline_keyboard ? 'YES' : 'NO');
+  // ========================================
   
   try {
     const sent = await bot.sendMessage(chatId, message, {
@@ -162,7 +157,7 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
     });
     console.log('✅ Apartment details with Book Now button sent, message ID:', sent.message_id);
   } catch (error) {
-    console.error('❌ Error sending apartment details with button:', error);
+    console.error('❌ Error sending apartment details with button:', error.message);
   }
 }
 
