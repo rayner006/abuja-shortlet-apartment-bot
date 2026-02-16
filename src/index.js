@@ -64,7 +64,9 @@ const handlers = [
   { name: 'booking callback handler', path: './handlers/callbacks/booking' },
   { name: 'admin callback handler', path: './handlers/callbacks/admin' },
   { name: 'owner callback handler', path: './handlers/callbacks/owner' },
-  { name: 'navigation callback handler', path: './handlers/callbacks/navigation' }
+  { name: 'navigation callback handler', path: './handlers/callbacks/navigation' },
+  // NEW: Session callback handler
+  { name: 'session callback handler', path: './handlers/callbacks/session' }
 ];
 
 handlers.forEach(handler => {
