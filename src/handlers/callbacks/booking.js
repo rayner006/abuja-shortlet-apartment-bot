@@ -12,8 +12,6 @@ module.exports = (bot) => {
     const messageId = cb.message.message_id;
     const data = cb.data;
 
-    console.log('📅 [BOOKING CALLBACK]', data);
-
     const redis = getRedis();
 
     const getSession = async () => {
@@ -25,19 +23,17 @@ module.exports = (bot) => {
       await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
     };
 
+    console.log('📅 CALLBACK:', data);
+
     /* ================= DATE SELECT ================= */
     if (data.startsWith('date_')) {
       const selectedDate = data.replace('date_', '');
 
       try {
         const session = await getSession();
+        if (!session) return bot.answerCallbackQuery(cb.id);
 
-        if (!session) {
-          await bot.answerCallbackQuery(cb.id, { text: 'Session expired' });
-          return;
-        }
-
-        /* ---- START DATE ---- */
+        // CHECK-IN
         if (session.step === 'awaiting_start_date') {
           session.startDate = selectedDate;
           session.step = 'awaiting_end_date';
@@ -53,19 +49,18 @@ module.exports = (bot) => {
             }
           );
 
-          await bot.answerCallbackQuery(cb.id, { text: `Check-in: ${selectedDate}` });
+          await bot.answerCallbackQuery(cb.id, { text: 'Check-in selected' });
         }
 
-        /* ---- END DATE ---- */
+        // CHECK-OUT
         else if (session.step === 'awaiting_end_date') {
           const start = new Date(session.startDate);
           const end = new Date(selectedDate);
 
           if (end <= start) {
-            await bot.answerCallbackQuery(cb.id, {
-              text: 'End date must be after start date'
+            return bot.answerCallbackQuery(cb.id, {
+              text: 'Check-out must be after check-in'
             });
-            return;
           }
 
           const result = await BookingService.processEndDate(
@@ -101,14 +96,11 @@ module.exports = (bot) => {
         const keyboard =
           session.step === 'awaiting_start_date'
             ? getDatePickerKeyboard(year, month)
-            : getDatePickerKeyboard(year, month, null, session.startDate);
+            : getDatePickerKeyboard(year, month, session.startDate);
 
         await bot.editMessageReplyMarkup(
           keyboard.reply_markup,
-          {
-            chat_id: chatId,
-            message_id: messageId
-          }
+          { chat_id: chatId, message_id: messageId }
         );
 
         await bot.answerCallbackQuery(cb.id);
@@ -132,14 +124,11 @@ module.exports = (bot) => {
         const keyboard =
           session.step === 'awaiting_start_date'
             ? getDatePickerKeyboard(newYear, Number(month))
-            : getDatePickerKeyboard(newYear, Number(month), null, session.startDate);
+            : getDatePickerKeyboard(newYear, Number(month), session.startDate);
 
         await bot.editMessageReplyMarkup(
           keyboard.reply_markup,
-          {
-            chat_id: chatId,
-            message_id: messageId
-          }
+          { chat_id: chatId, message_id: messageId }
         );
 
         await bot.answerCallbackQuery(cb.id);
@@ -147,6 +136,29 @@ module.exports = (bot) => {
       } catch (err) {
         logger.error('YEAR NAV ERROR:', err);
       }
+    }
+
+    /* ================= CLEAR DATES ================= */
+    else if (data === 'clear_dates') {
+      const session = await getSession();
+      if (!session) return bot.answerCallbackQuery(cb.id);
+
+      session.startDate = null;
+      session.endDate = null;
+      session.step = 'awaiting_start_date';
+      await saveSession(session);
+
+      await bot.editMessageText(
+        '📅 *Select your check-in date:*',
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: getDateRangePickerKeyboard('start').reply_markup
+        }
+      );
+
+      await bot.answerCallbackQuery(cb.id, { text: 'Dates cleared' });
     }
 
     /* ================= CANCEL ================= */
@@ -173,8 +185,7 @@ module.exports = (bot) => {
         );
 
         if (!result.success) {
-          await bot.sendMessage(chatId, result.message);
-          return;
+          return bot.sendMessage(chatId, result.message);
         }
 
         await saveSession(result.session);
