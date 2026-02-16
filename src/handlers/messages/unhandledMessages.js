@@ -20,66 +20,64 @@ module.exports = (bot) => {
     ];
     
     if (msg.text && menuCommands.includes(msg.text)) {
-      console.log('📋 Menu command detected in unhandledMessages, skipping:', msg.text);
-      return; // Let specific handlers (like locations.js) process these
+      return; // Let specific handlers process these
     }
     
-    // 🚫 Skip location selections (start with location emojis)
+    // 🚫 Skip location selections
     if (msg.text && msg.text.match(/^[🏛️🏘️💰🏭]/)) {
-      console.log('📍 Location selection detected in unhandledMessages, skipping:', msg.text);
       return; // Let locations.js handle these
     }
     
-    // 🚫 Skip apartment type selections (start with bed emoji)
+    // 🚫 Skip apartment type selections
     if (msg.text && msg.text.match(/^🛏️/)) {
-      console.log('🏠 Apartment type detected in unhandledMessages, skipping:', msg.text);
       return; // Let apartmentTypes.js handle these
     }
-    
-    // Ignore common callback-related texts
-    const callbackPatterns = ['✅', '❌', '💰', '📅', '🔍', '📞', 'ℹ️', '⬅️'];
-    if (msg.text && callbackPatterns.some(pattern => msg.text.includes(pattern))) return;
     
     try {
       const chatId = msg.chat.id;
       
-      // Check cooldown - prevent duplicate messages within 5 seconds
+      // Check cooldown
       const lastMessage = messageCooldown.get(chatId);
       if (lastMessage && Date.now() - lastMessage < 5000) {
-        logger.info(`⏱️ Cooldown active for ${chatId} - skipping duplicate`);
         return;
       }
       
-      const userInput = msg.text;
-      logger.info(`Unhandled message from ${chatId}: "${userInput}"`);
+      // IMPORTANT: Check if user is in ACTIVE booking flow
+      const redis = require('../../config/redis').getRedis();
+      const sessionData = await redis.get(`session:${chatId}`);
       
-      const { hasSession, message, action } = await SessionManager.getWelcomeBackMessage(chatId);
+      // If user has an active session, DO NOT show the resume message
+      // Let the booking flow handlers process it instead
+      if (sessionData) {
+        logger.info(`User ${chatId} has active booking session - ignoring in unhandledMessages`);
+        return; // ← THIS IS KEY - don't show resume message
+      }
       
-      // Send appropriate response based on session state
-      if (action === 'show_resume_options') {
-        await bot.sendMessage(chatId, message, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [
-                { text: '🔄 Continue where I left off', callback_data: 'resume_session' },
-                { text: '🆕 Start fresh', callback_data: 'start_fresh' }
-              ]
-            ]
-          }
-        });
-        messageCooldown.set(chatId, Date.now());
-      } else {
-        // THIS IS THE WELCOME MESSAGE FOR USERS WITH CLEARED HISTORY
-        const welcomeMessage = `
-👋 *Welcome Back!*
-
-🏠 *Abuja Shortlet Apartments*
-
-👇 *Click On Any Menu Below To Continue*
-        `;
+      // Also check for location selection session
+      const locationData = await redis.get(`selected_location:${chatId}`);
+      
+      // Only show welcome/resume for users with NO active session at all
+      if (!sessionData && !locationData) {
+        logger.info(`User ${chatId} has no active session - showing welcome/resume options`);
         
-        await showMainMenu(bot, chatId, welcomeMessage);
+        const { hasSession, message, action } = await SessionManager.getWelcomeBackMessage(chatId);
+        
+        if (action === 'show_resume_options') {
+          await bot.sendMessage(chatId, message, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '🔄 Continue where I left off', callback_data: 'resume_session' },
+                  { text: '🆕 Start fresh', callback_data: 'start_fresh' }
+                ]
+              ]
+            }
+          });
+        } else {
+          await showMainMenu(bot, chatId, '👋 *Welcome Back!*\n\n🏠 *Abuja Shortlet Apartments*\n\n👇 *Click On Any Menu Below To Continue*');
+        }
+        
         messageCooldown.set(chatId, Date.now());
       }
       
