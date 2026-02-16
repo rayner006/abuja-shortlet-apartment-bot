@@ -92,7 +92,7 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
         mediaGroup.push({
           type: 'photo',
           media: fullPath,
-          caption: i === 0 ? `📸 *${apt.name}* (${photoPaths.length} photos)` : undefined,
+          caption: undefined, // 👈 NO CAPTION AT ALL
           parse_mode: 'Markdown'
         });
       } else {
@@ -111,7 +111,7 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
           setTimeout(async () => {
             try {
               await bot.sendPhoto(chatId, fullPath, {
-                caption: i === 0 ? `📸 *${apt.name}*` : undefined,
+                caption: undefined, // 👈 NO CAPTION AT ALL
                 parse_mode: 'Markdown'
               });
             } catch (e) {
@@ -208,4 +208,4 @@ module.exports = {
   showApartmentsByLocationAndType,
   contactAdmin,
   aboutUs
-};  src/utils/messageHelpers.js
+};
