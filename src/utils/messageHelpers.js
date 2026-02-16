@@ -79,14 +79,8 @@ async function showApartmentsByLocationAndType(bot, chatId, location, apartmentT
 
 async function sendApartmentWithPhotos(bot, chatId, apt) {
   console.log('📸 Sending apartment:', apt.name);
-  console.log('🔍 ===== BOOK NOW BUTTON DEBUG =====');
-  console.log('🔑 Apartment ID:', apt.id);
-  console.log('🔑 Apartment ID type:', typeof apt.id);
-  console.log('🔑 Apartment ID exists:', !!apt.id);
-  console.log('📊 Full apartment object:', JSON.stringify(apt, null, 2));
   
   const photoPaths = Apartment.processPhotos(apt);
-  console.log('📸 Photo paths count:', photoPaths.length);
   
   if (photoPaths.length > 0) {
     const mediaGroup = [];
@@ -133,8 +127,8 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
     console.log('📸 No photos for this apartment');
   }
   
-  setTimeout(async () => {
-    const message = `
+  // Send apartment details with button IMMEDIATELY (no delay)
+  const message = `
 🏠 *Name:* ${apt.name}
 📍 *Location:* ${apt.location}
 📌 *Address:* ${apt.address || 'Contact admin for address'}
@@ -143,48 +137,19 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
 🛏️ *Bedrooms:* ${apt.bedrooms || 0}
 🚿 *Bathrooms:* ${apt.bathrooms || 1}
 📝 *Description:* ${apt.description}
-    `;
-    
-    console.log('🔍 Creating keyboard for apartment ID:', apt.id);
-    
-    // TEST 1: Try with hardcoded keyboard first
-    console.log('📋 TEST 1: Sending with HARDCODED keyboard');
-    const hardcodedKeyboard = {
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '📅 TEST BOOK NOW BUTTON', callback_data: 'test_book_button' }]
-        ]
-      }
-    };
-    
-    try {
-      const sent1 = await bot.sendMessage(chatId, message + '\n\n_[Test Mode - Hardcoded Button]_', {
-        parse_mode: 'Markdown',
-        reply_markup: hardcodedKeyboard
-      });
-      console.log('✅ TEST 1 SUCCESS: Message sent with hardcoded button. Message ID:', sent1.message_id);
-    } catch (error) {
-      console.error('❌ TEST 1 FAILED:', error);
-    }
-    
-    // TEST 2: Try with actual keyboard function
-    console.log('📋 TEST 2: Getting actual keyboard from getApartmentActionsKeyboard()');
-    const actualKeyboard = getApartmentActionsKeyboard(apt.id);
-    console.log('📋 Actual keyboard output:', JSON.stringify(actualKeyboard, null, 2));
-    
-    try {
-      const sent2 = await bot.sendMessage(chatId, message, {
-        parse_mode: 'Markdown',
-        reply_markup: actualKeyboard
-      });
-      console.log('✅ TEST 2 SUCCESS: Message sent with actual keyboard. Message ID:', sent2.message_id);
-    } catch (error) {
-      console.error('❌ TEST 2 FAILED:', error);
-    }
-    
-    console.log('🔍 ===== END DEBUG =====');
-    
-  }, 1500);
+  `;
+  
+  const keyboard = getApartmentActionsKeyboard(apt.id);
+  
+  try {
+    const sent = await bot.sendMessage(chatId, message, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
+    console.log('✅ Apartment details with Book Now button sent, message ID:', sent.message_id);
+  } catch (error) {
+    console.error('❌ Error sending apartment details with button:', error);
+  }
 }
 
 async function contactAdmin(bot, chatId) {
