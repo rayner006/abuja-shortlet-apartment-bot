@@ -117,6 +117,47 @@ module.exports = (bot) => {
       }
     }
     
+    // Handle year navigation
+    else if (data.startsWith('year_prev') || data.startsWith('year_next')) {
+      const parts = data.split('_');
+      const direction = parts[1]; // 'prev' or 'next'
+      const currentYear = parseInt(parts[2]);
+      const currentMonth = parseInt(parts[3]);
+      
+      let newYear = direction === 'prev' ? currentYear - 1 : currentYear + 1;
+      
+      console.log('📅 Year navigation:', { direction, newYear, month: currentMonth });
+      
+      try {
+        const redis = getRedis();
+        const sessionData = await redis.get(`session:${chatId}`);
+        
+        if (!sessionData) {
+          await bot.answerCallbackQuery(cb.id);
+          return;
+        }
+        
+        const session = JSON.parse(sessionData);
+        
+        // Generate new keyboard for the selected year/month
+        const { getDatePickerKeyboard } = require('../../utils/datePicker');
+        let newKeyboard;
+        
+        if (session.step === 'awaiting_start_date') {
+          newKeyboard = getDatePickerKeyboard(newYear, currentMonth);
+        } else {
+          newKeyboard = getDatePickerKeyboard(newYear, currentMonth, null, session.startDate);
+        }
+        
+        await bot.editMessageReplyMarkup(chatId, messageId, newKeyboard.reply_markup);
+        await bot.answerCallbackQuery(cb.id);
+        
+      } catch (error) {
+        logger.error('Error in year navigation:', error);
+        await bot.answerCallbackQuery(cb.id);
+      }
+    }
+    
     // Handle proceed to end date
     else if (data === 'proceed_to_end') {
       try {
