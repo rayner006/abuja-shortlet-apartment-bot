@@ -76,7 +76,8 @@ async function showApartmentsByLocationAndType(bot, chatId, location, apartmentT
 
     setTimeout(async () => {
       const keyboard = getSearchOptionsKeyboard();
-      await bot.sendMessage(chatId, '🔍 *What would you like to do next?*', {
+      // 👇 CHANGED THIS LINE - Updated text with emojis
+      await bot.sendMessage(chatId, '👇 *Or Click On Any Button Below* 👇', {
         parse_mode: 'Markdown',
         reply_markup: keyboard.reply_markup
       });
@@ -132,7 +133,7 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
 
   await bot.sendMessage(chatId, message, {
     parse_mode: 'Markdown',
-    reply_markup: keyboard.reply_markup   // ✅ FIXED
+    reply_markup: keyboard.reply_markup
   });
 }
 
