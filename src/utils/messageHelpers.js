@@ -7,7 +7,7 @@ const { getUploadPath } = require('../config/uploads');
 const { getRedis } = require('../config/redis');
 const logger = require('../middleware/logger');
 
-async function showMainMenu(bot, chatId, text = 'Welcome To\nAbuja Shortlet Apartments 🏠,\nClick On Any Menu Below 👇👇👇') {
+async function showMainMenu(bot, chatId, text = '*Welcome To* 👋\n\n*Abuja Shortlet Apartments* 🏠\n\n👇 *Click On Any Menu Below*') {
   const keyboard = getMainMenuKeyboard();
   await bot.sendMessage(chatId, text, {
     parse_mode: 'Markdown',
@@ -16,7 +16,7 @@ async function showMainMenu(bot, chatId, text = 'Welcome To\nAbuja Shortlet Apar
 }
 
 async function showWelcomeBack(bot, chatId) {
-  const welcomeBackText = 'Welcome Back! 👋\n\nAbuja Shortlet Apartments 🏠\nClick Any Menu Below To Continue 👇👇👇';
+  const welcomeBackText = '*Welcome Back!* 👋\n\n*Abuja Shortlet Apartments* 🏠\n\n👇 *Click On Any Menu Below To Continue*';
   await showMainMenu(bot, chatId, welcomeBackText);
 }
 
