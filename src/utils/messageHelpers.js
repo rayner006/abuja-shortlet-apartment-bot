@@ -79,7 +79,14 @@ async function showApartmentsByLocationAndType(bot, chatId, location, apartmentT
 
 async function sendApartmentWithPhotos(bot, chatId, apt) {
   console.log('📸 Sending apartment:', apt.name);
+  console.log('🔍 ===== BOOK NOW BUTTON DEBUG =====');
+  console.log('🔑 Apartment ID:', apt.id);
+  console.log('🔑 Apartment ID type:', typeof apt.id);
+  console.log('🔑 Apartment ID exists:', !!apt.id);
+  console.log('📊 Full apartment object:', JSON.stringify(apt, null, 2));
+  
   const photoPaths = Apartment.processPhotos(apt);
+  console.log('📸 Photo paths count:', photoPaths.length);
   
   if (photoPaths.length > 0) {
     const mediaGroup = [];
@@ -92,7 +99,7 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
         mediaGroup.push({
           type: 'photo',
           media: fullPath,
-          caption: undefined, // 👈 NO CAPTION AT ALL
+          caption: undefined,
           parse_mode: 'Markdown'
         });
       } else {
@@ -103,6 +110,7 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
     if (mediaGroup.length > 0) {
       try {
         await bot.sendMediaGroup(chatId, mediaGroup);
+        console.log('✅ Photos sent successfully');
       } catch (err) {
         logger.error('Error sending media group:', err);
         for (let i = 0; i < photosToSend.length; i++) {
@@ -111,7 +119,7 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
           setTimeout(async () => {
             try {
               await bot.sendPhoto(chatId, fullPath, {
-                caption: undefined, // 👈 NO CAPTION AT ALL
+                caption: undefined,
                 parse_mode: 'Markdown'
               });
             } catch (e) {
@@ -137,12 +145,45 @@ async function sendApartmentWithPhotos(bot, chatId, apt) {
 📝 *Description:* ${apt.description}
     `;
     
-    const keyboard = getApartmentActionsKeyboard(apt.id);
+    console.log('🔍 Creating keyboard for apartment ID:', apt.id);
     
-    await bot.sendMessage(chatId, message, {
-      parse_mode: 'Markdown',
-      reply_markup: keyboard
-    });
+    // TEST 1: Try with hardcoded keyboard first
+    console.log('📋 TEST 1: Sending with HARDCODED keyboard');
+    const hardcodedKeyboard = {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📅 TEST BOOK NOW BUTTON', callback_data: 'test_book_button' }]
+        ]
+      }
+    };
+    
+    try {
+      const sent1 = await bot.sendMessage(chatId, message + '\n\n_[Test Mode - Hardcoded Button]_', {
+        parse_mode: 'Markdown',
+        reply_markup: hardcodedKeyboard
+      });
+      console.log('✅ TEST 1 SUCCESS: Message sent with hardcoded button. Message ID:', sent1.message_id);
+    } catch (error) {
+      console.error('❌ TEST 1 FAILED:', error);
+    }
+    
+    // TEST 2: Try with actual keyboard function
+    console.log('📋 TEST 2: Getting actual keyboard from getApartmentActionsKeyboard()');
+    const actualKeyboard = getApartmentActionsKeyboard(apt.id);
+    console.log('📋 Actual keyboard output:', JSON.stringify(actualKeyboard, null, 2));
+    
+    try {
+      const sent2 = await bot.sendMessage(chatId, message, {
+        parse_mode: 'Markdown',
+        reply_markup: actualKeyboard
+      });
+      console.log('✅ TEST 2 SUCCESS: Message sent with actual keyboard. Message ID:', sent2.message_id);
+    } catch (error) {
+      console.error('❌ TEST 2 FAILED:', error);
+    }
+    
+    console.log('🔍 ===== END DEBUG =====');
+    
   }, 1500);
 }
 
