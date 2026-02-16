@@ -5,7 +5,7 @@ function getMonthName(month) {
   return months[month];
 }
 
-function getDatePickerKeyboard(year, month, selectedDate = null) {
+function getDatePickerKeyboard(year, month, selectedDate = null, highlightDate = null) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay(); // 0 = Sunday
   
@@ -26,8 +26,17 @@ function getDatePickerKeyboard(year, month, selectedDate = null) {
   // Add days of month
   for (let day = 1; day <= daysInMonth; day++) {
     const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    
+    // Check if this date is selected or highlighted
     const isSelected = selectedDate === dateStr;
-    const displayText = isSelected ? `✅ ${day}` : `${day}`;
+    const isHighlighted = highlightDate === dateStr;
+    
+    let displayText = `${day}`;
+    if (isSelected) {
+      displayText = `✅ ${day}`;
+    } else if (isHighlighted) {
+      displayText = `🔵 ${day}`;
+    }
     
     row.push({ 
       text: displayText, 
@@ -57,10 +66,26 @@ function getDatePickerKeyboard(year, month, selectedDate = null) {
     { text: 'Next ▶️', callback_data: `month_${nextYear}_${nextMonth}` }
   ]);
   
-  keyboard.push([
-    { text: '✅ Confirm Date', callback_data: 'confirm_date' },
-    { text: '❌ Cancel', callback_data: 'cancel_booking' }
-  ]);
+  // Add action buttons based on context
+  if (selectedDate && highlightDate) {
+    // Both dates selected - show confirm
+    keyboard.push([
+      { text: '✅ Confirm Booking', callback_data: 'confirm_booking' },
+      { text: '❌ Cancel', callback_data: 'cancel_booking' }
+    ]);
+  } else if (selectedDate) {
+    // Start date selected - show next step button
+    keyboard.push([
+      { text: '➡️ Select End Date', callback_data: 'proceed_to_end' },
+      { text: '❌ Cancel', callback_data: 'cancel_booking' }
+    ]);
+  } else {
+    // No date selected
+    keyboard.push([
+      { text: '✅ Confirm Date', callback_data: 'confirm_date' },
+      { text: '❌ Cancel', callback_data: 'cancel_booking' }
+    ]);
+  }
   
   return {
     reply_markup: {
@@ -69,14 +94,25 @@ function getDatePickerKeyboard(year, month, selectedDate = null) {
   };
 }
 
-function getDateRangePickerKeyboard(step, startDate = null, endDate = null) {
+function getDateRangePickerKeyboard(step, startDate = null) {
+  const today = new Date();
+  
   if (step === 'start') {
-    const today = new Date();
+    // Show current month for start date selection
     return getDatePickerKeyboard(today.getFullYear(), today.getMonth());
   } else {
-    // For end date, show months after start date
+    // For end date, show the month AFTER the start date
     const start = new Date(startDate);
-    return getDatePickerKeyboard(start.getFullYear(), start.getMonth());
+    let endYear = start.getFullYear();
+    let endMonth = start.getMonth() + 1;
+    
+    if (endMonth > 11) {
+      endMonth = 0;
+      endYear += 1;
+    }
+    
+    // Pass the start date as highlight so user sees which date they picked
+    return getDatePickerKeyboard(endYear, endMonth, null, startDate);
   }
 }
 
