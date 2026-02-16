@@ -5,17 +5,16 @@ module.exports = (bot) => {
     const chatId = cb.message.chat.id;
     const data = cb.data;
     
-    await bot.answerCallbackQuery(cb.id);
-    
-    // Search again
+    // ONLY handle navigation-specific callbacks
     if (data === 'search_again') {
+      await bot.answerCallbackQuery(cb.id);
       showLocations(bot, chatId);
     }
-    
-    // Back to main menu (if you have callback for that)
-    if (data === 'back_to_main') {
+    else if (data === 'back_to_main') {
+      await bot.answerCallbackQuery(cb.id);
       const { showMainMenu } = require('../../utils/messageHelpers');
       showMainMenu(bot, chatId);
     }
+    // Otherwise, do NOTHING - let other handlers process it
   });
 };
