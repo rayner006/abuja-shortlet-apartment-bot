@@ -34,10 +34,14 @@ module.exports = (bot) => {
         console.log('📅 Current step:', session.step);
         
         if (session.step === 'awaiting_start_date') {
-          // Save start date and ask for end date
-          const result = await BookingService.processStartDate(chatId, selectedDate, session);
+          // Save start date and move to end date selection
+          session.startDate = selectedDate;
+          session.step = 'awaiting_end_date';
           
-          await bot.editMessageText(result.message, {
+          await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
+          
+          // Show calendar for end date with start date highlighted
+          await bot.editMessageText('📅 *Select your check-out date:*\n(Your check-in date is highlighted in blue 🔵)', {
             chat_id: chatId,
             message_id: messageId,
             parse_mode: 'Markdown',
@@ -47,6 +51,15 @@ module.exports = (bot) => {
           await bot.answerCallbackQuery(cb.id, { text: `Check-in: ${selectedDate}` });
           
         } else if (session.step === 'awaiting_end_date') {
+          // Check if end date is after start date
+          const start = new Date(session.startDate);
+          const end = new Date(selectedDate);
+          
+          if (end <= start) {
+            await bot.answerCallbackQuery(cb.id, { text: 'End date must be after start date!' });
+            return;
+          }
+          
           // Save end date and complete booking
           const result = await BookingService.processEndDate(chatId, selectedDate, session);
           
@@ -85,11 +98,14 @@ module.exports = (bot) => {
         const session = JSON.parse(sessionData);
         
         // Generate new keyboard for the selected month
+        const { getDatePickerKeyboard } = require('../../utils/datePicker');
         let newKeyboard;
+        
         if (session.step === 'awaiting_start_date') {
           newKeyboard = getDatePickerKeyboard(year, month);
         } else {
-          newKeyboard = getDatePickerKeyboard(year, month, session.startDate);
+          // For end date selection, highlight the start date
+          newKeyboard = getDatePickerKeyboard(year, month, null, session.startDate);
         }
         
         await bot.editMessageReplyMarkup(chatId, messageId, newKeyboard.reply_markup);
@@ -101,9 +117,72 @@ module.exports = (bot) => {
       }
     }
     
-    // Handle confirm date
+    // Handle proceed to end date
+    else if (data === 'proceed_to_end') {
+      try {
+        const redis = getRedis();
+        const sessionData = await redis.get(`session:${chatId}`);
+        
+        if (!sessionData) {
+          await bot.answerCallbackQuery(cb.id, { text: 'Session expired' });
+          return;
+        }
+        
+        const session = JSON.parse(sessionData);
+        
+        if (session.startDate) {
+          await bot.editMessageText('📅 *Select your check-out date:*\n(Your check-in date is highlighted in blue 🔵)', {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown',
+            reply_markup: getDateRangePickerKeyboard('end', session.startDate).reply_markup
+          });
+        }
+        
+        await bot.answerCallbackQuery(cb.id);
+        
+      } catch (error) {
+        logger.error('Error in proceed to end:', error);
+        await bot.answerCallbackQuery(cb.id);
+      }
+    }
+    
+    // Handle confirm date (legacy)
     else if (data === 'confirm_date') {
       await bot.answerCallbackQuery(cb.id, { text: 'Please select a date first' });
+    }
+    
+    // Handle confirm booking
+    else if (data === 'confirm_booking') {
+      try {
+        const redis = getRedis();
+        const sessionData = await redis.get(`session:${chatId}`);
+        
+        if (!sessionData) {
+          await bot.answerCallbackQuery(cb.id, { text: 'Session expired' });
+          return;
+        }
+        
+        const session = JSON.parse(sessionData);
+        
+        if (session.startDate && session.endDate) {
+          const result = await BookingService.processEndDate(chatId, session.endDate, session);
+          
+          await bot.editMessageText(result.message, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown'
+          });
+          
+          await bot.answerCallbackQuery(cb.id, { text: 'Booking confirmed!' });
+        } else {
+          await bot.answerCallbackQuery(cb.id, { text: 'Please select both dates' });
+        }
+        
+      } catch (error) {
+        logger.error('Error confirming booking:', error);
+        await bot.answerCallbackQuery(cb.id, { text: 'Error' });
+      }
     }
     
     // Handle cancel booking
