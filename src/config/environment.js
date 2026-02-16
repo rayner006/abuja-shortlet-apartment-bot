@@ -1,5 +1,12 @@
 require('dotenv').config();
 
+// TEMPORARY DEBUG - ADD THIS BLOCK
+console.log('🔍 RAW ENVIRONMENT VARIABLES CHECK:');
+console.log('DB_NAME from process.env:', process.env.DB_NAME ? `"${process.env.DB_NAME}"` : '❌ UNDEFINED');
+console.log('DB_HOST from process.env:', process.env.DB_HOST ? '✅ Set' : '❌ UNDEFINED');
+console.log('DB_USER from process.env:', process.env.DB_USER ? '✅ Set' : '❌ UNDEFINED');
+console.log('====================================');
+
 const nodeEnv = process.env.NODE_ENV || 'development';
 
 const config = {
@@ -39,5 +46,6 @@ const config = {
     commissionRate: 0.1
   }
 };
+
 
 module.exports = config[nodeEnv];
