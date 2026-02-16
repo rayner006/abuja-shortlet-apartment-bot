@@ -25,7 +25,7 @@ class BookingService {
       return { 
         success: true, 
         session,
-        message: '👤 *Please enter your full name:*'
+        message: '👤 *Please enter full name:*'
       };
       
     } catch (error) {
@@ -183,3 +183,4 @@ We will contact you shortly to confirm.
 }
 
 module.exports = BookingService;
+
