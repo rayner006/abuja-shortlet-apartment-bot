@@ -2,6 +2,12 @@ const mysql = require('mysql2/promise');
 const config = require('./environment');
 const logger = require('../middleware/logger');
 
+// TEMPORARY DEBUG - ADD THIS BLOCK
+console.log('🔍 DATABASE CONFIG CHECK:');
+console.log('config.database.database:', config.database.database ? `"${config.database.database}"` : '❌ UNDEFINED');
+console.log('config.database.host:', config.database.host ? '✅ Set' : '❌ UNDEFINED');
+console.log('====================================');
+
 let pool;
 
 async function connectDatabase() {
@@ -89,3 +95,4 @@ async function executeQuery(query, params, retries = 3) {
 }
 
 module.exports = { connectDatabase, getPool, executeQuery };
+
