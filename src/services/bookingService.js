@@ -1,122 +1,162 @@
-const { generateBookingCode, generateaccesspin, validatePIN } = require('../utils/pingenerator');
-const Booking = require('../models/Booking');
 const Apartment = require('../models/Apartment');
-const User = require('../models/User');
-const Commission = require('../models/Commission');
-const NotificationService = require('./notificationService');
-const { photoExists } = require('../config/uploads');
+const Booking = require('../models/Booking');
+const { getRedis } = require('../config/redis');
 const logger = require('../middleware/logger');
 
 class BookingService {
-  static async processBooking(chatId, phoneNumber, msg, session) {
+  static async startBooking(chatId, apartmentId, message) {
     try {
-      const userId = msg.from.id;
-      const fullName = msg.from.first_name || '';
-      const username = msg.from.username || 'No username';
+      const apartment = await Apartment.findById(apartmentId);
       
-      if (phoneNumber.length < 10) {
-        return { success: false, message: '❌ Please enter a valid phone number (at least 10 digits)' };
+      if (!apartment) {
+        return { success: false, message: '❌ Apartment not found.' };
       }
       
-      // Check if apartment has photos (optional validation)
-      const apt = await Apartment.findById(session.apartmentId);
-      if (apt) {
-        const photos = Apartment.processPhotos(apt);
-        if (photos.length === 0) {
-          logger.warn(`Apartment ${session.apartmentId} has no photos`);
-        }
-      }
-      
-      const bookingCode = generateBookingCode();
-      const amount = session.apartmentPrice;
-      const pin = generateaccesspin();
-      
-      if (!validatePIN(pin)) {
-        return { success: false, message: '❌ Error generating valid PIN. Please try again.' };
-      }
-      
-      const bookingId = await Booking.create({
-        apartmentId: session.apartmentId,
-        userId,
-        amount,
-        bookingCode,
-        accessPin: pin,
-        userName: fullName,
-        username,
-        phone: phoneNumber
-      });
-      
-      await User.incrementBookings(userId);
-      
-      const bookingInfo = {
-        bookingCode,
-        guestName: fullName,
-        guestUsername: username,
-        guestPhone: phoneNumber,
-        apartmentName: session.apartmentName,
-        location: session.apartmentLocation,
-        type: session.apartmentType,
-        price: amount,
-        bookingId,
-        ownerId: session.ownerId
+      // Create session with step 1 (name)
+      const session = {
+        step: 'awaiting_name',
+        apartmentId: apartment.id,
+        apartmentName: apartment.name,
+        price: apartment.price,
+        chatId,
+        messageId: message.message_id
       };
       
-      if (session.ownerId) {
-        await NotificationService.notifyOwner(session.ownerId, bookingInfo);
-      }
-      
-      await NotificationService.notifyAdmins(bookingInfo);
-      
-      Commission.track(bookingId, bookingCode, session.ownerId, session.apartmentId, amount).catch(err => {
-        logger.error('Error tracking commission:', err);
-      });
-      
-      return {
-        success: true,
-        bookingCode,
-        pin,
-        fullName,
-        username,
-        phoneNumber,
-        apartmentName: session.apartmentName,
-        amount
+      return { 
+        success: true, 
+        session,
+        message: 'Please enter your full name:'
       };
       
     } catch (error) {
-      logger.error('Error processing booking:', error);
-      return { success: false, message: '❌ Error creating booking. Please try again.' };
+      logger.error('Error in startBooking:', error);
+      return { success: false, message: '❌ Error starting booking.' };
     }
   }
   
-  static async verifyPin(chatId, bookingCode, pin) {
-    if (!validatePIN(pin)) {
-      return { 
-        success: false, 
-        message: '❌ *Invalid PIN format*\nPIN must be 5 digits.' 
-      };
-    }
-    
+  static async processName(chatId, name, session) {
     try {
-      const completed = await Booking.completeWithPin(bookingCode, pin);
+      // Store name and move to phone number step
+      session.name = name;
+      session.step = 'awaiting_phone';
       
-      if (!completed) {
-        return { 
-          success: false, 
-          message: '❌ *Invalid or Used PIN* \nPlease check and try again.' 
-        };
-      }
+      const redis = getRedis();
+      await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
       
       return {
         success: true,
-        message: '✅ *Payment Confirmed!* 🎉\n\nYour booking is complete.\nThank you for choosing Abuja Shortlet Apartments! 🏠'
+        session,
+        message: '📱 *Please enter your phone number:*'
       };
       
     } catch (error) {
-      logger.error('Error verifying PIN:', error);
-      return { 
-        success: false, 
-        message: '❌ *Error Confirming PIN* \nPlease contact admin.' 
+      logger.error('Error in processName:', error);
+      return { success: false, message: '❌ Error processing name.' };
+    }
+  }
+  
+  static async processPhone(chatId, phone, session) {
+    try {
+      // Store phone and move to date selection
+      session.phone = phone;
+      session.step = 'awaiting_start_date';
+      
+      const redis = getRedis();
+      await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
+      
+      return {
+        success: true,
+        session,
+        message: '📅 *Select your check-in date:*',
+        showDatePicker: true
       };
+      
+    } catch (error) {
+      logger.error('Error in processPhone:', error);
+      return { success: false, message: '❌ Error processing phone.' };
+    }
+  }
+  
+  static async processStartDate(chatId, date, session) {
+    try {
+      session.startDate = date;
+      session.step = 'awaiting_end_date';
+      
+      const redis = getRedis();
+      await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
+      
+      return {
+        success: true,
+        session,
+        message: '📅 *Select your check-out date:*',
+        showDatePicker: true,
+        startDate: date
+      };
+      
+    } catch (error) {
+      logger.error('Error in processStartDate:', error);
+      return { success: false, message: '❌ Error processing start date.' };
+    }
+  }
+  
+  static async processEndDate(chatId, endDate, session) {
+    try {
+      session.endDate = endDate;
+      
+      // Calculate total days and price
+      const start = new Date(session.startDate);
+      const end = new Date(endDate);
+      const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
+      
+      if (days <= 0) {
+        return { 
+          success: false, 
+          message: '❌ Check-out date must be after check-in date. Please select again.' 
+        };
+      }
+      
+      const totalAmount = session.price * days;
+      
+      // Create booking in database
+      const booking = await Booking.create({
+        apartmentId: session.apartmentId,
+        guestName: session.name,
+        guestPhone: session.phone,
+        startDate: session.startDate,
+        endDate: endDate,
+        totalDays: days,
+        totalAmount: totalAmount,
+        chatId: chatId
+      });
+      
+      // Clear session
+      const redis = getRedis();
+      await redis.del(`session:${chatId}`);
+      
+      return {
+        success: true,
+        booking,
+        message: `
+✅ *Booking Confirmed!*
+
+📋 *Booking Details:*
+🏠 Apartment: ${session.apartmentName}
+👤 Name: ${session.name}
+📞 Phone: ${session.phone}
+📅 Check-in: ${session.startDate}
+📅 Check-out: ${endDate}
+📆 Total Days: ${days}
+💰 Total Amount: ₦${totalAmount}
+
+🔑 *Your Booking ID:* \`${booking.id}\`
+
+We will contact you shortly to confirm.
+        `
+      };
+      
+    } catch (error) {
+      logger.error('Error in processEndDate:', error);
+      return { success: false, message: '❌ Error processing end date.' };
     }
   }
 }
