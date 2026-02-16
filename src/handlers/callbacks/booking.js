@@ -74,38 +74,30 @@ module.exports = (bot) => {
       console.log('📅 Month navigation:', { year, month });
       
       try {
-        await bot.answerCallbackQuery(cb.id);
-        
         const redis = getRedis();
         const sessionData = await redis.get(`session:${chatId}`);
         
         if (!sessionData) {
-          await bot.editMessageText('❌ Session expired. Please start over.', {
-            chat_id: chatId,
-            message_id: messageId
-          });
+          await bot.answerCallbackQuery(cb.id);
           return;
         }
         
         const session = JSON.parse(sessionData);
         
-        // Get appropriate keyboard
-        let keyboard;
+        // Generate new keyboard for the selected month
+        let newKeyboard;
         if (session.step === 'awaiting_start_date') {
-          keyboard = getDateRangePickerKeyboard('start');
+          newKeyboard = getDatePickerKeyboard(year, month);
         } else {
-          keyboard = getDateRangePickerKeyboard('end', session.startDate);
+          newKeyboard = getDatePickerKeyboard(year, month, session.startDate);
         }
         
-        // Update the month in the keyboard (this requires modifying datePicker.js)
-        // For now, just regenerate with new month
-        const { getDatePickerKeyboard } = require('../../utils/datePicker');
-        const newKeyboard = getDatePickerKeyboard(year, month, session.startDate);
-        
         await bot.editMessageReplyMarkup(chatId, messageId, newKeyboard.reply_markup);
+        await bot.answerCallbackQuery(cb.id);
         
       } catch (error) {
         logger.error('Error in month navigation:', error);
+        await bot.answerCallbackQuery(cb.id);
       }
     }
     
