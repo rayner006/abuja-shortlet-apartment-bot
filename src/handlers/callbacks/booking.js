@@ -33,14 +33,16 @@ module.exports = (bot) => {
         const session = await getSession();
         if (!session) return bot.answerCallbackQuery(cb.id);
 
-        // CHECK-IN
+        /* ---------- CHECK-IN ---------- */
         if (session.step === 'awaiting_start_date') {
           session.startDate = selectedDate;
           session.step = 'awaiting_end_date';
           await saveSession(session);
 
           await bot.editMessageText(
-            '📅 *Select your check-out date:*',
+            `📅 *Select your Check-Out Date*\n\n` +
+            `🔵 Check-In Selected: *${selectedDate}*\n\n` +
+            `You can change month/year before picking.`,
             {
               chat_id: chatId,
               message_id: messageId,
@@ -52,7 +54,7 @@ module.exports = (bot) => {
           await bot.answerCallbackQuery(cb.id, { text: 'Check-in selected' });
         }
 
-        // CHECK-OUT
+        /* ---------- CHECK-OUT ---------- */
         else if (session.step === 'awaiting_end_date') {
           const start = new Date(session.startDate);
           const end = new Date(selectedDate);
@@ -96,7 +98,7 @@ module.exports = (bot) => {
         const keyboard =
           session.step === 'awaiting_start_date'
             ? getDatePickerKeyboard(year, month)
-            : getDatePickerKeyboard(year, month, session.startDate);
+            : getDatePickerKeyboard(year, month, null, session.startDate);
 
         await bot.editMessageReplyMarkup(
           keyboard.reply_markup,
@@ -124,7 +126,7 @@ module.exports = (bot) => {
         const keyboard =
           session.step === 'awaiting_start_date'
             ? getDatePickerKeyboard(newYear, Number(month))
-            : getDatePickerKeyboard(newYear, Number(month), session.startDate);
+            : getDatePickerKeyboard(newYear, Number(month), null, session.startDate);
 
         await bot.editMessageReplyMarkup(
           keyboard.reply_markup,
@@ -149,7 +151,8 @@ module.exports = (bot) => {
       await saveSession(session);
 
       await bot.editMessageText(
-        '📅 *Select your check-in date:*',
+        `📅 *Select your Check-In Date*\n\n` +
+        `You can change month or year before picking.`,
         {
           chat_id: chatId,
           message_id: messageId,
