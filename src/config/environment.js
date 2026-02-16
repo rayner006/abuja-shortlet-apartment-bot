@@ -46,6 +46,16 @@ const config = {
     commissionRate: 0.1
   }
 };
+console.log('🔍 CONFIG OBJECT CHECK:');
+console.log('NODE_ENV:', nodeEnv);
+console.log(
+  'Config DB Name:',
+  config[nodeEnv].database.database
+    ? `"${config[nodeEnv].database.database}"`
+    : '❌ UNDEFINED'
+);
+console.log('====================================');
 
 
 module.exports = config[nodeEnv];
+
