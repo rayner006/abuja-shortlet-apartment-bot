@@ -25,7 +25,7 @@ class BookingService {
       return { 
         success: true, 
         session,
-        message: 'Please enter your full name:'
+        message: '👤 *Please enter your full name:*'
       };
       
     } catch (error) {
@@ -117,16 +117,16 @@ class BookingService {
       
       const totalAmount = session.price * days;
       
-      // Create booking in database
+      // Create booking in database with correct column mappings
       const booking = await Booking.create({
         apartmentId: session.apartmentId,
-        guestName: session.name,
-        guestPhone: session.phone,
+        chatId: chatId,                    // maps to user_id
+        guestName: session.name,            // maps to user_name
+        guestPhone: session.phone,          // maps to phone
         startDate: session.startDate,
         endDate: endDate,
         totalDays: days,
-        totalAmount: totalAmount,
-        chatId: chatId
+        totalAmount: totalAmount            // maps to amount
       });
       
       // Clear session
@@ -148,7 +148,7 @@ class BookingService {
 📆 Total Days: ${days}
 💰 Total Amount: ₦${totalAmount}
 
-🔑 *Your Booking ID:* \`${booking.id}\`
+🔑 *Your Booking Code:* \`${booking.booking_code}\`
 
 We will contact you shortly to confirm.
         `
@@ -157,6 +157,27 @@ We will contact you shortly to confirm.
     } catch (error) {
       logger.error('Error in processEndDate:', error);
       return { success: false, message: '❌ Error processing end date.' };
+    }
+  }
+  
+  static async confirmBooking(bookingCode, chatId) {
+    try {
+      const booking = await Booking.findByCode(bookingCode);
+      
+      if (!booking) {
+        return { success: false, message: '❌ Booking not found.' };
+      }
+      
+      await Booking.updateStatus(booking.id, 'confirmed');
+      
+      return {
+        success: true,
+        message: `✅ Booking ${bookingCode} confirmed successfully!`
+      };
+      
+    } catch (error) {
+      logger.error('Error confirming booking:', error);
+      return { success: false, message: '❌ Error confirming booking.' };
     }
   }
 }
