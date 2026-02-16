@@ -2,6 +2,9 @@ const { showMainMenu, showWelcomeBack } = require('../../utils/messageHelpers');
 const SessionManager = require('../../services/sessionManager');
 const logger = require('../../middleware/logger');
 
+// Add cooldown map to prevent duplicates
+const messageCooldown = new Map();
+
 module.exports = (bot) => {
   bot.on('message', async (msg) => {
     // Ignore commands
@@ -13,8 +16,15 @@ module.exports = (bot) => {
     
     try {
       const chatId = msg.chat.id;
-      const userInput = msg.text;
       
+      // Check cooldown - prevent duplicate messages within 5 seconds
+      const lastMessage = messageCooldown.get(chatId);
+      if (lastMessage && Date.now() - lastMessage < 5000) {
+        logger.info(`⏱️ Cooldown active for ${chatId} - skipping duplicate`);
+        return;
+      }
+      
+      const userInput = msg.text;
       logger.info(`Unhandled message from ${chatId}: "${userInput}"`);
       
       const { hasSession, message, action } = await SessionManager.getWelcomeBackMessage(chatId);
@@ -32,8 +42,14 @@ module.exports = (bot) => {
             ]
           }
         });
+        messageCooldown.set(chatId, Date.now());
+      } else if (action === 'show_main_menu') {
+        await showMainMenu(bot, chatId);
+        messageCooldown.set(chatId, Date.now());
       } else {
-        await showWelcomeBack(bot, chatId);
+        // Only send ONE message
+        await bot.sendMessage(chatId, message || "Welcome back! 👋 Use the menu to continue.");
+        messageCooldown.set(chatId, Date.now());
       }
       
     } catch (error) {
