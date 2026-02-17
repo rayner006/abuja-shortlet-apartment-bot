@@ -99,24 +99,16 @@ module.exports = (bot) => {
         return;
       }
       
-      // ===== IGNORE MESSAGES DURING DATE SELECTION =====
-      // If user is in date selection step, ignore any text messages
+      // ===== DURING DATE SELECTION - SILENTLY IGNORE =====
+      // If user is in date selection step, do nothing
       if (session.step === 'selecting_dates') {
-        // Optionally, you can send a reminder
-        await bot.sendMessage(
-          chatId,
-          '📅 Please select your dates using the calendar above.',
-          { reply_markup: { force_reply: false } }
-        );
+        // Just return without sending any message
         return;
       }
       
     } catch (err) {
       logger.error('BOOKING MESSAGE HANDLER ERROR:', err);
-      await bot.sendMessage(
-        chatId,
-        '❌ An error occurred. Please try again.'
-      );
+      // Don't send error message to user
     }
   });
 };
