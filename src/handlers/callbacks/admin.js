@@ -109,7 +109,63 @@ module.exports = (bot) => {
       
       else if (data === 'admin_bookings_pending') {
         await bot.answerCallbackQuery(cb.id, { text: 'Fetching pending verifications...' });
-        bot.sendMessage(chatId, '⏳ *Pending Verification*\n\nComing soon...', { parse_mode: 'Markdown' });
+        
+        try {
+          const Booking = require('../../models/Booking');
+          // Adjust this query based on your actual model
+          const pendingBookings = await Booking.find({ 
+            $or: [
+              { status: 'pending' },
+              { verified: false },
+              { admin_confirmed: false }
+            ]
+          }).limit(10);
+          
+          if (!pendingBookings || pendingBookings.length === 0) {
+            const keyboard = {
+              inline_keyboard: [
+                [{ text: '« Back to Bookings', callback_data: 'admin_menu_bookings' }]
+              ]
+            };
+            return bot.sendMessage(chatId, '✅ No pending verifications found.', { 
+              reply_markup: keyboard 
+            });
+          }
+          
+          let message = '⏳ *Pending Verifications*\n\n';
+          
+          pendingBookings.forEach((booking, index) => {
+            message += `${index+1}. *${booking.apartment_name || 'Apartment'}*\n`;
+            message += `   👤 Guest: ${booking.guest_name || 'N/A'}\n`;
+            message += `   📅 Dates: ${booking.check_in || '?'} to ${booking.check_out || '?'}\n`;
+            message += `   💰 Amount: ₦${booking.amount || 0}\n`;
+            message += `   🏠 Owner: ${booking.owner_name || booking.owner_id || 'N/A'}\n`;
+            message += `   🔑 Code: \`${booking.booking_code || booking.id}\`\n\n`;
+          });
+          
+          message += 'Select a booking to verify payment:';
+          
+          const buttons = pendingBookings.map(booking => {
+            const displayText = booking.apartment_name || `Booking ${booking.booking_code || booking.id}`;
+            const callbackData = `admin_verify_${booking.booking_code || booking.id}`;
+            return [{ text: `✅ Verify: ${displayText}`, callback_data: callbackData }];
+          });
+          
+          buttons.push([{ text: '« Back to Bookings', callback_data: 'admin_menu_bookings' }]);
+          
+          const keyboard = {
+            inline_keyboard: buttons
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error fetching pending bookings:', error);
+          bot.sendMessage(chatId, '❌ Error fetching pending verifications.');
+        }
       }
 
       else if (data === 'admin_bookings_verified') {
@@ -130,7 +186,91 @@ module.exports = (bot) => {
       else if (data === 'admin_bookings_search') {
         await bot.answerCallbackQuery(cb.id, { text: 'Search feature...' });
         bot.sendMessage(chatId, '🔍 *Search Booking*\n\nPlease enter booking code or guest name:', { parse_mode: 'Markdown' });
-        // This would need a message listener to handle the response
+      }
+      
+      else if (data.startsWith('admin_verify_')) {
+        await bot.answerCallbackQuery(cb.id, { text: 'Opening verification...' });
+        
+        const bookingId = data.replace('admin_verify_', '');
+        
+        try {
+          const Booking = require('../../models/Booking');
+          const booking = await Booking.findByCode(bookingId);
+          
+          if (!booking) {
+            return bot.sendMessage(chatId, '❌ Booking not found.');
+          }
+          
+          const message = 
+            `✅ *Verify Payment*\n\n` +
+            `*Booking:* ${booking.apartment_name}\n` +
+            `*Guest:* ${booking.guest_name}\n` +
+            `*Owner:* ${booking.owner_name || booking.owner_id}\n` +
+            `*Amount Paid to Owner:* ₦${booking.amount || 0}\n` +
+            `*Your Commission (10%):* ₦${booking.amount ? booking.amount * 0.1 : 0}\n\n` +
+            `Has the guest confirmed they paid the owner?`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [
+                { text: '✅ Yes, Mark Verified', callback_data: `admin_confirm_verify_${bookingId}` },
+                { text: '❌ No', callback_data: 'admin_bookings_pending' }
+              ],
+              [{ text: '« Back', callback_data: 'admin_bookings_pending' }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error in verify booking:', error);
+          bot.sendMessage(chatId, '❌ Error opening verification.');
+        }
+      }
+
+      else if (data.startsWith('admin_confirm_verify_')) {
+        await bot.answerCallbackQuery(cb.id, { text: 'Verifying...' });
+        
+        const bookingId = data.replace('admin_confirm_verify_', '');
+        
+        try {
+          const Booking = require('../../models/Booking');
+          await Booking.updateOne(
+            { booking_code: bookingId }, 
+            { 
+              verified: true, 
+              status: 'verified',
+              verified_at: new Date(),
+              verified_by: chatId
+            }
+          );
+          
+          const message = 
+            `✅ *Payment Verified Successfully!*\n\n` +
+            `Booking ${bookingId} has been marked as verified.\n` +
+            `Commission is now due from the owner.\n\n` +
+            `You can track this in "Commission Due" section.`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [{ text: '📋 Back to Pending', callback_data: 'admin_bookings_pending' }],
+              [{ text: '💰 Commission Due', callback_data: 'admin_bookings_commission_due' }],
+              [{ text: '« Main Menu', callback_data: 'admin_main_menu' }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error confirming verification:', error);
+          bot.sendMessage(chatId, '❌ Error verifying booking.');
+        }
       }
       
       else if (data === 'admin_main_menu') {
