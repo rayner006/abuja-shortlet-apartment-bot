@@ -36,25 +36,21 @@ module.exports = {
     
     // Verified bookings (placeholder)
     else if (data === 'admin_bookings_verified') {
-      await bot.answerCallbackQuery(cb.id, { text: 'Coming soon...' });
       await bot.sendMessage(chatId, '✅ *Verified Bookings*\n\nComing soon...', { parse_mode: 'Markdown' });
     }
     
     // Commission due (placeholder)
     else if (data === 'admin_bookings_commission_due') {
-      await bot.answerCallbackQuery(cb.id, { text: 'Coming soon...' });
       await bot.sendMessage(chatId, '💰 *Commissions Due*\n\nComing soon...', { parse_mode: 'Markdown' });
     }
     
     // Paid commissions (placeholder)
     else if (data === 'admin_bookings_commission_paid') {
-      await bot.answerCallbackQuery(cb.id, { text: 'Coming soon...' });
       await bot.sendMessage(chatId, '💵 *Paid Commissions*\n\nComing soon...', { parse_mode: 'Markdown' });
     }
     
     // Search booking (placeholder)
     else if (data === 'admin_bookings_search') {
-      await bot.answerCallbackQuery(cb.id, { text: 'Coming soon...' });
       await bot.sendMessage(chatId, '🔍 *Search Booking*\n\nComing soon...', { parse_mode: 'Markdown' });
     }
   }
@@ -63,8 +59,6 @@ module.exports = {
 // ==================== HANDLER FUNCTIONS ====================
 
 async function handleAllBookings(bot, cb, chatId) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Fetching all bookings...' });
-  
   try {
     const bookings = await executeQuery('SELECT * FROM bookings ORDER BY id DESC LIMIT 10');
     
@@ -117,8 +111,6 @@ async function handleAllBookings(bot, cb, chatId) {
 }
 
 async function handlePendingBookings(bot, cb, chatId) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Fetching pending verifications...' });
-  
   try {
     const pendingBookings = await executeQuery(
       "SELECT * FROM bookings WHERE status = 'pending' ORDER BY id DESC LIMIT 10"
@@ -169,8 +161,6 @@ async function handlePendingBookings(bot, cb, chatId) {
 }
 
 async function handleVerifyBooking(bot, cb, chatId, data) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Opening verification...' });
-  
   const bookingCode = data.replace('admin_verify_', '');
   
   try {
@@ -210,8 +200,6 @@ async function handleVerifyBooking(bot, cb, chatId, data) {
 }
 
 async function handleConfirmVerify(bot, cb, chatId, data) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Verifying...' });
-  
   const bookingCode = data.replace('admin_confirm_verify_', '');
   
   try {
@@ -249,8 +237,6 @@ async function handleConfirmVerify(bot, cb, chatId, data) {
 }
 
 async function handleDeleteBooking(bot, cb, chatId, data) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Preparing delete...' });
-  
   const bookingCode = data.replace('admin_delete_', '');
   
   const message = `⚠️ *Confirm Delete*\n\nAre you sure you want to delete booking *${bookingCode}*?\n\nThis action cannot be undone.`;
@@ -271,8 +257,6 @@ async function handleDeleteBooking(bot, cb, chatId, data) {
 }
 
 async function handleConfirmDelete(bot, cb, chatId, data) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Deleting...' });
-  
   const bookingCode = data.replace('admin_confirm_delete_', '');
   
   try {
