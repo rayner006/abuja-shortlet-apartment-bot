@@ -4,6 +4,8 @@ const { isAdmin } = require('../../middleware/auth');
 const logger = require('../../middleware/logger');
 const Apartment = require('../../models/Apartment');
 const { getRedis } = require('../../config/redis');
+const fs = require('fs');
+const { getUploadPath } = require('../../config/uploads');
 
 module.exports = (bot) => {
   bot.on('callback_query', async (cb) => {
@@ -529,7 +531,7 @@ module.exports = (bot) => {
           `Please send me the apartment details in this format:\n\n` +
           `Name|Location|Address|Type|Price|Bedrooms|Bathrooms|Description|OwnerID\n\n` +
           `Example:\n` +
-          `Cozy Studio|Kubwa|No 12 Peace Estate|Self Contain|45000|1|1|Fully furnished studio|1\n\n` +
+          `Cozy Studio|Kubwa|No 12 Peace Estate|Studio Apartment|45000|1|1|Fully furnished studio|1\n\n` +
           `After that, you can upload photos.`;
         
         const keyboard = {
@@ -675,7 +677,7 @@ module.exports = (bot) => {
         }
       }
       
-      // Manage Photos
+      // Manage Photos - Simplified with buttons
       else if (data.startsWith('admin_apartment_photos_')) {
         const apartmentId = data.replace('admin_apartment_photos_', '');
         
@@ -691,40 +693,161 @@ module.exports = (bot) => {
           
           const photoPaths = Apartment.processPhotos(apt);
           
-          let message = `📸 *Manage Photos - ${apt.name}*\n\n`;
-          message += `Total photos: ${photoPaths.length}\n\n`;
-          
+          // Send each photo with delete button
           if (photoPaths.length > 0) {
-            message += `*Current photos:*\n`;
-            photoPaths.forEach((photo, index) => {
-              message += `${index + 1}. ${photo}\n`;
+            await bot.sendMessage(chatId, `📸 *${apt.name} - Photos*\n\nTotal: ${photoPaths.length}`, {
+              parse_mode: 'Markdown'
             });
-            message += `\n`;
+            
+            // Send each photo with a delete button
+            for (let i = 0; i < photoPaths.length; i++) {
+              const photo = photoPaths[i];
+              const fullPath = getUploadPath(photo);
+              
+              if (fullPath && fs.existsSync(fullPath)) {
+                const keyboard = {
+                  inline_keyboard: [
+                    [{ text: `🗑️ Delete Photo ${i+1}`, callback_data: `admin_photo_delete_${apartmentId}_${i}` }]
+                  ]
+                };
+                
+                await bot.sendPhoto(chatId, fullPath, {
+                  caption: `Photo ${i+1}`,
+                  reply_markup: keyboard
+                });
+              }
+            }
+          } else {
+            await bot.sendMessage(chatId, '📸 No photos yet. Send photos to add them.');
           }
           
-          message += `*Options:*\n`;
-          message += `- Send new photos to add them\n`;
-          message += `- Send /clearphotos to remove all photos\n`;
-          message += `- Send /deletephoto [number] to delete specific photo`;
-          
-          const keyboard = {
+          // Action buttons
+          const actionKeyboard = {
             inline_keyboard: [
+              [{ text: '➕ Add More Photos', callback_data: `admin_photo_add_${apartmentId}` }],
+              [{ text: '🗑️ Delete All Photos', callback_data: `admin_photo_deleteall_${apartmentId}` }],
               [{ text: '« Back to Apartment', callback_data: `admin_apartment_detail_${apartmentId}` }]
             ]
           };
           
-          await bot.sendMessage(chatId, message, { 
+          await bot.sendMessage(chatId, '📸 *Photo Actions*', {
             parse_mode: 'Markdown',
-            reply_markup: keyboard 
+            reply_markup: actionKeyboard
           });
           
-          // Store in Redis that we're managing photos for this apartment
+          // Store in Redis that we're managing photos
           const redis = getRedis();
           await redis.setex(`managing_photos:${chatId}`, 3600, apartmentId);
           
         } catch (error) {
           logger.error('Error loading photos:', error);
           bot.sendMessage(chatId, '❌ Error loading photos.');
+        }
+      }
+      
+      // Delete single photo
+      else if (data.startsWith('admin_photo_delete_')) {
+        const parts = data.split('_');
+        const apartmentId = parts[3];
+        const photoIndex = parseInt(parts[4]);
+        
+        await bot.answerCallbackQuery(cb.id, { text: 'Deleting photo...' });
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          const [apt] = await executeQuery('SELECT * FROM apartments WHERE id = ?', [apartmentId]);
+          
+          if (!apt) {
+            return bot.sendMessage(chatId, '❌ Apartment not found.');
+          }
+          
+          let photoPaths = Apartment.processPhotos(apt);
+          
+          if (photoIndex >= 0 && photoIndex < photoPaths.length) {
+            // Remove the photo from array
+            photoPaths.splice(photoIndex, 1);
+            
+            // Update database
+            const photoPathsJson = JSON.stringify(photoPaths);
+            await executeQuery('UPDATE apartments SET photo_paths = ? WHERE id = ?', [photoPathsJson, apartmentId]);
+            
+            await bot.sendMessage(chatId, '✅ Photo deleted successfully!');
+          }
+          
+          // Show updated photos
+          bot.emit('callback_query', { 
+            ...cb, 
+            data: `admin_apartment_photos_${apartmentId}` 
+          });
+          
+        } catch (error) {
+          logger.error('Error deleting photo:', error);
+          bot.sendMessage(chatId, '❌ Error deleting photo.');
+        }
+      }
+      
+      // Add photos mode
+      else if (data.startsWith('admin_photo_add_')) {
+        const apartmentId = data.replace('admin_photo_add_', '');
+        
+        await bot.answerCallbackQuery(cb.id, { text: 'Ready to receive photos...' });
+        
+        await bot.sendMessage(chatId, 
+          `📸 *Add Photos*\n\n` +
+          `Send me the photos you want to add.\n` +
+          `You can send multiple photos one by one.\n\n` +
+          `Send /done when finished.`,
+          { parse_mode: 'Markdown' }
+        );
+        
+        const redis = getRedis();
+        await redis.setex(`adding_photos:${chatId}`, 3600, apartmentId);
+      }
+      
+      // Delete all photos
+      else if (data.startsWith('admin_photo_deleteall_')) {
+        const apartmentId = data.replace('admin_photo_deleteall_', '');
+        
+        const message = `⚠️ *Confirm*\n\nAre you sure you want to delete ALL photos?`;
+        
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '✅ Yes, Delete All', callback_data: `admin_photo_confirm_deleteall_${apartmentId}` },
+              { text: '❌ No', callback_data: `admin_apartment_photos_${apartmentId}` }
+            ]
+          ]
+        };
+        
+        await bot.sendMessage(chatId, message, {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
+      }
+      
+      // Confirm delete all photos
+      else if (data.startsWith('admin_photo_confirm_deleteall_')) {
+        const apartmentId = data.replace('admin_photo_confirm_deleteall_', '');
+        
+        await bot.answerCallbackQuery(cb.id, { text: 'Deleting all photos...' });
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          
+          // Set photo_paths to empty array
+          await executeQuery('UPDATE apartments SET photo_paths = ? WHERE id = ?', [JSON.stringify([]), apartmentId]);
+          
+          await bot.sendMessage(chatId, '✅ All photos deleted successfully!');
+          
+          // Go back to photos menu
+          bot.emit('callback_query', { 
+            ...cb, 
+            data: `admin_apartment_photos_${apartmentId}` 
+          });
+          
+        } catch (error) {
+          logger.error('Error deleting all photos:', error);
+          bot.sendMessage(chatId, '❌ Error deleting photos.');
         }
       }
       
