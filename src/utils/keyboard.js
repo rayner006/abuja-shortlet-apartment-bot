@@ -1,132 +1,105 @@
-const { LOCATIONS, APARTMENT_TYPES } = require('../config/constants');
+/**
+ * Keyboard Utility
+ * Central place for all Telegram keyboards
+ */
 
-// Main menu keyboard
-function getMainMenuKeyboard() {
-  return {
-    reply_markup: {
-      keyboard: [
-        ['🏠 View Apartments'],
-        ['📞 Contact Admin', 'ℹ️ About Us']
-      ],
-      resize_keyboard: true
-    }
-  };
-}
-
-// Locations keyboard
-function getLocationsKeyboard() {
-  const locationButtons = Object.keys(LOCATIONS).map(location => [location]);
-  
-  // Split into rows of 2
-  const keyboard = [];
-  for (let i = 0; i < locationButtons.length; i += 2) {
-    const row = [];
-    row.push(locationButtons[i][0]);
-    if (i + 1 < locationButtons.length) {
-      row.push(locationButtons[i + 1][0]);
-    }
-    keyboard.push(row);
-  }
-  
-  // Add back button
-  keyboard.push(['⬅️ Back to Main Menu']);
-  
-  return {
-    reply_markup: {
-      keyboard,
-      resize_keyboard: true
-    }
-  };
-}
-
-// Apartment types keyboard
-function getApartmentTypesKeyboard(location) {
-  const keyboard = APARTMENT_TYPES.map(type => [type]);
-  keyboard.push(['⬅️ Back to Main Menu']);
-  
-  return {
-    reply_markup: {
-      keyboard,
-      resize_keyboard: true
-    }
-  };
-}
-
-// Apartment actions keyboard (inline)
-function getApartmentActionsKeyboard(apartmentId) {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: '📅 Book Now', callback_data: `book_${apartmentId}` }]
-      ]
-    }
-  };
-}
-
-// Owner actions keyboard (inline)
-function getOwnerActionsKeyboard(bookingCode) {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '✅ Confirm Booking', callback_data: `confirm_owner_${bookingCode}` },
-          { text: '📞 Contacted Guest', callback_data: `contacted_${bookingCode}` }
+class Keyboard {
+  /* ================= MAIN MENU ================= */
+  static mainMenu() {
+    return {
+      reply_markup: {
+        keyboard: [
+          [{ text: '🏠 Browse Apartments' }],
+          [{ text: '📅 My Bookings' }],
+          [{ text: '📞 Contact Support' }]
         ],
-        [
-          { text: '🔐 Confirm with PIN', callback_data: `confirm_property_owner_${bookingCode}` }
+        resize_keyboard: true,
+        one_time_keyboard: false
+      }
+    };
+  }
+
+  /* ================= LOCATION MENU ================= */
+  static locationMenu(locations = []) {
+    const rows = locations.map(loc => [{ text: loc }]);
+
+    rows.push([{ text: '⬅️ Back to Menu' }]);
+
+    return {
+      reply_markup: {
+        keyboard: rows,
+        resize_keyboard: true
+      }
+    };
+  }
+
+  /* ================= APARTMENT INLINE ================= */
+  static apartmentInline(apartmentId) {
+    return {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '📸 View Photos', callback_data: `photos_${apartmentId}` },
+            { text: '📝 Details', callback_data: `details_${apartmentId}` }
+          ],
+          [
+            { text: '💳 Book Now', callback_data: `book_${apartmentId}` }
+          ]
         ]
-      ]
-    }
-  };
-}
+      }
+    };
+  }
 
-// Admin actions keyboard (inline)
-function getAdminActionsKeyboard(bookingCode) {
-  return {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '💰 View Commission', callback_data: `admin_commission_${bookingCode}` },
-          { text: '📊 Dashboard', callback_data: 'admin_dashboard' }
+  /* ================= BOOKING CONFIRM ================= */
+  static bookingConfirm(apartmentId) {
+    return {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '✅ Confirm Booking', callback_data: `confirm_${apartmentId}` },
+            { text: '❌ Cancel', callback_data: `cancel_${apartmentId}` }
+          ]
         ]
-      ]
-    }
-  };
+      }
+    };
+  }
+
+  /* ================= OWNER APPROVAL ================= */
+  static ownerApproval(bookingId) {
+    return {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '💰 Payment Received', callback_data: `paid_${bookingId}` },
+            { text: '❌ Reject', callback_data: `reject_${bookingId}` }
+          ]
+        ]
+      }
+    };
+  }
+
+  /* ================= ADMIN ACTIONS ================= */
+  static adminActions(bookingId) {
+    return {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '📊 View Commission', callback_data: `commission_${bookingId}` }
+          ]
+        ]
+      }
+    };
+  }
+
+  /* ================= BACK BUTTON ================= */
+  static backButton(label = '⬅️ Back') {
+    return {
+      reply_markup: {
+        keyboard: [[{ text: label }]],
+        resize_keyboard: true
+      }
+    };
+  }
 }
 
-// Search options keyboard
-function getSearchOptionsKeyboard() {
-  return {
-    reply_markup: {
-      keyboard: [
-        ['🔍 Search Again'],
-        ['🏠 View Apartments'],
-        ['⬅️ Back to Main Menu']
-      ],
-      resize_keyboard: true
-    }
-  };
-}
-
-// Back button only
-function getBackKeyboard() {
-  return {
-    reply_markup: {
-      keyboard: [
-        ['⬅️ Back to Main Menu']
-      ],
-      resize_keyboard: true
-    }
-  };
-}
-
-module.exports = {
-  getMainMenuKeyboard,
-  getLocationsKeyboard,
-  getApartmentTypesKeyboard,
-  getApartmentActionsKeyboard,
-  getOwnerActionsKeyboard,
-  getAdminActionsKeyboard,
-  getSearchOptionsKeyboard,
-  getBackKeyboard
-};
+module.exports = Keyboard;
