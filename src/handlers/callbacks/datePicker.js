@@ -66,11 +66,6 @@ class PremiumDatePicker {
     return date < today;
   }
 
-  isInRange(dateStr, checkIn, checkOut) {
-    if (!checkIn || !checkOut) return false;
-    return dateStr > checkIn && dateStr < checkOut;
-  }
-
   calculateNights(checkIn, checkOut) {
     if (!checkIn || !checkOut) return 0;
     const start = new Date(checkIn);
@@ -114,7 +109,6 @@ class PremiumDatePicker {
       const isPast = this.isPastDate(year, month, day);
       const isCheckIn = checkIn === dateStr;
       const isCheckOut = checkOut === dateStr;
-      const isInRange = this.isInRange(dateStr, checkIn, checkOut);
       
       let buttonText = '';
       let callbackData = isPast ? 'ignore' : `date_${dateStr}`;
@@ -125,10 +119,8 @@ class PremiumDatePicker {
         buttonText = `🔵 ${day}`;
       } else if (isCheckOut) {
         buttonText = `🟢 ${day}`;
-      } else if (isInRange) {
-        buttonText = `🟡 ${day}`;
       } else {
-        buttonText = `⬜ ${day}`;
+        buttonText = `${day}`;
       }
 
       row.push({
@@ -174,13 +166,10 @@ class PremiumDatePicker {
     
     keyboard.push(actionRow);
 
-    // Legend
+    // Legend - ONLY Check-in and Check-out (no Past)
     keyboard.push([
       { text: '🔵 Check-in', callback_data: 'ignore' },
-      { text: '🟢 Check-out', callback_data: 'ignore' },
-      { text: '🟡 Between', callback_data: 'ignore' },
-      { text: '⬜ Available', callback_data: 'ignore' },
-      { text: '❌ Past', callback_data: 'ignore' }
+      { text: '🟢 Check-out', callback_data: 'ignore' }
     ]);
 
     return {
@@ -329,7 +318,6 @@ class PremiumDatePicker {
       '📅 *Select Your Dates*\n\n' +
       '• Click a date for *check-in*\n' +
       '• Click another date for *check-out*\n' +
-      '• Dates between will be highlighted 🟡\n' +
       '• Click *CONFIRM* when both are selected',
       {
         parse_mode: 'Markdown',
