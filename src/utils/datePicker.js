@@ -1,13 +1,21 @@
 // utils/datePicker.js
 
 function getMonthName(month) {
-  const months = ['Jan','Feb','Mar','Apr','May','Jun',
-                  'Jul','Aug','Sep','Oct','Nov','Dec'];
+  const months = [
+    'Jan','Feb','Mar','Apr','May','Jun',
+    'Jul','Aug','Sep','Oct','Nov','Dec'
+  ];
   return months[month];
 }
 
 /* ================= MAIN KEYBOARD ================= */
-function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
+function getDatePickerKeyboard(
+  year,
+  month,
+  step = 'start',
+  startDate = null,
+  endDate = null
+) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
 
@@ -16,7 +24,9 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
 
   // Week headers
   const weekdays = ['Su','Mo','Tu','We','Th','Fr','Sa'];
-  keyboard.push(weekdays.map(d => ({ text: d, callback_data: 'ignore' })));
+  keyboard.push(
+    weekdays.map(d => ({ text: d, callback_data: 'ignore' }))
+  );
 
   // Empty start cells
   for (let i = 0; i < firstDay; i++) {
@@ -28,8 +38,9 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
     const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 
     let label = `${day}`;
-    if (startDate === dateStr) label = `🔵 ${day}`; // check-in
-    if (endDate === dateStr) label = `🟢 ${day}`;   // check-out
+
+    if (startDate === dateStr) label = `🔵 ${day}`; // Check-in
+    if (endDate === dateStr) label = `🟢 ${day}`;   // Check-out
 
     row.push({
       text: label,
@@ -43,15 +54,17 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
   }
 
   if (row.length > 0) {
-    while (row.length < 7) row.push({ text: ' ', callback_data: 'ignore' });
+    while (row.length < 7) {
+      row.push({ text: ' ', callback_data: 'ignore' });
+    }
     keyboard.push(row);
   }
 
   /* ================= YEAR NAV ================= */
   keyboard.push([
-    { text: '⏪', callback_data: `year_prev_${year}_${month}` },
+    { text: '⏪', callback_data: `year_prev_${year}_${month}_${step}` },
     { text: `${year}`, callback_data: 'ignore' },
-    { text: '⏩', callback_data: `year_next_${year}_${month}` }
+    { text: '⏩', callback_data: `year_next_${year}_${month}_${step}` }
   ]);
 
   /* ================= MONTH NAV ================= */
@@ -61,9 +74,9 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
   const nextYear = month === 11 ? year + 1 : year;
 
   keyboard.push([
-    { text: '◀️', callback_data: `month_${prevYear}_${prevMonth}` },
+    { text: '◀️', callback_data: `month_${prevYear}_${prevMonth}_${step}` },
     { text: `${getMonthName(month)}`, callback_data: 'ignore' },
-    { text: '▶️', callback_data: `month_${nextYear}_${nextMonth}` }
+    { text: '▶️', callback_data: `month_${nextYear}_${nextMonth}_${step}` }
   ]);
 
   /* ================= ACTIONS ================= */
@@ -86,25 +99,25 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
 }
 
 /* ================= RANGE WRAPPER ================= */
-function getDateRangePickerKeyboard(step, startDate = null, endDate = null) {
+function getDateRangePickerKeyboard(
+  step = 'start',
+  startDate = null,
+  endDate = null,
+  year = null,
+  month = null
+) {
   const today = new Date();
 
-  if (step === 'start') {
-    return getDatePickerKeyboard(today.getFullYear(), today.getMonth());
-  }
+  const y = year ?? today.getFullYear();
+  const m = month ?? today.getMonth();
 
-  // End date step
-  if (startDate) {
-    const start = new Date(startDate);
-    return getDatePickerKeyboard(
-      start.getFullYear(),
-      start.getMonth(),
-      startDate,
-      endDate
-    );
-  }
-
-  return getDatePickerKeyboard(today.getFullYear(), today.getMonth());
+  return getDatePickerKeyboard(
+    y,
+    m,
+    step,
+    startDate,
+    endDate
+  );
 }
 
 module.exports = {
