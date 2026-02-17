@@ -35,15 +35,22 @@ module.exports = (bot) => {
       await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
     };
 
-    /* ===== HEADER BUILDER ===== */
+    /* ===== HEADER BUILDER (UPDATED) ===== */
     const buildHeader = (session) => {
-      if (!session.startDate)
+
+      if (session.step === 'awaiting_start_date') {
         return '📅 *Select your check-in date:*';
+      }
 
-      if (!session.endDate)
+      if (session.step === 'awaiting_end_date') {
         return `📅 *Select your check-out date:*\n\nCheck-in: ${formatShortDate(session.startDate)}`;
+      }
 
-      return `📅 *Confirm your dates:*\n\nCheck-in: ${formatShortDate(session.startDate)}\nCheck-out: ${formatShortDate(session.endDate)}`;
+      if (session.startDate && session.endDate) {
+        return `📅 *Confirm your dates:*\n\nCheck-in: ${formatShortDate(session.startDate)}\nCheck-out: ${formatShortDate(session.endDate)}`;
+      }
+
+      return '📅 *Select your check-in date:*';
     };
 
     try {
