@@ -4,134 +4,69 @@ const { getRedis } = require('../../config/redis');
 const logger = require('../../middleware/logger');
 
 module.exports = (bot) => {
-  bot.on('callback_query', async (cb) => {
-    if (!cb.message) return;
 
-    const chatId = cb.message.chat.id;
-    const messageId = cb.message.message_id;
-    const data = cb.data;
+  // Handle text input during booking flow
+  bot.on('message', async (msg) => {
+    const chatId = msg.chat.id;
+    const text = msg.text;
 
-    const redis = getRedis();
+    // Ignore commands or empty text
+    if (!text || text.startsWith('/')) return;
 
-    const getSession = async () => {
-      const raw = await redis.get(`session:${chatId}`);
-      return raw ? JSON.parse(raw) : null;
-    };
+    try {
+      const redis = getRedis();
+      const sessionRaw = await redis.get(`session:${chatId}`);
+      if (!sessionRaw) return;
 
-    const saveSession = async (session) => {
-      await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
-    };
+      const session = JSON.parse(sessionRaw);
 
-    console.log('📅 CALLBACK:', data);
+      /* ================= NAME INPUT ================= */
+      if (session.step === 'awaiting_name') {
+        const result = await BookingService.processName(chatId, text, session);
 
-    /* ================= DATE CLICK ================= */
-    if (data.startsWith('date_')) {
-      const picked = data.replace('date_', '');
-      const session = await getSession();
-      if (!session) return;
-
-      if (!session.startDate) {
-        session.startDate = picked;
-      } else if (!session.endDate) {
-        if (picked <= session.startDate) {
-          return bot.answerCallbackQuery(cb.id, { text: 'End must be after start' });
+        if (result.success) {
+          await bot.sendMessage(chatId, result.message, {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              force_reply: true,
+              selective: true
+            }
+          });
+        } else {
+          await bot.sendMessage(chatId, result.message);
         }
-        session.endDate = picked;
       }
 
-      await saveSession(session);
+      /* ================= PHONE INPUT ================= */
+      else if (session.step === 'awaiting_phone') {
 
-      const [year, month] = picked.split('-');
-
-      const keyboard = getDatePickerKeyboard(
-        Number(year),
-        Number(month) - 1,
-        session.startDate,
-        session.endDate
-      );
-
-      await bot.editMessageReplyMarkup(keyboard.reply_markup, {
-        chat_id: chatId,
-        message_id: messageId
-      });
-
-      await bot.answerCallbackQuery(cb.id);
-    }
-
-    /* ================= CONFIRM BOOKING ================= */
-    else if (data === 'confirm_booking') {
-      const session = await getSession();
-      if (!session?.startDate || !session?.endDate) {
-        return bot.answerCallbackQuery(cb.id, { text: 'Select dates first' });
-      }
-
-      const result = await BookingService.processEndDate(
-        chatId,
-        session.endDate,
-        session
-      );
-
-      await redis.del(`session:${chatId}`);
-
-      await bot.editMessageText(result.message, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: 'Markdown'
-      });
-
-      await bot.answerCallbackQuery(cb.id, { text: 'Booking confirmed' });
-    }
-
-    /* ================= CLEAR ================= */
-    else if (data === 'clear_dates') {
-      const session = await getSession();
-      if (!session) return;
-
-      session.startDate = null;
-      session.endDate = null;
-      await saveSession(session);
-
-      await bot.answerCallbackQuery(cb.id, { text: 'Cleared' });
-    }
-
-    /* ================= CANCEL ================= */
-    else if (data === 'cancel_booking') {
-      await redis.del(`session:${chatId}`);
-
-      await bot.editMessageText('❌ Booking cancelled.', {
-        chat_id: chatId,
-        message_id: messageId
-      });
-    }
-
-    /* ================= BOOK NOW BUTTON ================= */
-    else if (data.startsWith('book_')) {
-      const apartmentId = data.replace('book_', '');
-
-      try {
-        const result = await BookingService.startBooking(
-          chatId,
-          apartmentId,
-          cb.message
-        );
-
-        if (!result.success) {
-          return bot.sendMessage(chatId, result.message);
+        // Basic phone validation
+        if (!text.match(/^[0-9+\-\s()]{7,}$/)) {
+          return bot.sendMessage(chatId, '❌ Please enter a valid phone number:');
         }
 
-        await saveSession(result.session);
+        const result = await BookingService.processPhone(chatId, text, session);
 
-        await bot.sendMessage(chatId, result.message, {
-          parse_mode: 'Markdown'
-        });
+        if (result.success) {
+          const now = new Date();
 
-        await bot.answerCallbackQuery(cb.id, { text: 'Booking started' });
+          await bot.sendMessage(chatId, result.message, {
+            parse_mode: 'Markdown',
+            reply_markup: getDatePickerKeyboard(
+              now.getFullYear(),
+              now.getMonth()
+            ).reply_markup
+          });
 
-      } catch (err) {
-        logger.error('BOOK START ERROR:', err);
-        await bot.sendMessage(chatId, '❌ Error starting booking.');
+        } else {
+          await bot.sendMessage(chatId, result.message);
+        }
       }
-    }
 
+    } catch (error) {
+      logger.error('Booking message handler error:', error);
+      bot.sendMessage(chatId, '❌ Error processing your request. Please try again.');
+    }
   });
+
 };
