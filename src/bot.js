@@ -59,4 +59,5 @@ bot.getMe().then(botInfo => {
   logger.error('❌ Failed to get bot info - invalid token?', err);
 });
 
-module.exports = bot; thats my bot.js 
+module.exports = bot; 
+
