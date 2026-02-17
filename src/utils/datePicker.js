@@ -1,5 +1,17 @@
 // utils/datePicker.js
 
+/* ===== SHORT DATE FORMAT HELPER ===== */
+function formatShortDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+
+  return d.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+}
+
 function getMonthName(month) {
   const months = [
     'Jan','Feb','Mar','Apr','May','Jun',
@@ -121,5 +133,6 @@ function getDateRangePickerKeyboard(
 
 module.exports = {
   getDatePickerKeyboard,
-  getDateRangePickerKeyboard
+  getDateRangePickerKeyboard,
+  formatShortDate   // <-- exported
 };
