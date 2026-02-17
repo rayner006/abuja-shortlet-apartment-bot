@@ -15,6 +15,7 @@ const logger = winston.createLogger({
   ),
   defaultMeta: { service: 'abuja-shortlet-bot' },
   transports: [
+    new winston.transports.Console(), // ← ADD THIS LINE
     new winston.transports.File({ 
       filename: path.join(logDir, 'error.log'), 
       level: 'error',
@@ -28,20 +29,3 @@ const logger = winston.createLogger({
     })
   ]
 });
-
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(new winston.transports.Console({
-    format: winston.format.combine(
-      winston.format.colorize(),
-      winston.format.simple()
-    )
-  }));
-}
-
-console.log = (...args) => logger.info(...args);
-console.error = (...args) => logger.error(...args);
-console.warn = (...args) => logger.warn(...args);
-console.info = (...args) => logger.info(...args);
-console.debug = (...args) => logger.debug(...args);
-
-module.exports = logger;
