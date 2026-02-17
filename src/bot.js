@@ -1,66 +1,55 @@
 const TelegramBot = require('node-telegram-bot-api');
-const config = require('./config/environment');
 const logger = require('./middleware/logger');
 
-// Initialize bot based on environment
-let bot;
+module.exports = function initBot(redis, sequelize) {
+  const token = process.env.BOT_TOKEN;
+  const nodeEnv = process.env.NODE_ENV || 'development';
 
-if (config.nodeEnv === 'production') {
-  // Production: Webhook mode (no polling)
-  bot = new TelegramBot(config.botToken);
-  
-  // Webhook will be set by webhook.js
-  logger.info('Bot initialized in webhook mode');
-} else {
-  // Development: Polling mode
-  bot = new TelegramBot(config.botToken, { 
-    polling: {
-      params: {
-        timeout: 30,
-        limit: 100,
-        allowed_updates: ['message', 'callback_query']
-      }
-    }
-  });
-  logger.info('Bot initialized in polling mode');
-}
-
-// Clear any existing webhooks to prevent conflicts
-// This ensures clean startup regardless of environment
-bot.deleteWebHook()
-  .then(() => logger.info('✅ Existing webhook cleared'))
-  .catch(err => {
-    // 404 means no webhook was set, which is fine
-    if (err.response && err.response.statusCode === 404) {
-      logger.info('ℹ️ No existing webhook to clear');
-    } else {
-      logger.warn('⚠️ Error clearing webhook:', err.message);
-    }
-  });
-
-// Global error handlers
-bot.on('polling_error', (error) => {
-  if (error.code === 'EFATAL') {
-    logger.error('Fatal polling error:', error);
-  } else {
-    logger.warn('Polling error:', error.message);
+  if (!token) {
+    throw new Error('BOT_TOKEN is missing in .env');
   }
-});
 
-bot.on('webhook_error', (error) => {
-  logger.error('Webhook error:', error);
-});
+  let bot;
 
-// Track bot info
-bot.getMe().then(botInfo => {
-  bot.botInfo = botInfo;
-  logger.info(`✅ Bot authenticated as @${botInfo.username}`);
-}).catch(err => {
-  logger.error('❌ Failed to get bot info - invalid token?', err);
-});
+  // ================= INIT MODE =================
+  if (nodeEnv === 'production') {
+    // Webhook Mode
+    bot = new TelegramBot(token);
+    logger.info('Bot running in WEBHOOK mode');
+  } else {
+    // Polling Mode
+    bot = new TelegramBot(token, {
+      polling: {
+        params: {
+          timeout: 30,
+          limit: 100,
+          allowed_updates: ['message', 'callback_query']
+        }
+      }
+    });
+    logger.info('Bot running in POLLING mode');
+  }
 
-/* ================= REGISTER HANDLERS ================= */
-require('./handlers/commands/admin')(bot);
+  // ================= CLEAR OLD WEBHOOK =================
+  bot.deleteWebHook().catch(() => {});
 
-/* ================= EXPORT BOT ================= */
-module.exports = bot;
+  // ================= BOT INFO =================
+  bot.getMe()
+    .then(info => {
+      bot.botInfo = info;
+      logger.info(`Authenticated as @${info.username}`);
+    })
+    .catch(err => logger.error('Bot auth failed:', err.message));
+
+  // ================= GLOBAL ERRORS =================
+  bot.on('polling_error', err => logger.warn('Polling error:', err.message));
+  bot.on('webhook_error', err => logger.error('Webhook error:', err.message));
+
+  // ================= REGISTER HANDLERS =================
+  require('./handlers/commands/start')(bot, redis, sequelize);
+  require('./handlers/commands/admin')(bot, redis, sequelize);
+  require('./handlers/callbacks/navigation')(bot, redis, sequelize);
+  require('./handlers/callbacks/booking')(bot, redis, sequelize);
+
+  return bot;
+};
