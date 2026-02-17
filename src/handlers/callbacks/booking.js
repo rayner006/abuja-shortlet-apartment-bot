@@ -1,11 +1,10 @@
 const BookingService = require('../../services/bookingService');
-const { getDatePickerKeyboard } = require('../../utils/datePicker');
+const { getDateRangePickerKeyboard } = require('../../utils/datePicker');
 const { getRedis } = require('../../config/redis');
 const logger = require('../../middleware/logger');
 
 module.exports = (bot) => {
 
-  // Handle text input during booking flow
   bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
@@ -48,15 +47,18 @@ module.exports = (bot) => {
         const result = await BookingService.processPhone(chatId, text, session);
 
         if (result.success) {
-          const now = new Date();
 
-          await bot.sendMessage(chatId, result.message, {
-            parse_mode: 'Markdown',
-            reply_markup: getDatePickerKeyboard(
-              now.getFullYear(),
-              now.getMonth()
-            ).reply_markup
-          });
+          // IMPORTANT: Set booking step
+          session.step = 'awaiting_start_date';
+          await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
+
+          await bot.sendMessage(chatId,
+            '📅 *Select your Check-In Date*',
+            {
+              parse_mode: 'Markdown',
+              reply_markup: getDateRangePickerKeyboard('start').reply_markup
+            }
+          );
 
         } else {
           await bot.sendMessage(chatId, result.message);
