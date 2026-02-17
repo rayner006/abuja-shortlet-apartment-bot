@@ -71,21 +71,20 @@ module.exports = (bot) => {
         await bot.answerCallbackQuery(cb.id, { text: 'Fetching all bookings...' });
         
         try {
-          const Booking = require('../../models/Booking');
-          const bookings = await Booking.findAll(); // Adjust based on your model
+          const { executeQuery } = require('../../config/database');
+          const bookings = await executeQuery('SELECT * FROM bookings ORDER BY id DESC LIMIT 10');
           
           if (!bookings || bookings.length === 0) {
             return bot.sendMessage(chatId, '📭 No bookings found.');
           }
           
           let message = '📋 *All Bookings*\n\n';
-          bookings.slice(0, 10).forEach((booking, index) => {
-            message += `${index+1}. *${booking.apartment_name}*\n`;
-            message += `   Guest: ${booking.guest_name}\n`;
-            message += `   Dates: ${booking.check_in} to ${booking.check_out}\n`;
+          bookings.forEach((booking, index) => {
+            message += `${index+1}. *Booking ${booking.booking_code}*\n`;
+            message += `   Guest: ${booking.user_name || 'N/A'}\n`;
+            message += `   Dates: ${booking.start_date} to ${booking.end_date}\n`;
             message += `   Amount: ₦${booking.amount}\n`;
-            message += `   Status: ${booking.status || 'Pending'}\n`;
-            message += `   Commission: ${booking.commission_paid ? '✅ Paid' : '⏳ Due'}\n\n`;
+            message += `   Status: ${booking.status || 'Pending'}\n\n`;
           });
           
           message += 'Showing last 10 bookings. Use search for more.';
@@ -111,15 +110,11 @@ module.exports = (bot) => {
         await bot.answerCallbackQuery(cb.id, { text: 'Fetching pending verifications...' });
         
         try {
-          const Booking = require('../../models/Booking');
-          // Adjust this query based on your actual model
-          const pendingBookings = await Booking.find({ 
-            $or: [
-              { status: 'pending' },
-              { verified: false },
-              { admin_confirmed: false }
-            ]
-          }).limit(10);
+          const { executeQuery } = require('../../config/database');
+          
+          const pendingBookings = await executeQuery(
+            "SELECT * FROM bookings WHERE status = 'pending' ORDER BY id DESC LIMIT 10"
+          );
           
           if (!pendingBookings || pendingBookings.length === 0) {
             const keyboard = {
@@ -135,20 +130,17 @@ module.exports = (bot) => {
           let message = '⏳ *Pending Verifications*\n\n';
           
           pendingBookings.forEach((booking, index) => {
-            message += `${index+1}. *${booking.apartment_name || 'Apartment'}*\n`;
-            message += `   👤 Guest: ${booking.guest_name || 'N/A'}\n`;
-            message += `   📅 Dates: ${booking.check_in || '?'} to ${booking.check_out || '?'}\n`;
+            message += `${index+1}. *Booking ${booking.booking_code}*\n`;
+            message += `   👤 Guest: ${booking.user_name || 'N/A'}\n`;
+            message += `   📅 Dates: ${booking.start_date} to ${booking.end_date}\n`;
             message += `   💰 Amount: ₦${booking.amount || 0}\n`;
-            message += `   🏠 Owner: ${booking.owner_name || booking.owner_id || 'N/A'}\n`;
-            message += `   🔑 Code: \`${booking.booking_code || booking.id}\`\n\n`;
+            message += `   🔑 Code: \`${booking.booking_code}\`\n\n`;
           });
           
           message += 'Select a booking to verify payment:';
           
           const buttons = pendingBookings.map(booking => {
-            const displayText = booking.apartment_name || `Booking ${booking.booking_code || booking.id}`;
-            const callbackData = `admin_verify_${booking.booking_code || booking.id}`;
-            return [{ text: `✅ Verify: ${displayText}`, callback_data: callbackData }];
+            return [{ text: `✅ Verify: ${booking.booking_code}`, callback_data: `admin_verify_${booking.booking_code}` }];
           });
           
           buttons.push([{ text: '« Back to Bookings', callback_data: 'admin_menu_bookings' }]);
@@ -191,11 +183,11 @@ module.exports = (bot) => {
       else if (data.startsWith('admin_verify_')) {
         await bot.answerCallbackQuery(cb.id, { text: 'Opening verification...' });
         
-        const bookingId = data.replace('admin_verify_', '');
+        const bookingCode = data.replace('admin_verify_', '');
         
         try {
-          const Booking = require('../../models/Booking');
-          const booking = await Booking.findByCode(bookingId);
+          const { executeQuery } = require('../../config/database');
+          const [booking] = await executeQuery("SELECT * FROM bookings WHERE booking_code = ?", [bookingCode]);
           
           if (!booking) {
             return bot.sendMessage(chatId, '❌ Booking not found.');
@@ -203,9 +195,8 @@ module.exports = (bot) => {
           
           const message = 
             `✅ *Verify Payment*\n\n` +
-            `*Booking:* ${booking.apartment_name}\n` +
-            `*Guest:* ${booking.guest_name}\n` +
-            `*Owner:* ${booking.owner_name || booking.owner_id}\n` +
+            `*Booking Code:* ${booking.booking_code}\n` +
+            `*Guest:* ${booking.user_name}\n` +
             `*Amount Paid to Owner:* ₦${booking.amount || 0}\n` +
             `*Your Commission (10%):* ₦${booking.amount ? booking.amount * 0.1 : 0}\n\n` +
             `Has the guest confirmed they paid the owner?`;
@@ -213,7 +204,7 @@ module.exports = (bot) => {
           const keyboard = {
             inline_keyboard: [
               [
-                { text: '✅ Yes, Mark Verified', callback_data: `admin_confirm_verify_${bookingId}` },
+                { text: '✅ Yes, Mark Verified', callback_data: `admin_confirm_verify_${bookingCode}` },
                 { text: '❌ No', callback_data: 'admin_bookings_pending' }
               ],
               [{ text: '« Back', callback_data: 'admin_bookings_pending' }]
@@ -234,25 +225,24 @@ module.exports = (bot) => {
       else if (data.startsWith('admin_confirm_verify_')) {
         await bot.answerCallbackQuery(cb.id, { text: 'Verifying...' });
         
-        const bookingId = data.replace('admin_confirm_verify_', '');
+        const bookingCode = data.replace('admin_confirm_verify_', '');
         
         try {
-          const Booking = require('../../models/Booking');
-          await Booking.updateOne(
-            { booking_code: bookingId }, 
-            { 
-              verified: true, 
-              status: 'verified',
-              verified_at: new Date(),
-              verified_by: chatId
-            }
+          const { executeQuery } = require('../../config/database');
+          
+          await executeQuery(
+            "UPDATE bookings SET status = 'verified', verified_at = NOW(), verified_by = ? WHERE booking_code = ?",
+            [chatId, bookingCode]
           );
+          
+          const [booking] = await executeQuery("SELECT * FROM bookings WHERE booking_code = ?", [bookingCode]);
           
           const message = 
             `✅ *Payment Verified Successfully!*\n\n` +
-            `Booking ${bookingId} has been marked as verified.\n` +
-            `Commission is now due from the owner.\n\n` +
-            `You can track this in "Commission Due" section.`;
+            `Booking *${bookingCode}* has been marked as verified.\n` +
+            `Amount: ₦${booking.amount}\n` +
+            `Commission (10%): ₦${booking.amount * 0.1}\n\n` +
+            `Commission is now due from the owner.`;
           
           const keyboard = {
             inline_keyboard: [
