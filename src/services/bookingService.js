@@ -36,7 +36,6 @@ class BookingService {
   
   static async processName(chatId, name, session) {
     try {
-      // Store name and move to phone number step
       session.name = name;
       session.step = 'awaiting_phone';
       
@@ -57,7 +56,6 @@ class BookingService {
   
   static async processPhone(chatId, phone, session) {
     try {
-      // Store phone and move to date selection
       session.phone = phone;
       session.step = 'awaiting_start_date';
       
@@ -102,8 +100,16 @@ class BookingService {
   static async processEndDate(chatId, endDate, session) {
     try {
       session.endDate = endDate;
+
+      // 🔧 SAFETY FIX — Ensure apartment data exists
+      if (!session.price || !session.apartmentName) {
+        const apartment = await Apartment.findById(session.apartmentId);
+        if (apartment) {
+          session.price = apartment.price;
+          session.apartmentName = apartment.name;
+        }
+      }
       
-      // Calculate total days and price
       const start = new Date(session.startDate);
       const end = new Date(endDate);
       const days = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
@@ -117,19 +123,17 @@ class BookingService {
       
       const totalAmount = session.price * days;
       
-      // Create booking in database with correct column mappings
       const booking = await Booking.create({
         apartmentId: session.apartmentId,
-        chatId: chatId,                    // maps to user_id
-        guestName: session.name,            // maps to user_name
-        guestPhone: session.phone,          // maps to phone
+        chatId: chatId,
+        guestName: session.name,
+        guestPhone: session.phone,
         startDate: session.startDate,
         endDate: endDate,
         totalDays: days,
-        totalAmount: totalAmount            // maps to amount
+        totalAmount: totalAmount
       });
       
-      // Clear session
       const redis = getRedis();
       await redis.del(`session:${chatId}`);
       
@@ -183,4 +187,3 @@ We will contact you shortly to confirm.
 }
 
 module.exports = BookingService;
-
