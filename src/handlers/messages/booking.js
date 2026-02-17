@@ -25,6 +25,19 @@ module.exports = (bot) => {
       
       const session = JSON.parse(sessionRaw);
       
+      // ===== IGNORE MENU MESSAGES =====
+      const menuMessages = [
+        '🏠 View Apartments',
+        '⬅️ Back to Main Menu',
+        '🔍 Search Again',
+        '📞 Contact Admin',
+        'ℹ️ About Us'
+      ];
+      
+      if (menuMessages.includes(text)) {
+        return; // Don't process menu messages in booking flow
+      }
+      
       // ===== STEP 1: AWAITING NAME =====
       if (session.step === 'awaiting_name') {
         
