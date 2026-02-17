@@ -4,6 +4,20 @@ const { getRedis } = require('../config/redis');
 const logger = require('../middleware/logger');
 
 class BookingService {
+  
+  /**
+   * Helper to format dates
+   */
+  static formatDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    });
+  }
+
   static async startBooking(chatId, apartmentId, message) {
     try {
       const apartment = await Apartment.findById(apartmentId);
@@ -182,6 +196,90 @@ We will contact you shortly to confirm.
     } catch (error) {
       logger.error('Error confirming booking:', error);
       return { success: false, message: '❌ Error confirming booking.' };
+    }
+  }
+
+  /**
+   * NEW METHOD: Process complete booking with all data at once
+   * This is for our new calendar flow
+   */
+  static async processCompleteBooking({
+    chatId,
+    apartmentId,
+    userName,
+    userPhone,
+    checkIn,
+    checkOut,
+    nights
+  }) {
+    try {
+      // Get apartment details
+      const apartment = await Apartment.findById(apartmentId);
+      
+      if (!apartment) {
+        throw new Error('Apartment not found');
+      }
+      
+      const totalAmount = apartment.price * nights;
+      
+      // Create booking using your existing Booking model
+      const booking = await Booking.create({
+        apartmentId: apartmentId,
+        chatId: chatId.toString(),
+        guestName: userName,
+        guestPhone: userPhone,
+        startDate: checkIn,
+        endDate: checkOut,
+        totalDays: nights,
+        totalAmount: totalAmount
+      });
+      
+      const message = 
+        `✅ *Booking Confirmed!*\n\n` +
+        `━━━━━━━━━━━━━━━━━\n\n` +
+        `🏠 *Apartment:* ${apartment.name}\n` +
+        `📍 *Location:* ${apartment.location || 'N/A'}\n` +
+        `👤 *Guest:* ${userName}\n` +
+        `📞 *Phone:* ${userPhone}\n\n` +
+        `📅 *Check-in:* ${this.formatDate(checkIn)}\n` +
+        `📅 *Check-out:* ${this.formatDate(checkOut)}\n` +
+        `🌙 *Nights:* ${nights}\n\n` +
+        `💰 *Total:* ₦${totalAmount.toLocaleString()}\n\n` +
+        `━━━━━━━━━━━━━━━━━\n\n` +
+        `🔑 *Booking Code:* \`${booking.booking_code}\`\n\n` +
+        `📌 *Next Steps:*\n` +
+        `1. Make payment to the provided account\n` +
+        `2. Upload payment proof\n` +
+        `3. Admin will verify and confirm\n\n` +
+        `Thank you for choosing Abuja Shortlet! 🏨`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [{ text: '📤 Upload Payment Proof', callback_data: `upload_proof_${booking.booking_code}` }],
+          [{ text: '📋 My Bookings', callback_data: 'my_bookings' }],
+          [{ text: '🏠 Main Menu', callback_data: 'main_menu' }]
+        ]
+      };
+
+      return {
+        success: true,
+        bookingCode: booking.booking_code,
+        message,
+        keyboard
+      };
+
+    } catch (error) {
+      logger.error('processCompleteBooking Error:', error);
+      
+      return {
+        success: false,
+        message: `❌ *Booking Failed*\n\nSorry, we couldn't process your booking. Please try again.`,
+        keyboard: {
+          inline_keyboard: [
+            [{ text: '🔍 Browse Apartments', callback_data: 'browse_apartments' }]
+          ]
+        }
+      };
     }
   }
 }
