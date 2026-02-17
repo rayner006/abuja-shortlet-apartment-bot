@@ -2,6 +2,7 @@ const Booking = require('../../models/Booking');
 const Commission = require('../../models/Commission');
 const { isAdmin } = require('../../middleware/auth');
 const logger = require('../../middleware/logger');
+const Apartment = require('../../models/Apartment');
 
 module.exports = (bot) => {
   bot.on('callback_query', async (cb) => {
@@ -44,8 +45,23 @@ module.exports = (bot) => {
       
       else if (data === 'admin_menu_apartments') {
         await bot.answerCallbackQuery(cb.id, { text: 'Opening Apartments...' });
-        // Add apartments functionality here
-        bot.sendMessage(chatId, '🏠 *Apartments Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+        
+        const message = '🏠 *Apartments Management*\n\nSelect an option:';
+        
+        const keyboard = {
+          inline_keyboard: [
+            [{ text: '📋 View All Apartments', callback_data: 'admin_apartments_all' }],
+            [{ text: '➕ Add New Apartment', callback_data: 'admin_apartments_add' }],
+            [{ text: '👥 View by Owner', callback_data: 'admin_apartments_by_owner' }],
+            [{ text: '📊 Statistics', callback_data: 'admin_apartments_stats' }],
+            [{ text: '« Back to Admin', callback_data: 'admin_main_menu' }]
+          ]
+        };
+        
+        await bot.sendMessage(chatId, message, { 
+          parse_mode: 'Markdown',
+          reply_markup: keyboard 
+        });
       }
       
       else if (data === 'admin_menu_owners') {
@@ -335,6 +351,183 @@ module.exports = (bot) => {
         } catch (error) {
           logger.error('Error deleting booking:', error);
           bot.sendMessage(chatId, '❌ Error deleting booking.');
+        }
+      }
+      
+      // Apartments submenu handlers
+      else if (data === 'admin_apartments_all') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Fetching apartments...' });
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          const apartments = await executeQuery(`
+            SELECT a.*, 
+                   (SELECT COUNT(*) FROM bookings WHERE apartment_id = a.id) as total_bookings
+            FROM apartments a 
+            ORDER BY a.id DESC 
+            LIMIT 10
+          `);
+          
+          if (!apartments || apartments.length === 0) {
+            const keyboard = {
+              inline_keyboard: [
+                [{ text: '➕ Add First Apartment', callback_data: 'admin_apartments_add' }],
+                [{ text: '« Back', callback_data: 'admin_menu_apartments' }]
+              ]
+            };
+            return bot.sendMessage(chatId, '🏠 No apartments found. Add your first apartment!', { 
+              reply_markup: keyboard 
+            });
+          }
+          
+          for (const apt of apartments) {
+            const status = apt.verified ? '✅ Active' : '⏸️ Inactive';
+            const photoCount = Apartment.processPhotos(apt).length;
+            
+            const message = 
+              `🏠 *${apt.name || 'Unnamed Apartment'}*\n` +
+              `📍 Location: ${apt.location || 'N/A'}\n` +
+              `🏷️ Type: ${apt.type || 'N/A'}\n` +
+              `💰 Price: ₦${Number(apt.price).toLocaleString()}/night\n` +
+              `👤 Owner ID: ${apt.owner_id || 'Not assigned'}\n` +
+              `📊 Bookings: ${apt.total_bookings || 0}\n` +
+              `📸 Photos: ${photoCount}\n` +
+              `📌 Status: ${status}`;
+            
+            const keyboard = {
+              inline_keyboard: [
+                [
+                  { text: '📝 Edit', callback_data: `admin_apartment_edit_${apt.id}` },
+                  { text: '🗑️ Delete', callback_data: `admin_apartment_delete_${apt.id}` },
+                  { text: apt.verified ? '⏸️ Deactivate' : '✅ Activate', callback_data: `admin_apartment_toggle_${apt.id}` }
+                ],
+                [{ text: '📸 Manage Photos', callback_data: `admin_apartment_photos_${apt.id}` }]
+              ]
+            };
+            
+            await bot.sendMessage(chatId, message, { 
+              parse_mode: 'Markdown',
+              reply_markup: keyboard 
+            });
+          }
+          
+          const navKeyboard = {
+            inline_keyboard: [
+              [{ text: '➕ Add New Apartment', callback_data: 'admin_apartments_add' }],
+              [{ text: '« Back to Apartments Menu', callback_data: 'admin_menu_apartments' }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, '------------------\nSelect an option:', { 
+            reply_markup: navKeyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error fetching apartments:', error);
+          bot.sendMessage(chatId, '❌ Error fetching apartments.');
+        }
+      }
+      
+      else if (data === 'admin_apartments_add') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Starting add process...' });
+        
+        const message = 
+          `🏠 *Add New Apartment*\n\n` +
+          `Please send me the apartment details in this format:\n\n` +
+          `Name|Location|Address|Type|Price|Bedrooms|Bathrooms|Description|OwnerID\n\n` +
+          `Example:\n` +
+          `Cozy Studio|Kubwa|No 12 Peace Estate|Self Contain|45000|1|1|Fully furnished studio|1\n\n` +
+          `After that, you can upload photos.`;
+        
+        const keyboard = {
+          inline_keyboard: [
+            [{ text: '« Cancel', callback_data: 'admin_menu_apartments' }]
+          ]
+        };
+        
+        await bot.sendMessage(chatId, message, { 
+          parse_mode: 'Markdown',
+          reply_markup: keyboard 
+        });
+      }
+      
+      else if (data.startsWith('admin_apartment_delete_')) {
+        const apartmentId = data.replace('admin_apartment_delete_', '');
+        
+        const message = `⚠️ *Confirm Delete*\n\nAre you sure you want to delete this apartment?\n\nThis action cannot be undone.`;
+        
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '✅ Yes, Delete', callback_data: `admin_apartment_confirm_delete_${apartmentId}` },
+              { text: '❌ No', callback_data: 'admin_apartments_all' }
+            ]
+          ]
+        };
+        
+        await bot.sendMessage(chatId, message, { 
+          parse_mode: 'Markdown',
+          reply_markup: keyboard 
+        });
+      }
+      
+      else if (data.startsWith('admin_apartment_confirm_delete_')) {
+        await bot.answerCallbackQuery(cb.id, { text: 'Deleting...' });
+        
+        const apartmentId = data.replace('admin_apartment_confirm_delete_', '');
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          await executeQuery("DELETE FROM apartments WHERE id = ?", [apartmentId]);
+          
+          const message = `🗑️ *Apartment Deleted*\n\nApartment has been permanently deleted.`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [{ text: '📋 Back to Apartments', callback_data: 'admin_apartments_all' }],
+              [{ text: '« Main Menu', callback_data: 'admin_main_menu' }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error deleting apartment:', error);
+          bot.sendMessage(chatId, '❌ Error deleting apartment.');
+        }
+      }
+      
+      else if (data.startsWith('admin_apartment_toggle_')) {
+        const apartmentId = data.replace('admin_apartment_toggle_', '');
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          const [apt] = await executeQuery("SELECT verified FROM apartments WHERE id = ?", [apartmentId]);
+          
+          const newStatus = apt.verified ? 0 : 1;
+          await executeQuery("UPDATE apartments SET verified = ? WHERE id = ?", [newStatus, apartmentId]);
+          
+          const statusText = newStatus ? '✅ Activated' : '⏸️ Deactivated';
+          
+          const message = `${statusText}\n\nApartment status has been updated.`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [{ text: '📋 Back to Apartments', callback_data: 'admin_apartments_all' }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error toggling apartment:', error);
+          bot.sendMessage(chatId, '❌ Error updating apartment status.');
         }
       }
       
