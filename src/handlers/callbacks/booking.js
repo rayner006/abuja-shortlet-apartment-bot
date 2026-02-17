@@ -142,7 +142,10 @@ module.exports = (bot) => {
 
       /* ================= MONTH NAV ================= */
       if (data.startsWith('month_')) {
-        const [, year, month] = data.split('_').map(Number);
+        const parts = data.split('_');
+        const year = Number(parts[1]);
+        const month = Number(parts[2]);
+
         const session = await getSession();
         if (!session) return;
 
@@ -163,7 +166,10 @@ module.exports = (bot) => {
 
       /* ================= MONTH HIGHLIGHT ================= */
       if (data.startsWith('select_month_')) {
-        const [, year, month] = data.split('_').map(Number);
+        const parts = data.split('_');
+        const year = Number(parts[2]);
+        const month = Number(parts[3]);
+
         const session = await getSession();
         if (!session) return;
 
@@ -212,7 +218,10 @@ module.exports = (bot) => {
 
       /* ================= YEAR HIGHLIGHT ================= */
       if (data.startsWith('select_year_')) {
-        const [, year, month] = data.split('_').map(Number);
+        const parts = data.split('_');
+        const year = Number(parts[2]);
+        const month = Number(parts[3]);
+
         const session = await getSession();
         if (!session) return;
 
