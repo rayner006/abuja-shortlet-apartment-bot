@@ -4,7 +4,6 @@ const Apartment = require('../../../models/Apartment');
 const { getRedis } = require('../../../config/redis');
 const fs = require('fs');
 const { getUploadPath } = require('../../../config/uploads');
-const fetch = require('node-fetch');
 const path = require('path');
 
 module.exports = {
