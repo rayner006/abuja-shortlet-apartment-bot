@@ -4,7 +4,7 @@ const logger = require('../../middleware/logger');
 
 module.exports = (bot) => {
   // Handle apartment type selections - with or without emoji
-  const typePattern = /^(🛏️ )?(Self Contain|1-Bedroom|2-Bedroom|3-Bedroom)$/;
+  const typePattern = /^(🛏️ )?(Studio Apartment|1-Bedroom|2-Bedroom|3-Bedroom)$/;
   
   bot.onText(typePattern, async (msg) => {
     const chatId = msg.chat.id;
@@ -40,3 +40,4 @@ module.exports = (bot) => {
     }
   });
 };
+
