@@ -17,7 +17,13 @@ function getMonthName(month) {
     'Jan','Feb','Mar','Apr','May','Jun',
     'Jul','Aug','Sep','Oct','Nov','Dec'
   ];
-  return months[month];
+
+  // SAFE FALLBACK
+  if (month === null || month === undefined || isNaN(month)) {
+    return '';
+  }
+
+  return months[month] || '';
 }
 
 function getDatePickerKeyboard(
@@ -134,5 +140,5 @@ function getDateRangePickerKeyboard(
 module.exports = {
   getDatePickerKeyboard,
   getDateRangePickerKeyboard,
-  formatShortDate   // <-- exported
+  formatShortDate
 };
