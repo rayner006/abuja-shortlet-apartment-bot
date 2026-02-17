@@ -1,4 +1,3 @@
-
 const { isAdmin } = require('../../../middleware/auth');
 const logger = require('../../../middleware/logger');
 
@@ -21,7 +20,7 @@ module.exports = (bot) => {
     }
     
     // Route to appropriate module based on callback data
-    if (data.startsWith('admin_menu_') || data.startsWith('admin_main_menu')) {
+    if (data.startsWith('admin_menu_') || data === 'admin_main_menu') {
       // Handle main menu navigation
       await handleMainMenu(bot, cb, chatId, data);
     }
@@ -41,7 +40,7 @@ module.exports = (bot) => {
       const apartmentsHandler = require('./apartments');
       await apartmentsHandler.handle(bot, cb, chatId, data);
     }
-    else if (data === 'admin_commission_') {
+    else if (data.startsWith('admin_commission_')) {
       // Handle commission details
       const { executeQuery } = require('../../../config/database');
       const Booking = require('../../../models/Booking');
@@ -69,6 +68,11 @@ module.exports = (bot) => {
         logger.error('Error in admin commission callback:', error);
         bot.sendMessage(chatId, '❌ Error fetching commission details.');
       }
+    }
+    else if (data === 'admin_dashboard') {
+      // Admin dashboard shortcut
+      await bot.answerCallbackQuery(cb.id, { text: 'Opening dashboard...' });
+      bot.sendMessage(chatId, '/dashboard');
     }
     else {
       // Unknown admin callback
@@ -141,5 +145,17 @@ async function handleMainMenu(bot, cb, chatId, data) {
       parse_mode: 'Markdown',
       reply_markup: keyboard 
     });
+  }
+  else if (data === 'admin_menu_owners') {
+    await bot.answerCallbackQuery(cb.id, { text: 'Opening Owners...' });
+    bot.sendMessage(chatId, '👥 *Owners Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+  }
+  else if (data === 'admin_menu_reports') {
+    await bot.answerCallbackQuery(cb.id, { text: 'Opening Reports...' });
+    bot.sendMessage(chatId, '📊 *Reports Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+  }
+  else if (data === 'admin_menu_settings') {
+    await bot.answerCallbackQuery(cb.id, { text: 'Opening Settings...' });
+    bot.sendMessage(chatId, '⚙️ *Settings Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
   }
 }
