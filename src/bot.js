@@ -2,6 +2,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const config = require('./config/environment');
 const logger = require('./middleware/logger');
 
+const ADMIN_ID = process.env.ADMIN_ID; // <-- ADDED
+
 // Initialize bot based on environment
 let bot;
 
@@ -57,6 +59,26 @@ bot.getMe().then(botInfo => {
   logger.info(`✅ Bot authenticated as @${botInfo.username}`);
 }).catch(err => {
   logger.error('❌ Failed to get bot info - invalid token?', err);
+});
+
+
+/* ================= ADMIN COMMAND ================= */
+bot.onText(/\/admin/, (msg) => {
+  const chatId = msg.chat.id;
+
+  if (String(msg.from.id) !== String(ADMIN_ID)) {
+    return bot.sendMessage(chatId, 'Unauthorized ❌');
+  }
+
+  bot.sendMessage(chatId, 'Admin Panel', {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: 'View Bookings', callback_data: 'admin_view_bookings' }],
+        [{ text: 'Add Apartment', callback_data: 'admin_add_apartment' }],
+        [{ text: 'Delete Apartment', callback_data: 'admin_delete_apartment' }]
+      ]
+    }
+  });
 });
 
 module.exports = bot;
