@@ -23,7 +23,6 @@ module.exports = (bot) => {
       
       const session = JSON.parse(sessionRaw);
       
-      // ===== STEP 1: GET NAME =====
       if (session.step === 'awaiting_name') {
         
         if (text.split(' ').length < 2) {
@@ -54,7 +53,6 @@ module.exports = (bot) => {
         return;
       }
       
-      // ===== STEP 2: GET PHONE =====
       if (session.step === 'awaiting_phone') {
         
         const phone = text.replace(/[^\d]/g, '');
