@@ -41,8 +41,7 @@ module.exports = (bot) => {
         await bot.sendMessage(
           chatId,
           '📞 *Step 2 of 2: Your Phone Number*\n\n' +
-          'Please enter your phone number:\n' +
-          'Example: `08031234567`',
+          'Please enter your phone number:',
           { 
             parse_mode: 'Markdown',
             reply_markup: { force_reply: true }
@@ -55,13 +54,14 @@ module.exports = (bot) => {
       
       if (session.step === 'awaiting_phone') {
         
-        const phone = text.replace(/[^\d]/g, '');
+        // Remove spaces and special characters for counting
+        const digitsOnly = text.replace(/[^\d]/g, '');
         
-        if (!/^0\d{10}$/.test(phone)) {
+        // Only check that it has at least 9 digits
+        if (digitsOnly.length < 9) {
           await bot.sendMessage(
             chatId,
-            '❌ Please enter a valid *11-digit* Nigerian phone number:\n' +
-            'Example: `08031234567`',
+            '❌ Please enter a valid phone number (minimum 9 digits):',
             { 
               parse_mode: 'Markdown',
               reply_markup: { force_reply: true }
@@ -70,7 +70,7 @@ module.exports = (bot) => {
           return;
         }
         
-        session.userPhone = phone;
+        session.userPhone = text; // Save exactly what user entered
         session.step = 'selecting_dates';
         await redis.setex(`booking:${chatId}`, 3600, JSON.stringify(session));
         
