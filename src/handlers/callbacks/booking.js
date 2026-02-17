@@ -30,6 +30,21 @@ module.exports = (bot) => {
 
     try {
 
+      // ===== CLEAR SESSION WHEN NAVIGATING AWAY FROM BOOKING =====
+      if (data === 'browse_apartments' || 
+          data === 'main_menu' || 
+          data === 'view_locations' ||
+          data === 'search_again' ||
+          data === 'my_bookings' ||
+          data === 'contact_support') {
+        
+        // Clear any existing booking session
+        await redis.del(`booking:${chatId}`);
+        
+        // Let the main bot handler process this callback
+        // We don't return here because other handlers need to process it
+      }
+
       if (data.startsWith('book_')) {
         const apartmentId = data.replace('book_', '');
 
@@ -106,6 +121,7 @@ module.exports = (bot) => {
             nights: result.nights
           });
           
+          // Clear session after successful booking
           await redis.del(`booking:${chatId}`);
           
           await bot.sendMessage(
@@ -118,13 +134,15 @@ module.exports = (bot) => {
           );
         }
         else if (result && result.action === 'cancel') {
+          // Clear session on cancel
           await redis.del(`booking:${chatId}`);
           
           await bot.sendMessage(chatId, result.message, {
             parse_mode: 'Markdown',
             reply_markup: {
               inline_keyboard: [
-                [{ text: '🏠 Browse Apartments', callback_data: 'browse_apartments' }]
+                [{ text: '🏠 Browse Apartments', callback_data: 'browse_apartments' }],
+                [{ text: '🔍 Main Menu', callback_data: 'main_menu' }]
               ]
             }
           });
@@ -134,6 +152,7 @@ module.exports = (bot) => {
       }
 
       if (data === 'cancel_booking') {
+        // Clear session on cancel
         await redis.del(`booking:${chatId}`);
         
         await bot.editMessageText(
@@ -144,7 +163,8 @@ module.exports = (bot) => {
             parse_mode: 'Markdown',
             reply_markup: {
               inline_keyboard: [
-                [{ text: '🏠 Main Menu', callback_data: 'main_menu' }]
+                [{ text: '🏠 Main Menu', callback_data: 'main_menu' }],
+                [{ text: '📋 Browse Apartments', callback_data: 'browse_apartments' }]
               ]
             }
           }
