@@ -3,6 +3,7 @@ const Commission = require('../../models/Commission');
 const { isAdmin } = require('../../middleware/auth');
 const logger = require('../../middleware/logger');
 const Apartment = require('../../models/Apartment');
+const { getRedis } = require('../../config/redis');
 
 module.exports = (bot) => {
   bot.on('callback_query', async (cb) => {
@@ -620,6 +621,110 @@ module.exports = (bot) => {
         } catch (error) {
           logger.error('Error toggling apartment:', error);
           bot.sendMessage(chatId, '❌ Error updating apartment status.');
+        }
+      }
+      
+      // Edit apartment - Start edit process
+      else if (data.startsWith('admin_apartment_edit_')) {
+        const apartmentId = data.replace('admin_apartment_edit_', '');
+        
+        await bot.answerCallbackQuery(cb.id, { text: 'Loading edit form...' });
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          const [apt] = await executeQuery('SELECT * FROM apartments WHERE id = ?', [apartmentId]);
+          
+          if (!apt) {
+            return bot.sendMessage(chatId, '❌ Apartment not found.');
+          }
+          
+          const message = 
+            `✏️ *Edit Apartment*\n\n` +
+            `Current details:\n` +
+            `Name: ${apt.name}\n` +
+            `Location: ${apt.location}\n` +
+            `Address: ${apt.address}\n` +
+            `Type: ${apt.type}\n` +
+            `Price: ₦${apt.price}\n` +
+            `Bedrooms: ${apt.bedrooms}\n` +
+            `Bathrooms: ${apt.bathrooms}\n` +
+            `Description: ${apt.description}\n` +
+            `Owner ID: ${apt.owner_id}\n\n` +
+            `Please send the updated details in this format:\n\n` +
+            `Name|Location|Address|Type|Price|Bedrooms|Bathrooms|Description|OwnerID\n\n` +
+            `Or send /cancel to cancel.`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [{ text: '« Cancel', callback_data: `admin_apartment_detail_${apartmentId}` }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+          // Store in Redis that we're editing this apartment
+          const redis = getRedis();
+          await redis.setex(`editing_apartment:${chatId}`, 3600, apartmentId);
+          
+        } catch (error) {
+          logger.error('Error loading apartment for edit:', error);
+          bot.sendMessage(chatId, '❌ Error loading apartment details.');
+        }
+      }
+      
+      // Manage Photos
+      else if (data.startsWith('admin_apartment_photos_')) {
+        const apartmentId = data.replace('admin_apartment_photos_', '');
+        
+        await bot.answerCallbackQuery(cb.id, { text: 'Loading photos...' });
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          const [apt] = await executeQuery('SELECT * FROM apartments WHERE id = ?', [apartmentId]);
+          
+          if (!apt) {
+            return bot.sendMessage(chatId, '❌ Apartment not found.');
+          }
+          
+          const photoPaths = Apartment.processPhotos(apt);
+          
+          let message = `📸 *Manage Photos - ${apt.name}*\n\n`;
+          message += `Total photos: ${photoPaths.length}\n\n`;
+          
+          if (photoPaths.length > 0) {
+            message += `*Current photos:*\n`;
+            photoPaths.forEach((photo, index) => {
+              message += `${index + 1}. ${photo}\n`;
+            });
+            message += `\n`;
+          }
+          
+          message += `*Options:*\n`;
+          message += `- Send new photos to add them\n`;
+          message += `- Send /clearphotos to remove all photos\n`;
+          message += `- Send /deletephoto [number] to delete specific photo`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [{ text: '« Back to Apartment', callback_data: `admin_apartment_detail_${apartmentId}` }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+          // Store in Redis that we're managing photos for this apartment
+          const redis = getRedis();
+          await redis.setex(`managing_photos:${chatId}`, 3600, apartmentId);
+          
+        } catch (error) {
+          logger.error('Error loading photos:', error);
+          bot.sendMessage(chatId, '❌ Error loading photos.');
         }
       }
       
