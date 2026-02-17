@@ -18,8 +18,39 @@ module.exports = (bot) => {
         return bot.sendMessage(chatId, '❌ You are not authorized.');
       }
       
+      // Handle main menu buttons
+      if (data === 'admin_menu_bookings') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Opening Bookings...' });
+        // Add bookings functionality here
+        bot.sendMessage(chatId, '📋 *Bookings Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+      
+      else if (data === 'admin_menu_apartments') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Opening Apartments...' });
+        // Add apartments functionality here
+        bot.sendMessage(chatId, '🏠 *Apartments Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+      
+      else if (data === 'admin_menu_owners') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Opening Owners...' });
+        // Add owners functionality here
+        bot.sendMessage(chatId, '👥 *Owners Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+      
+      else if (data === 'admin_menu_reports') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Opening Reports...' });
+        // Add reports functionality here
+        bot.sendMessage(chatId, '📊 *Reports Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+      
+      else if (data === 'admin_menu_settings') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Opening Settings...' });
+        // Add settings functionality here
+        bot.sendMessage(chatId, '⚙️ *Settings Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+      
       // Admin commission details
-      if (data.startsWith('admin_commission_')) {
+      else if (data.startsWith('admin_commission_')) {
         await bot.answerCallbackQuery(cb.id, { text: 'Fetching commission...' });
         
         const bookingCode = data.replace('admin_commission_', '');
