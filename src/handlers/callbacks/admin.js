@@ -21,8 +21,25 @@ module.exports = (bot) => {
       // Handle main menu buttons
       if (data === 'admin_menu_bookings') {
         await bot.answerCallbackQuery(cb.id, { text: 'Opening Bookings...' });
-        // Add bookings functionality here
-        bot.sendMessage(chatId, '📋 *Bookings Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+        
+        const message = '📋 *Bookings Management*\n\nSelect an option:';
+        
+        const keyboard = {
+          inline_keyboard: [
+            [{ text: '📅 All Bookings', callback_data: 'admin_bookings_all' }],
+            [{ text: '⏳ Pending Verification', callback_data: 'admin_bookings_pending' }],
+            [{ text: '✅ Verified', callback_data: 'admin_bookings_verified' }],
+            [{ text: '💰 Commission Due', callback_data: 'admin_bookings_commission_due' }],
+            [{ text: '💵 Paid Commissions', callback_data: 'admin_bookings_commission_paid' }],
+            [{ text: '🔍 Search Booking', callback_data: 'admin_bookings_search' }],
+            [{ text: '« Back to Admin', callback_data: 'admin_main_menu' }]
+          ]
+        };
+        
+        await bot.sendMessage(chatId, message, { 
+          parse_mode: 'Markdown',
+          reply_markup: keyboard 
+        });
       }
       
       else if (data === 'admin_menu_apartments') {
@@ -47,6 +64,98 @@ module.exports = (bot) => {
         await bot.answerCallbackQuery(cb.id, { text: 'Opening Settings...' });
         // Add settings functionality here
         bot.sendMessage(chatId, '⚙️ *Settings Menu*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+      
+      // Bookings submenu handlers
+      else if (data === 'admin_bookings_all') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Fetching all bookings...' });
+        
+        try {
+          const Booking = require('../../models/Booking');
+          const bookings = await Booking.findAll(); // Adjust based on your model
+          
+          if (!bookings || bookings.length === 0) {
+            return bot.sendMessage(chatId, '📭 No bookings found.');
+          }
+          
+          let message = '📋 *All Bookings*\n\n';
+          bookings.slice(0, 10).forEach((booking, index) => {
+            message += `${index+1}. *${booking.apartment_name}*\n`;
+            message += `   Guest: ${booking.guest_name}\n`;
+            message += `   Dates: ${booking.check_in} to ${booking.check_out}\n`;
+            message += `   Amount: ₦${booking.amount}\n`;
+            message += `   Status: ${booking.status || 'Pending'}\n`;
+            message += `   Commission: ${booking.commission_paid ? '✅ Paid' : '⏳ Due'}\n\n`;
+          });
+          
+          message += 'Showing last 10 bookings. Use search for more.';
+          
+          const keyboard = {
+            inline_keyboard: [
+              [{ text: '« Back to Bookings', callback_data: 'admin_menu_bookings' }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error fetching bookings:', error);
+          bot.sendMessage(chatId, '❌ Error fetching bookings.');
+        }
+      }
+      
+      else if (data === 'admin_bookings_pending') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Fetching pending verifications...' });
+        bot.sendMessage(chatId, '⏳ *Pending Verification*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+
+      else if (data === 'admin_bookings_verified') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Fetching verified bookings...' });
+        bot.sendMessage(chatId, '✅ *Verified Bookings*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+
+      else if (data === 'admin_bookings_commission_due') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Fetching commissions due...' });
+        bot.sendMessage(chatId, '💰 *Commissions Due*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+
+      else if (data === 'admin_bookings_commission_paid') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Fetching paid commissions...' });
+        bot.sendMessage(chatId, '💵 *Paid Commissions*\n\nComing soon...', { parse_mode: 'Markdown' });
+      }
+
+      else if (data === 'admin_bookings_search') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Search feature...' });
+        bot.sendMessage(chatId, '🔍 *Search Booking*\n\nPlease enter booking code or guest name:', { parse_mode: 'Markdown' });
+        // This would need a message listener to handle the response
+      }
+      
+      else if (data === 'admin_main_menu') {
+        await bot.answerCallbackQuery(cb.id, { text: 'Returning to admin...' });
+        
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '📋 Bookings', callback_data: 'admin_menu_bookings' },
+              { text: '🏠 Apartments', callback_data: 'admin_menu_apartments' }
+            ],
+            [
+              { text: '👥 Owners', callback_data: 'admin_menu_owners' },
+              { text: '📊 Reports', callback_data: 'admin_menu_reports' }
+            ],
+            [
+              { text: '⚙️ Settings', callback_data: 'admin_menu_settings' }
+            ]
+          ]
+        };
+        
+        await bot.sendMessage(chatId, '🛠 *Admin Control Center*', {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        });
       }
       
       // Admin commission details
