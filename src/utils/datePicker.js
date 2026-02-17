@@ -9,38 +9,41 @@ function getMonthName(month) {
 }
 
 /* ================= MAIN KEYBOARD ================= */
-function getDatePickerKeyboard(
-  year,
-  month,
-  step = 'start',
-  startDate = null,
-  endDate = null
-) {
+function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
 
   const keyboard = [];
   let row = [];
 
-  // Week headers
+  /* ===== WEEK HEADERS ===== */
   const weekdays = ['Su','Mo','Tu','We','Th','Fr','Sa'];
   keyboard.push(
-    weekdays.map(d => ({ text: d, callback_data: 'ignore' }))
+    weekdays.map(d => ({
+      text: d,
+      callback_data: 'ignore'
+    }))
   );
 
-  // Empty start cells
+  /* ===== EMPTY CELLS BEFORE MONTH START ===== */
   for (let i = 0; i < firstDay; i++) {
     row.push({ text: ' ', callback_data: 'ignore' });
   }
 
-  // Days
+  /* ===== DAYS ===== */
   for (let day = 1; day <= daysInMonth; day++) {
-    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const dateStr =
+      `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 
     let label = `${day}`;
 
-    if (startDate === dateStr) label = `🔵 ${day}`; // Check-in
-    if (endDate === dateStr) label = `🟢 ${day}`;   // Check-out
+    // COLOR INDICATORS ONLY WHEN USER SELECTS
+    if (startDate === dateStr) {
+      label = `🔵 ${day}`; // Check-in
+    }
+    if (endDate === dateStr) {
+      label = `🟢 ${day}`; // Check-out
+    }
 
     row.push({
       text: label,
@@ -60,26 +63,27 @@ function getDatePickerKeyboard(
     keyboard.push(row);
   }
 
-  /* ================= YEAR NAV ================= */
+  /* ===== YEAR NAV ===== */
   keyboard.push([
-    { text: '⏪', callback_data: `year_prev_${year}_${month}_${step}` },
+    { text: '⏪', callback_data: `year_prev_${year}_${month}` },
     { text: `${year}`, callback_data: 'ignore' },
-    { text: '⏩', callback_data: `year_next_${year}_${month}_${step}` }
+    { text: '⏩', callback_data: `year_next_${year}_${month}` }
   ]);
 
-  /* ================= MONTH NAV ================= */
+  /* ===== MONTH NAV ===== */
   const prevMonth = month === 0 ? 11 : month - 1;
   const prevYear = month === 0 ? year - 1 : year;
+
   const nextMonth = month === 11 ? 0 : month + 1;
   const nextYear = month === 11 ? year + 1 : year;
 
   keyboard.push([
-    { text: '◀️', callback_data: `month_${prevYear}_${prevMonth}_${step}` },
+    { text: '◀️', callback_data: `month_${prevYear}_${prevMonth}` },
     { text: `${getMonthName(month)}`, callback_data: 'ignore' },
-    { text: '▶️', callback_data: `month_${nextYear}_${nextMonth}_${step}` }
+    { text: '▶️', callback_data: `month_${nextYear}_${nextMonth}` }
   ]);
 
-  /* ================= ACTIONS ================= */
+  /* ===== ACTION BUTTONS ===== */
   keyboard.push([
     { text: '🧹 Clear Dates', callback_data: 'clear_dates' },
     { text: '❌ Cancel', callback_data: 'cancel_booking' }
@@ -99,24 +103,31 @@ function getDatePickerKeyboard(
 }
 
 /* ================= RANGE WRAPPER ================= */
-function getDateRangePickerKeyboard(
-  step = 'start',
-  startDate = null,
-  endDate = null,
-  year = null,
-  month = null
-) {
+function getDateRangePickerKeyboard(step, startDate = null, endDate = null) {
   const today = new Date();
 
-  const y = year ?? today.getFullYear();
-  const m = month ?? today.getMonth();
+  // CHECK-IN STEP
+  if (step === 'start') {
+    return getDatePickerKeyboard(
+      today.getFullYear(),
+      today.getMonth()
+    );
+  }
+
+  // CHECK-OUT STEP
+  if (startDate) {
+    const start = new Date(startDate);
+    return getDatePickerKeyboard(
+      start.getFullYear(),
+      start.getMonth(),
+      startDate,
+      endDate
+    );
+  }
 
   return getDatePickerKeyboard(
-    y,
-    m,
-    step,
-    startDate,
-    endDate
+    today.getFullYear(),
+    today.getMonth()
   );
 }
 
