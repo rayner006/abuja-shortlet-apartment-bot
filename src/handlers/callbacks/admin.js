@@ -87,12 +87,14 @@ module.exports = (bot) => {
             message += `   Status: ${booking.status || 'Pending'}\n\n`;
           });
           
-          message += 'Showing last 10 bookings. Use search for more.';
+          const buttons = bookings.map(booking => {
+            return [{ text: `🗑️ Delete ${booking.booking_code}`, callback_data: `admin_delete_${booking.booking_code}` }];
+          });
+          
+          buttons.push([{ text: '« Back to Bookings', callback_data: 'admin_menu_bookings' }]);
           
           const keyboard = {
-            inline_keyboard: [
-              [{ text: '« Back to Bookings', callback_data: 'admin_menu_bookings' }]
-            ]
+            inline_keyboard: buttons
           };
           
           await bot.sendMessage(chatId, message, { 
@@ -260,6 +262,58 @@ module.exports = (bot) => {
         } catch (error) {
           logger.error('Error confirming verification:', error);
           bot.sendMessage(chatId, '❌ Error verifying booking.');
+        }
+      }
+      
+      else if (data.startsWith('admin_delete_')) {
+        await bot.answerCallbackQuery(cb.id, { text: 'Preparing delete...' });
+        
+        const bookingCode = data.replace('admin_delete_', '');
+        
+        const message = `⚠️ *Confirm Delete*\n\nAre you sure you want to delete booking *${bookingCode}*?\n\nThis action cannot be undone.`;
+        
+        const keyboard = {
+          inline_keyboard: [
+            [
+              { text: '✅ Yes, Delete', callback_data: `admin_confirm_delete_${bookingCode}` },
+              { text: '❌ No', callback_data: 'admin_bookings_all' }
+            ]
+          ]
+        };
+        
+        await bot.sendMessage(chatId, message, { 
+          parse_mode: 'Markdown',
+          reply_markup: keyboard 
+        });
+      }
+
+      else if (data.startsWith('admin_confirm_delete_')) {
+        await bot.answerCallbackQuery(cb.id, { text: 'Deleting...' });
+        
+        const bookingCode = data.replace('admin_confirm_delete_', '');
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          
+          await executeQuery("DELETE FROM bookings WHERE booking_code = ?", [bookingCode]);
+          
+          const message = `🗑️ *Booking Deleted*\n\nBooking *${bookingCode}* has been permanently deleted.`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [{ text: '📋 Back to Bookings', callback_data: 'admin_bookings_all' }],
+              [{ text: '« Main Menu', callback_data: 'admin_main_menu' }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error deleting booking:', error);
+          bot.sendMessage(chatId, '❌ Error deleting booking.');
         }
       }
       
