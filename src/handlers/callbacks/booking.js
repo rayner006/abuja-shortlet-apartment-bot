@@ -30,7 +30,6 @@ module.exports = (bot) => {
 
     try {
 
-      // ===== STEP 1: BOOK NOW =====
       if (data.startsWith('book_')) {
         const apartmentId = data.replace('book_', '');
 
@@ -58,7 +57,6 @@ module.exports = (bot) => {
         return;
       }
 
-      // ===== STEP 2: SHOW DATE PICKER =====
       if (data === 'show_date_picker') {
         const session = await getSession();
         if (!session) return;
@@ -78,7 +76,6 @@ module.exports = (bot) => {
         return;
       }
 
-      // ===== STEP 3: DATE PICKER CALLBACKS =====
       if (data.startsWith('date_') || 
           data === 'month_prev' || 
           data === 'month_next' || 
@@ -136,7 +133,6 @@ module.exports = (bot) => {
         return;
       }
 
-      // ===== CANCEL =====
       if (data === 'cancel_booking') {
         await redis.del(`booking:${chatId}`);
         
