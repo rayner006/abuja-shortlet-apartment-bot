@@ -61,7 +61,7 @@ module.exports = (bot) => {
         if (digitsOnly.length < 9) {
           await bot.sendMessage(
             chatId,
-            '❌ Please enter a valid phone number (minimum 9 digits):',
+            '❌ Please enter a valid phone number:',
             { 
               parse_mode: 'Markdown',
               reply_markup: { force_reply: true }
@@ -99,3 +99,4 @@ module.exports = (bot) => {
     }
   });
 };
+
