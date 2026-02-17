@@ -3,6 +3,18 @@ const { getDatePickerKeyboard } = require('../../utils/datePicker');
 const { getRedis } = require('../../config/redis');
 const logger = require('../../middleware/logger');
 
+/* ===== SHORT DATE FORMAT HELPER ===== */
+const formatShortDate = (dateStr) => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+
+  return d.toLocaleDateString('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  });
+};
+
 module.exports = (bot) => {
 
   bot.on('callback_query', async (query) => {
