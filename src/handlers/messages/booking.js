@@ -71,29 +71,22 @@ module.exports = (bot) => {
         }
         
         session.userPhone = phone;
-        session.step = 'awaiting_dates';
+        session.step = 'selecting_dates';
         await redis.setex(`booking:${chatId}`, 3600, JSON.stringify(session));
         
+        // Delete user's phone message
         await bot.deleteMessage(chatId, messageId).catch(() => {});
         
-        const keyboard = {
-          inline_keyboard: [
-            [{ text: '📅 Select Dates', callback_data: 'show_date_picker' }],
-            [{ text: '❌ Cancel Booking', callback_data: 'cancel_booking' }]
-          ]
-        };
+        // Get the date picker
+        const datePicker = require('../callbacks/datePicker');
         
-        await bot.sendMessage(
-          chatId,
-          `✅ *Details Confirmed!*\n\n` +
-          `Name: ${session.userName}\n` +
-          `Phone: ${phone}\n\n` +
-          `Click below to select your dates:`,
-          {
-            parse_mode: 'Markdown',
-            reply_markup: keyboard
-          }
-        );
+        // DIRECTLY show date picker - NO MESSAGES
+        await datePicker.startDatePicker(bot, chatId, {
+          apartmentId: session.apartmentId,
+          userName: session.userName,
+          userPhone: session.userPhone
+        });
+        
         return;
       }
       
