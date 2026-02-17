@@ -1,10 +1,12 @@
 // utils/datePicker.js
 
 function getMonthName(month) {
-  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun',
+                  'Jul','Aug','Sep','Oct','Nov','Dec'];
   return months[month];
 }
 
+/* ================= MAIN KEYBOARD ================= */
 function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
@@ -26,8 +28,8 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
     const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 
     let label = `${day}`;
-    if (startDate === dateStr) label = `🔵 ${day}`;
-    if (endDate === dateStr) label = `🟢 ${day}`;
+    if (startDate === dateStr) label = `🔵 ${day}`; // check-in
+    if (endDate === dateStr) label = `🟢 ${day}`;   // check-out
 
     row.push({
       text: label,
@@ -45,14 +47,14 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
     keyboard.push(row);
   }
 
-  // YEAR NAV
+  /* ================= YEAR NAV ================= */
   keyboard.push([
     { text: '⏪', callback_data: `year_prev_${year}_${month}` },
     { text: `${year}`, callback_data: 'ignore' },
     { text: '⏩', callback_data: `year_next_${year}_${month}` }
   ]);
 
-  // MONTH NAV
+  /* ================= MONTH NAV ================= */
   const prevMonth = month === 0 ? 11 : month - 1;
   const prevYear = month === 0 ? year - 1 : year;
   const nextMonth = month === 11 ? 0 : month + 1;
@@ -64,7 +66,7 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
     { text: '▶️', callback_data: `month_${nextYear}_${nextMonth}` }
   ]);
 
-  // ACTION BUTTONS
+  /* ================= ACTIONS ================= */
   keyboard.push([
     { text: '🧹 Clear Dates', callback_data: 'clear_dates' },
     { text: '❌ Cancel', callback_data: 'cancel_booking' }
@@ -83,6 +85,29 @@ function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
   };
 }
 
+/* ================= RANGE WRAPPER ================= */
+function getDateRangePickerKeyboard(step, startDate = null, endDate = null) {
+  const today = new Date();
+
+  if (step === 'start') {
+    return getDatePickerKeyboard(today.getFullYear(), today.getMonth());
+  }
+
+  // End date step
+  if (startDate) {
+    const start = new Date(startDate);
+    return getDatePickerKeyboard(
+      start.getFullYear(),
+      start.getMonth(),
+      startDate,
+      endDate
+    );
+  }
+
+  return getDatePickerKeyboard(today.getFullYear(), today.getMonth());
+}
+
 module.exports = {
-  getDatePickerKeyboard
+  getDatePickerKeyboard,
+  getDateRangePickerKeyboard
 };
