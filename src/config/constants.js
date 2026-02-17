@@ -20,7 +20,7 @@ const LOCATIONS = {
 };
 
 const APARTMENT_TYPES = [
-  '🛏️ Self Contain',
+  '🛏️ Studio Apartment',
   '🛏️ 1-Bedroom',
   '🛏️ 2-Bedroom',
   '🛏️ 3-Bedroom'
@@ -49,4 +49,5 @@ module.exports = {
   BOOKING_STATUS,
   MENU_OPTIONS,
   COMMISSION_RATE
+
 };
