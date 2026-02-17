@@ -35,17 +35,42 @@ module.exports = (bot) => {
       await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
     };
 
+    /* ===== HEADER BUILDER ===== */
     const buildHeader = (session) => {
       if (!session.startDate)
         return '📅 *Select your check-in date:*';
 
-      if (session.startDate && !session.endDate)
-        return `📅 Check-in: *${formatShortDate(session.startDate)}*\nSelect *check-out* date:`;
+      if (!session.endDate)
+        return `📅 *Select your check-out date:*\n\nCheck-in: ${formatShortDate(session.startDate)}`;
 
-      return `📅 Check-in: *${formatShortDate(session.startDate)}*\n📅 Check-out: *${formatShortDate(session.endDate)}*`;
+      return `📅 *Confirm your dates:*\n\nCheck-in: ${formatShortDate(session.startDate)}\nCheck-out: ${formatShortDate(session.endDate)}`;
     };
 
     try {
+
+      /* ================= BOOK NOW ================= */
+      if (data.startsWith('book_')) {
+        const apartmentId = data.replace('book_', '');
+
+        const session = {
+          apartmentId,
+          step: 'awaiting_name'
+        };
+
+        await saveSession(session);
+
+        await bot.sendMessage(
+          chatId,
+          '📝 *Enter Your Full Name:*',
+          {
+            parse_mode: 'Markdown',
+            reply_markup: { force_reply: true }
+          }
+        );
+
+        await bot.answerCallbackQuery(query.id);
+        return;
+      }
 
       /* ================= DATE SELECT ================= */
       if (data.startsWith('date_')) {
@@ -57,25 +82,11 @@ module.exports = (bot) => {
           session.startDate = selectedDate;
           session.step = 'awaiting_end_date';
           await saveSession(session);
-        } else if (session.step === 'awaiting_end_date') {
-          const start = new Date(session.startDate);
-          const end = new Date(selectedDate);
 
-          if (end <= start) {
-            return bot.answerCallbackQuery(query.id, {
-              text: 'Check-out must be after check-in'
-            });
-          }
+          const start = new Date(selectedDate);
+          const header = buildHeader(session);
 
-          session.endDate = selectedDate;
-          await saveSession(session);
-        }
-
-        const start = new Date(session.startDate || new Date());
-
-        await bot.editMessageText(
-          buildHeader(session),
-          {
+          await bot.editMessageText(header, {
             chat_id: chatId,
             message_id: messageId,
             parse_mode: 'Markdown',
@@ -87,10 +98,64 @@ module.exports = (bot) => {
               session.selectedMonth,
               session.selectedYear
             ).reply_markup
+          });
+
+          return bot.answerCallbackQuery(query.id, { text: 'Check-in selected' });
+        }
+
+        if (session.step === 'awaiting_end_date') {
+          const start = new Date(session.startDate);
+          const end = new Date(selectedDate);
+
+          if (end <= start) {
+            return bot.answerCallbackQuery(query.id, {
+              text: 'Check-out must be after check-in'
+            });
           }
+
+          session.endDate = selectedDate;
+          await saveSession(session);
+
+          const header = buildHeader(session);
+
+          await bot.editMessageText(header, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown',
+            reply_markup: getDatePickerKeyboard(
+              start.getFullYear(),
+              start.getMonth(),
+              session.startDate,
+              session.endDate,
+              session.selectedMonth,
+              session.selectedYear
+            ).reply_markup
+          });
+
+          return bot.answerCallbackQuery(query.id, { text: 'Check-out selected' });
+        }
+      }
+
+      /* ================= CONFIRM BOOKING ================= */
+      if (data === 'confirm_booking') {
+        const session = await getSession();
+        if (!session) return;
+
+        const result = await BookingService.processEndDate(
+          chatId,
+          session.endDate,
+          session
         );
 
-        return bot.answerCallbackQuery(query.id);
+        await redis.del(`session:${chatId}`);
+
+        await bot.editMessageText(result.message, {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown'
+        });
+
+        return bot.answerCallbackQuery(query.id, { text: 'Booking confirmed' });
       }
 
       /* ================= MONTH NAV ================= */
@@ -102,52 +167,21 @@ module.exports = (bot) => {
         const session = await getSession();
         if (!session) return;
 
-        await bot.editMessageText(
-          buildHeader(session),
-          {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown',
-            reply_markup: getDatePickerKeyboard(
-              year,
-              month,
-              session.startDate,
-              session.endDate,
-              session.selectedMonth,
-              session.selectedYear
-            ).reply_markup
-          }
-        );
+        const header = buildHeader(session);
 
-        return bot.answerCallbackQuery(query.id);
-      }
-
-      /* ================= YEAR NAV ================= */
-      if (data.startsWith('year_')) {
-        const [, direction, year, month] = data.split('_');
-        const newYear = direction === 'prev'
-          ? Number(year) - 1
-          : Number(year) + 1;
-
-        const session = await getSession();
-        if (!session) return;
-
-        await bot.editMessageText(
-          buildHeader(session),
-          {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown',
-            reply_markup: getDatePickerKeyboard(
-              newYear,
-              Number(month),
-              session.startDate,
-              session.endDate,
-              session.selectedMonth,
-              session.selectedYear
-            ).reply_markup
-          }
-        );
+        await bot.editMessageText(header, {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: getDatePickerKeyboard(
+            year,
+            month,
+            session.startDate,
+            session.endDate,
+            session.selectedMonth,
+            session.selectedYear
+          ).reply_markup
+        });
 
         return bot.answerCallbackQuery(query.id);
       }
@@ -166,18 +200,27 @@ module.exports = (bot) => {
 
         const now = new Date();
 
-        await bot.editMessageText(
-          '📅 *Select your check-in date:*',
-          {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown',
-            reply_markup: getDatePickerKeyboard(
-              now.getFullYear(),
-              now.getMonth()
-            ).reply_markup
-          }
-        );
+        await bot.editMessageText('📅 *Select your check-in date:*', {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: getDatePickerKeyboard(
+            now.getFullYear(),
+            now.getMonth()
+          ).reply_markup
+        });
+
+        return bot.answerCallbackQuery(query.id, { text: 'Dates cleared' });
+      }
+
+      /* ================= CANCEL ================= */
+      if (data === 'cancel_booking') {
+        await redis.del(`session:${chatId}`);
+
+        await bot.editMessageText('❌ Booking cancelled.', {
+          chat_id: chatId,
+          message_id: messageId
+        });
 
         return bot.answerCallbackQuery(query.id);
       }
