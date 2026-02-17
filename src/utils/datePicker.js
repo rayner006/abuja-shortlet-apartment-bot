@@ -1,42 +1,36 @@
-// Simple date picker utility for Telegram
+// utils/datePicker.js
 
 function getMonthName(month) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   return months[month];
 }
 
-function getDatePickerKeyboard(year, month, selectedDate = null, highlightDate = null) {
+function getDatePickerKeyboard(year, month, startDate = null, endDate = null) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDay = new Date(year, month, 1).getDay();
-  
+
   const keyboard = [];
   let row = [];
 
-  // Weekday headers
-  const weekdays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-  row = weekdays.map(day => ({ text: day, callback_data: 'ignore' }));
-  keyboard.push(row);
+  // Week headers
+  const weekdays = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  keyboard.push(weekdays.map(d => ({ text: d, callback_data: 'ignore' })));
 
-  // Empty cells
-  row = [];
+  // Empty start cells
   for (let i = 0; i < firstDay; i++) {
     row.push({ text: ' ', callback_data: 'ignore' });
   }
 
-  // Days loop
+  // Days
   for (let day = 1; day <= daysInMonth; day++) {
-    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
 
-    const isSelected = selectedDate === dateStr;
-    const isHighlighted = highlightDate === dateStr;
-
-    let displayText = `${day}`;
-    if (isSelected) displayText = `✅ ${day}`;
-    else if (isHighlighted) displayText = `🔵 ${day}`;
+    let label = `${day}`;
+    if (startDate === dateStr) label = `🔵 ${day}`;
+    if (endDate === dateStr) label = `🟢 ${day}`;
 
     row.push({
-      text: displayText,
+      text: label,
       callback_data: `date_${dateStr}`
     });
 
@@ -47,32 +41,40 @@ function getDatePickerKeyboard(year, month, selectedDate = null, highlightDate =
   }
 
   if (row.length > 0) {
+    while (row.length < 7) row.push({ text: ' ', callback_data: 'ignore' });
     keyboard.push(row);
   }
 
-  // Year navigation
+  // YEAR NAV
   keyboard.push([
-    { text: '⏪ Year -', callback_data: `year_prev_${year}_${month}` },
-    { text: `📅 ${year}`, callback_data: 'ignore' },
-    { text: 'Year + ⏩', callback_data: `year_next_${year}_${month}` }
+    { text: '⏪', callback_data: `year_prev_${year}_${month}` },
+    { text: `${year}`, callback_data: 'ignore' },
+    { text: '⏩', callback_data: `year_next_${year}_${month}` }
   ]);
 
-  // Month navigation
+  // MONTH NAV
   const prevMonth = month === 0 ? 11 : month - 1;
   const prevYear = month === 0 ? year - 1 : year;
   const nextMonth = month === 11 ? 0 : month + 1;
   const nextYear = month === 11 ? year + 1 : year;
 
   keyboard.push([
-    { text: '◀️ Prev', callback_data: `month_${prevYear}_${prevMonth}` },
-    { text: `${getMonthName(month)} ${year}`, callback_data: 'ignore' },
-    { text: 'Next ▶️', callback_data: `month_${nextYear}_${nextMonth}` }
+    { text: '◀️', callback_data: `month_${prevYear}_${prevMonth}` },
+    { text: `${getMonthName(month)}`, callback_data: 'ignore' },
+    { text: '▶️', callback_data: `month_${nextYear}_${nextMonth}` }
   ]);
 
-  // Action buttons
+  // ACTION BUTTONS
   keyboard.push([
+    { text: '🧹 Clear Dates', callback_data: 'clear_dates' },
     { text: '❌ Cancel', callback_data: 'cancel_booking' }
   ]);
+
+  if (startDate && endDate) {
+    keyboard.push([
+      { text: '✅ Confirm Booking', callback_data: 'confirm_booking' }
+    ]);
+  }
 
   return {
     reply_markup: {
@@ -81,26 +83,6 @@ function getDatePickerKeyboard(year, month, selectedDate = null, highlightDate =
   };
 }
 
-function getDateRangePickerKeyboard(step, startDate = null) {
-  const today = new Date();
-
-  if (step === 'start') {
-    return getDatePickerKeyboard(today.getFullYear(), today.getMonth());
-  } else {
-    const start = new Date(startDate);
-    let endYear = start.getFullYear();
-    let endMonth = start.getMonth() + 1;
-
-    if (endMonth > 11) {
-      endMonth = 0;
-      endYear += 1;
-    }
-
-    return getDatePickerKeyboard(endYear, endMonth, null, startDate);
-  }
-}
-
 module.exports = {
-  getDatePickerKeyboard,
-  getDateRangePickerKeyboard
+  getDatePickerKeyboard
 };
