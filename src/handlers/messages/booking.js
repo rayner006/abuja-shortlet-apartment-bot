@@ -19,12 +19,16 @@ module.exports = (bot) => {
     
     try {
       const sessionRaw = await redis.get(`booking:${chatId}`);
+      
+      // If no session, user is not in booking flow - ignore
       if (!sessionRaw) return;
       
       const session = JSON.parse(sessionRaw);
       
+      // ===== STEP 1: AWAITING NAME =====
       if (session.step === 'awaiting_name') {
         
+        // Validate name has at least first and last name
         if (text.split(' ').length < 2) {
           await bot.sendMessage(
             chatId,
@@ -34,10 +38,12 @@ module.exports = (bot) => {
           return;
         }
         
+        // Save name and move to phone step
         session.userName = text;
         session.step = 'awaiting_phone';
         await redis.setex(`booking:${chatId}`, 3600, JSON.stringify(session));
         
+        // Ask for phone number
         await bot.sendMessage(
           chatId,
           '📞 *Step 2 of 2: Your Phone Number*\n\n' +
@@ -48,16 +54,18 @@ module.exports = (bot) => {
           }
         );
         
+        // Delete user's name message for privacy
         await bot.deleteMessage(chatId, messageId).catch(() => {});
         return;
       }
       
+      // ===== STEP 2: AWAITING PHONE =====
       if (session.step === 'awaiting_phone') {
         
         // Remove spaces and special characters for counting
         const digitsOnly = text.replace(/[^\d]/g, '');
         
-        // Only check that it has at least 9 digits
+        // Check that it has at least 9 digits
         if (digitsOnly.length < 9) {
           await bot.sendMessage(
             chatId,
@@ -70,23 +78,36 @@ module.exports = (bot) => {
           return;
         }
         
-        session.userPhone = text; // Save exactly what user entered
+        // Save phone number (keep original format)
+        session.userPhone = text;
         session.step = 'selecting_dates';
         await redis.setex(`booking:${chatId}`, 3600, JSON.stringify(session));
         
-        // Delete user's phone message
+        // Delete user's phone message for privacy
         await bot.deleteMessage(chatId, messageId).catch(() => {});
         
         // Get the date picker
         const datePicker = require('../callbacks/datePicker');
         
-        // DIRECTLY show date picker - NO MESSAGES
+        // Show date picker directly
         await datePicker.startDatePicker(bot, chatId, {
           apartmentId: session.apartmentId,
           userName: session.userName,
           userPhone: session.userPhone
         });
         
+        return;
+      }
+      
+      // ===== IGNORE MESSAGES DURING DATE SELECTION =====
+      // If user is in date selection step, ignore any text messages
+      if (session.step === 'selecting_dates') {
+        // Optionally, you can send a reminder
+        await bot.sendMessage(
+          chatId,
+          '📅 Please select your dates using the calendar above.',
+          { reply_markup: { force_reply: false } }
+        );
         return;
       }
       
@@ -99,4 +120,3 @@ module.exports = (bot) => {
     }
   });
 };
-
