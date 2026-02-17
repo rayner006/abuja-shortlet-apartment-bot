@@ -54,7 +54,6 @@ app.get('/health', (req, res) => {
 // Import all handlers with detailed error logging
 const handlers = [
   { name: 'start handler', path: './handlers/commands/start' },
-  { name: 'admin handler', path: './handlers/commands/admin' },
   { name: 'owner handler', path: './handlers/commands/owner' },
   { name: 'test handler', path: './handlers/commands/test' },
   { name: 'locations handler', path: './handlers/messages/locations' },
