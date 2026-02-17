@@ -60,7 +60,7 @@ bot.getMe().then(botInfo => {
 });
 
 /* ================= REGISTER HANDLERS ================= */
-require('./handlers/commands/adminBooking')(bot);
+require('./handlers/commands/admin')(bot);
 
 /* ================= EXPORT BOT ================= */
 module.exports = bot;
