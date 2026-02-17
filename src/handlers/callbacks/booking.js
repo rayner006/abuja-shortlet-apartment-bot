@@ -55,7 +55,6 @@ module.exports = (bot) => {
         const session = await getSession();
         if (!session) return bot.answerCallbackQuery(query.id);
 
-        // CHECK-IN
         if (session.step === 'awaiting_start_date') {
           session.startDate = selectedDate;
           session.step = 'awaiting_end_date';
@@ -68,7 +67,9 @@ module.exports = (bot) => {
               start.getFullYear(),
               start.getMonth(),
               session.startDate,
-              session.endDate
+              session.endDate,
+              session.selectedMonth,
+              session.selectedYear
             ).reply_markup,
             { chat_id: chatId, message_id: messageId }
           );
@@ -76,7 +77,6 @@ module.exports = (bot) => {
           return bot.answerCallbackQuery(query.id, { text: 'Check-in selected' });
         }
 
-        // CHECK-OUT
         if (session.step === 'awaiting_end_date') {
           const start = new Date(session.startDate);
           const end = new Date(selectedDate);
@@ -95,7 +95,9 @@ module.exports = (bot) => {
               start.getFullYear(),
               start.getMonth(),
               session.startDate,
-              session.endDate
+              session.endDate,
+              session.selectedMonth,
+              session.selectedYear
             ).reply_markup,
             { chat_id: chatId, message_id: messageId }
           );
@@ -137,7 +139,33 @@ module.exports = (bot) => {
             year,
             month,
             session.startDate,
-            session.endDate
+            session.endDate,
+            session.selectedMonth,
+            session.selectedYear
+          ).reply_markup,
+          { chat_id: chatId, message_id: messageId }
+        );
+
+        return bot.answerCallbackQuery(query.id);
+      }
+
+      /* ================= MONTH HIGHLIGHT ================= */
+      if (data.startsWith('select_month_')) {
+        const [, year, month] = data.split('_').map(Number);
+        const session = await getSession();
+        if (!session) return;
+
+        session.selectedMonth = month;
+        await saveSession(session);
+
+        await bot.editMessageReplyMarkup(
+          getDatePickerKeyboard(
+            year,
+            month,
+            session.startDate,
+            session.endDate,
+            session.selectedMonth,
+            session.selectedYear
           ).reply_markup,
           { chat_id: chatId, message_id: messageId }
         );
@@ -160,7 +188,33 @@ module.exports = (bot) => {
             newYear,
             Number(month),
             session.startDate,
-            session.endDate
+            session.endDate,
+            session.selectedMonth,
+            session.selectedYear
+          ).reply_markup,
+          { chat_id: chatId, message_id: messageId }
+        );
+
+        return bot.answerCallbackQuery(query.id);
+      }
+
+      /* ================= YEAR HIGHLIGHT ================= */
+      if (data.startsWith('select_year_')) {
+        const [, year, month] = data.split('_').map(Number);
+        const session = await getSession();
+        if (!session) return;
+
+        session.selectedYear = year;
+        await saveSession(session);
+
+        await bot.editMessageReplyMarkup(
+          getDatePickerKeyboard(
+            year,
+            month,
+            session.startDate,
+            session.endDate,
+            session.selectedMonth,
+            session.selectedYear
           ).reply_markup,
           { chat_id: chatId, message_id: messageId }
         );
@@ -175,6 +229,8 @@ module.exports = (bot) => {
 
         session.startDate = null;
         session.endDate = null;
+        session.selectedMonth = null;
+        session.selectedYear = null;
         session.step = 'awaiting_start_date';
         await saveSession(session);
 
