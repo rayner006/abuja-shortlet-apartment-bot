@@ -354,19 +354,15 @@ module.exports = (bot) => {
       
       // Apartments submenu handlers
       else if (data === 'admin_apartments_all') {
-        await bot.answerCallbackQuery(cb.id, { text: 'Fetching apartments...' });
+        await bot.answerCallbackQuery(cb.id, { text: 'Loading locations...' });
         
         try {
           const { executeQuery } = require('../../config/database');
-          const apartments = await executeQuery(`
-            SELECT a.*, 
-                   (SELECT COUNT(*) FROM bookings WHERE apartment_id = a.id) as total_bookings
-            FROM apartments a 
-            ORDER BY a.id DESC 
-            LIMIT 10
-          `);
           
-          if (!apartments || apartments.length === 0) {
+          // Get unique locations
+          const locations = await executeQuery('SELECT DISTINCT location FROM apartments ORDER BY location');
+          
+          if (!locations || locations.length === 0) {
             const keyboard = {
               inline_keyboard: [
                 [{ text: '➕ Add First Apartment', callback_data: 'admin_apartments_add' }],
@@ -378,51 +374,149 @@ module.exports = (bot) => {
             });
           }
           
-          for (const apt of apartments) {
-            const status = apt.verified ? '✅ Active' : '⏸️ Inactive';
-            const photoCount = Apartment.processPhotos(apt).length;
-            
-            const message = 
-              `🏠 *${apt.name || 'Unnamed Apartment'}*\n` +
-              `📍 Location: ${apt.location || 'N/A'}\n` +
-              `🏷️ Type: ${apt.type || 'N/A'}\n` +
-              `💰 Price: ₦${Number(apt.price).toLocaleString()}/night\n` +
-              `👤 Owner ID: ${apt.owner_id || 'Not assigned'}\n` +
-              `📊 Bookings: ${apt.total_bookings || 0}\n` +
-              `📸 Photos: ${photoCount}\n` +
-              `📌 Status: ${status}`;
-            
+          let message = '📍 *Select Location*\n\nChoose a location to view apartments:';
+          
+          // Create location buttons (2 per row)
+          const locationButtons = [];
+          for (let i = 0; i < locations.length; i += 2) {
+            const row = [];
+            row.push({ text: `📍 ${locations[i].location}`, callback_data: `admin_apartments_location_${locations[i].location}` });
+            if (i + 1 < locations.length) {
+              row.push({ text: `📍 ${locations[i+1].location}`, callback_data: `admin_apartments_location_${locations[i+1].location}` });
+            }
+            locationButtons.push(row);
+          }
+          
+          // Add back button
+          locationButtons.push([{ text: '« Back to Apartments Menu', callback_data: 'admin_menu_apartments' }]);
+          
+          const keyboard = {
+            inline_keyboard: locationButtons
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error fetching locations:', error);
+          bot.sendMessage(chatId, '❌ Error loading locations.');
+        }
+      }
+      
+      else if (data.startsWith('admin_apartments_location_')) {
+        const location = data.replace('admin_apartments_location_', '');
+        
+        await bot.answerCallbackQuery(cb.id, { text: `Loading apartments in ${location}...` });
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          
+          // Get apartments in this location
+          const apartments = await executeQuery(
+            'SELECT id, name FROM apartments WHERE location = ? ORDER BY name',
+            [location]
+          );
+          
+          if (!apartments || apartments.length === 0) {
             const keyboard = {
               inline_keyboard: [
-                [
-                  { text: '📝 Edit', callback_data: `admin_apartment_edit_${apt.id}` },
-                  { text: '🗑️ Delete', callback_data: `admin_apartment_delete_${apt.id}` },
-                  { text: apt.verified ? '⏸️ Deactivate' : '✅ Activate', callback_data: `admin_apartment_toggle_${apt.id}` }
-                ],
-                [{ text: '📸 Manage Photos', callback_data: `admin_apartment_photos_${apt.id}` }]
+                [{ text: '« Back to Locations', callback_data: 'admin_apartments_all' }]
               ]
             };
-            
-            await bot.sendMessage(chatId, message, { 
-              parse_mode: 'Markdown',
+            return bot.sendMessage(chatId, `🏠 No apartments found in ${location}.`, { 
               reply_markup: keyboard 
             });
           }
           
-          const navKeyboard = {
-            inline_keyboard: [
-              [{ text: '➕ Add New Apartment', callback_data: 'admin_apartments_add' }],
-              [{ text: '« Back to Apartments Menu', callback_data: 'admin_menu_apartments' }]
-            ]
+          let message = `📍 *${location}*\n\nSelect an apartment:`;
+          
+          // Create apartment name buttons (2 per row)
+          const aptButtons = [];
+          for (let i = 0; i < apartments.length; i += 2) {
+            const row = [];
+            row.push({ text: `🏠 ${apartments[i].name}`, callback_data: `admin_apartment_detail_${apartments[i].id}` });
+            if (i + 1 < apartments.length) {
+              row.push({ text: `🏠 ${apartments[i+1].name}`, callback_data: `admin_apartment_detail_${apartments[i+1].id}` });
+            }
+            aptButtons.push(row);
+          }
+          
+          // Add back button
+          aptButtons.push([{ text: '« Back to Locations', callback_data: 'admin_apartments_all' }]);
+          
+          const keyboard = {
+            inline_keyboard: aptButtons
           };
           
-          await bot.sendMessage(chatId, '------------------\nSelect an option:', { 
-            reply_markup: navKeyboard 
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
           });
           
         } catch (error) {
-          logger.error('Error fetching apartments:', error);
-          bot.sendMessage(chatId, '❌ Error fetching apartments.');
+          logger.error('Error fetching apartments by location:', error);
+          bot.sendMessage(chatId, '❌ Error loading apartments.');
+        }
+      }
+      
+      else if (data.startsWith('admin_apartment_detail_')) {
+        const apartmentId = data.replace('admin_apartment_detail_', '');
+        
+        await bot.answerCallbackQuery(cb.id, { text: 'Loading apartment details...' });
+        
+        try {
+          const { executeQuery } = require('../../config/database');
+          
+          const [apt] = await executeQuery(`
+            SELECT a.*, 
+                   (SELECT COUNT(*) FROM bookings WHERE apartment_id = a.id) as total_bookings
+            FROM apartments a 
+            WHERE a.id = ?
+          `, [apartmentId]);
+          
+          if (!apt) {
+            return bot.sendMessage(chatId, '❌ Apartment not found.');
+          }
+          
+          const status = apt.verified ? '✅ Active' : '⏸️ Inactive';
+          const photoCount = Apartment.processPhotos(apt).length;
+          
+          const message = 
+            `🏠 *${apt.name}*\n\n` +
+            `📍 *Location:* ${apt.location}\n` +
+            `📫 *Address:* ${apt.address || 'N/A'}\n` +
+            `🏷️ *Type:* ${apt.type}\n` +
+            `💰 *Price:* ₦${Number(apt.price).toLocaleString()}/night\n` +
+            `🛏️ *Bedrooms:* ${apt.bedrooms}\n` +
+            `🚿 *Bathrooms:* ${apt.bathrooms}\n` +
+            `📝 *Description:* ${apt.description || 'N/A'}\n` +
+            `👤 *Owner ID:* ${apt.owner_id || 'Not assigned'}\n` +
+            `📊 *Total Bookings:* ${apt.total_bookings || 0}\n` +
+            `📸 *Photos:* ${photoCount}\n` +
+            `📌 *Status:* ${status}`;
+          
+          const keyboard = {
+            inline_keyboard: [
+              [
+                { text: '📝 Edit', callback_data: `admin_apartment_edit_${apt.id}` },
+                { text: '🗑️ Delete', callback_data: `admin_apartment_delete_${apt.id}` },
+                { text: apt.verified ? '⏸️ Deactivate' : '✅ Activate', callback_data: `admin_apartment_toggle_${apt.id}` }
+              ],
+              [{ text: '📸 Manage Photos', callback_data: `admin_apartment_photos_${apt.id}` }],
+              [{ text: '« Back to Apartments', callback_data: `admin_apartments_location_${apt.location}` }]
+            ]
+          };
+          
+          await bot.sendMessage(chatId, message, { 
+            parse_mode: 'Markdown',
+            reply_markup: keyboard 
+          });
+          
+        } catch (error) {
+          logger.error('Error fetching apartment details:', error);
+          bot.sendMessage(chatId, '❌ Error loading apartment details.');
         }
       }
       
