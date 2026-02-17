@@ -1,79 +1,110 @@
-const BookingService = require('../../services/bookingService');
-const { getDateRangePickerKeyboard } = require('../../utils/datePicker');
+// ============================================
+// HANDLES BOOKING MESSAGES (NAME & PHONE COLLECTION)
+// Location: /handlers/messages/booking.js
+// ============================================
+
 const { getRedis } = require('../../config/redis');
 const logger = require('../../middleware/logger');
 
 module.exports = (bot) => {
-
+  
   bot.on('message', async (msg) => {
-
-    // STOP if no text
-    if (!msg.text) return;
-
+    if (!msg.text || msg.text.startsWith('/')) return;
+    
     const chatId = msg.chat.id;
     const text = msg.text.trim();
-
-    // STOP commands
-    if (text.startsWith('/')) return;
-
+    const messageId = msg.message_id;
+    
+    const redis = getRedis();
+    
     try {
-      const redis = getRedis();
-      const sessionRaw = await redis.get(`session:${chatId}`);
+      const sessionRaw = await redis.get(`booking:${chatId}`);
       if (!sessionRaw) return;
-
+      
       const session = JSON.parse(sessionRaw);
-
-      // ONLY run if user is actually in booking flow
-      if (!session.step) return;
-
-      /* ================= NAME STEP ================= */
+      
+      // ===== STEP 1: GET NAME =====
       if (session.step === 'awaiting_name') {
-
-        const result = await BookingService.processName(chatId, text, session);
-
-        if (result.success) {
-          await bot.sendMessage(chatId, result.message, {
+        
+        if (text.split(' ').length < 2) {
+          await bot.sendMessage(
+            chatId,
+            '❌ Please enter your *full name* (first and last name):',
+            { parse_mode: 'Markdown', reply_markup: { force_reply: true } }
+          );
+          return;
+        }
+        
+        session.userName = text;
+        session.step = 'awaiting_phone';
+        await redis.setex(`booking:${chatId}`, 3600, JSON.stringify(session));
+        
+        await bot.sendMessage(
+          chatId,
+          '📞 *Step 2 of 2: Your Phone Number*\n\n' +
+          'Please enter your phone number:\n' +
+          'Example: `08031234567`',
+          { 
             parse_mode: 'Markdown',
             reply_markup: { force_reply: true }
-          });
-        } else {
-          await bot.sendMessage(chatId, result.message);
-        }
+          }
+        );
+        
+        await bot.deleteMessage(chatId, messageId).catch(() => {});
+        return;
       }
-
-      /* ================= PHONE STEP ================= */
-      else if (session.step === 'awaiting_phone') {
-
-        // Ignore menu button texts
-        const blockedTexts = [
-          '🏠 View Apartments',
-          '📞 Contact Admin',
-          '⬅️ Back to Main Menu'
-        ];
-
-        if (blockedTexts.includes(text)) return;
-
-        // Validate phone
-        if (!/^[0-9+\-\s()]{7,}$/.test(text)) {
-          return bot.sendMessage(chatId, '❌ Please enter a valid phone number:');
+      
+      // ===== STEP 2: GET PHONE =====
+      if (session.step === 'awaiting_phone') {
+        
+        const phone = text.replace(/[^\d]/g, '');
+        
+        if (!/^0\d{10}$/.test(phone)) {
+          await bot.sendMessage(
+            chatId,
+            '❌ Please enter a valid *11-digit* Nigerian phone number:\n' +
+            'Example: `08031234567`',
+            { 
+              parse_mode: 'Markdown',
+              reply_markup: { force_reply: true }
+            }
+          );
+          return;
         }
-
-        const result = await BookingService.processPhone(chatId, text, session);
-
-        if (result.success) {
-          await bot.sendMessage(chatId, result.message, {
+        
+        session.userPhone = phone;
+        session.step = 'awaiting_dates';
+        await redis.setex(`booking:${chatId}`, 3600, JSON.stringify(session));
+        
+        await bot.deleteMessage(chatId, messageId).catch(() => {});
+        
+        const keyboard = {
+          inline_keyboard: [
+            [{ text: '📅 Select Dates', callback_data: 'show_date_picker' }],
+            [{ text: '❌ Cancel Booking', callback_data: 'cancel_booking' }]
+          ]
+        };
+        
+        await bot.sendMessage(
+          chatId,
+          `✅ *Details Confirmed!*\n\n` +
+          `Name: ${session.userName}\n` +
+          `Phone: ${phone}\n\n` +
+          `Click below to select your dates:`,
+          {
             parse_mode: 'Markdown',
-            reply_markup: getDateRangePickerKeyboard('start').reply_markup
-          });
-        } else {
-          await bot.sendMessage(chatId, result.message);
-        }
+            reply_markup: keyboard
+          }
+        );
+        return;
       }
-
-    } catch (error) {
-      logger.error('Booking message handler error:', error);
+      
+    } catch (err) {
+      logger.error('BOOKING MESSAGE HANDLER ERROR:', err);
+      await bot.sendMessage(
+        chatId,
+        '❌ An error occurred. Please try again.'
+      );
     }
-
   });
-
 };
