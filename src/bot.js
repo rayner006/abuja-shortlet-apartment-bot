@@ -59,5 +59,8 @@ bot.getMe().then(botInfo => {
   logger.error('❌ Failed to get bot info - invalid token?', err);
 });
 
-module.exports = bot; 
+/* ================= REGISTER HANDLERS ================= */
+require('./handlers/commands/adminBooking')(bot);
 
+/* ================= EXPORT BOT ================= */
+module.exports = bot;
