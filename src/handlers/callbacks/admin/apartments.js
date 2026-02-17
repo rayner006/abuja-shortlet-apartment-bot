@@ -80,8 +80,6 @@ module.exports = {
 // ==================== HANDLER FUNCTIONS ====================
 
 async function handleViewLocations(bot, cb, chatId) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Loading locations...' });
-  
   try {
     const locations = await executeQuery('SELECT DISTINCT location FROM apartments ORDER BY location');
     
@@ -128,8 +126,6 @@ async function handleViewLocations(bot, cb, chatId) {
 
 async function handleApartmentsByLocation(bot, cb, chatId, data) {
   const location = data.replace('admin_apartments_location_', '');
-  
-  await bot.answerCallbackQuery(cb.id, { text: `Loading apartments in ${location}...` });
   
   try {
     const apartments = await executeQuery(
@@ -179,8 +175,6 @@ async function handleApartmentsByLocation(bot, cb, chatId, data) {
 
 async function handleApartmentDetail(bot, cb, chatId, data) {
   const apartmentId = data.replace('admin_apartment_detail_', '');
-  
-  await bot.answerCallbackQuery(cb.id, { text: 'Loading apartment details...' });
   
   try {
     const [apt] = await executeQuery(`
@@ -235,8 +229,6 @@ async function handleApartmentDetail(bot, cb, chatId, data) {
 }
 
 async function handleAddApartment(bot, cb, chatId) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Starting add process...' });
-  
   const message = 
     `🏠 *Add New Apartment*\n\n` +
     `Please send me the apartment details in this format:\n\n` +
@@ -278,8 +270,6 @@ async function handleDeleteApartment(bot, cb, chatId, data) {
 }
 
 async function handleConfirmDeleteApartment(bot, cb, chatId, data) {
-  await bot.answerCallbackQuery(cb.id, { text: 'Deleting...' });
-  
   const apartmentId = data.replace('admin_apartment_confirm_delete_', '');
   
   try {
@@ -338,8 +328,6 @@ async function handleToggleApartment(bot, cb, chatId, data) {
 async function handleEditApartment(bot, cb, chatId, data) {
   const apartmentId = data.replace('admin_apartment_edit_', '');
   
-  await bot.answerCallbackQuery(cb.id, { text: 'Loading edit form...' });
-  
   try {
     const [apt] = await executeQuery('SELECT * FROM apartments WHERE id = ?', [apartmentId]);
     
@@ -385,8 +373,6 @@ async function handleEditApartment(bot, cb, chatId, data) {
 
 async function handleManagePhotos(bot, cb, chatId, data) {
   const apartmentId = data.replace('admin_apartment_photos_', '');
-  
-  await bot.answerCallbackQuery(cb.id, { text: 'Loading photos...' });
   
   try {
     const [apt] = await executeQuery('SELECT * FROM apartments WHERE id = ?', [apartmentId]);
@@ -450,8 +436,6 @@ async function handleDeletePhoto(bot, cb, chatId, data) {
   const apartmentId = parts[3];
   const photoIndex = parseInt(parts[4]);
   
-  await bot.answerCallbackQuery(cb.id, { text: 'Deleting photo...' });
-  
   try {
     const [apt] = await executeQuery('SELECT * FROM apartments WHERE id = ?', [apartmentId]);
     
@@ -483,8 +467,6 @@ async function handleDeletePhoto(bot, cb, chatId, data) {
 
 async function handleAddPhotos(bot, cb, chatId, data) {
   const apartmentId = data.replace('admin_photo_add_', '');
-  
-  await bot.answerCallbackQuery(cb.id, { text: 'Ready to receive photos...' });
   
   await bot.sendMessage(chatId, 
     `📸 *Add Photos*\n\n` +
@@ -520,8 +502,6 @@ async function handleDeleteAllPhotos(bot, cb, chatId, data) {
 
 async function handleConfirmDeleteAllPhotos(bot, cb, chatId, data) {
   const apartmentId = data.replace('admin_photo_confirm_deleteall_', '');
-  
-  await bot.answerCallbackQuery(cb.id, { text: 'Deleting all photos...' });
   
   try {
     await executeQuery('UPDATE apartments SET photo_paths = ? WHERE id = ?', [JSON.stringify([]), apartmentId]);
