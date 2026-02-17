@@ -50,10 +50,8 @@ module.exports = (bot) => {
         
         const keyboard = {
           inline_keyboard: [
-            [{ text: '📋 View All Apartments', callback_data: 'admin_apartments_all' }],
+            [{ text: '📍 View by Location', callback_data: 'admin_apartments_all' }],
             [{ text: '➕ Add New Apartment', callback_data: 'admin_apartments_add' }],
-            [{ text: '👥 View by Owner', callback_data: 'admin_apartments_by_owner' }],
-            [{ text: '📊 Statistics', callback_data: 'admin_apartments_stats' }],
             [{ text: '« Back to Admin', callback_data: 'admin_main_menu' }]
           ]
         };
