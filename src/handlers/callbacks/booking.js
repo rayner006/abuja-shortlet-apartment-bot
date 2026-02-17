@@ -1,74 +1,94 @@
 const BookingService = require('../../services/bookingService');
-const { getDateRangePickerKeyboard } = require('../../utils/datePicker');
+const { getDatePickerKeyboard } = require('../../utils/datePicker');
 const { getRedis } = require('../../config/redis');
 const logger = require('../../middleware/logger');
 
 module.exports = (bot) => {
 
-  bot.on('message', async (msg) => {
-    const chatId = msg.chat.id;
-    const text = msg.text;
+  bot.on('callback_query', async (cb) => {
+    if (!cb.message) return;
 
-    // Ignore commands or empty text
-    if (!text || text.startsWith('/')) return;
+    const chatId = cb.message.chat.id;
+    const messageId = cb.message.message_id;
+    const data = cb.data;
 
-    try {
-      const redis = getRedis();
-      const sessionRaw = await redis.get(`session:${chatId}`);
-      if (!sessionRaw) return;
+    const redis = getRedis();
 
-      const session = JSON.parse(sessionRaw);
+    const getSession = async () => {
+      const raw = await redis.get(`session:${chatId}`);
+      return raw ? JSON.parse(raw) : null;
+    };
 
-      /* ================= NAME INPUT ================= */
-      if (session.step === 'awaiting_name') {
-        const result = await BookingService.processName(chatId, text, session);
+    const saveSession = async (session) => {
+      await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
+    };
 
-        if (result.success) {
-          await bot.sendMessage(chatId, result.message, {
-            parse_mode: 'Markdown',
-            reply_markup: {
-              force_reply: true,
-              selective: true
-            }
-          });
-        } else {
-          await bot.sendMessage(chatId, result.message);
+    console.log('📅 CALLBACK:', data);
+
+    /* ================= BOOK NOW ================= */
+    if (data.startsWith('book_')) {
+      const apartmentId = data.replace('book_', '');
+
+      try {
+        const result = await BookingService.startBooking(chatId, apartmentId, cb.message);
+
+        if (!result.success) {
+          return bot.sendMessage(chatId, result.message);
         }
+
+        await saveSession(result.session);
+
+        await bot.sendMessage(chatId, result.message, {
+          parse_mode: 'Markdown',
+          reply_markup: { force_reply: true }
+        });
+
+        await bot.answerCallbackQuery(cb.id, { text: 'Booking started' });
+
+      } catch (err) {
+        logger.error(err);
       }
-
-      /* ================= PHONE INPUT ================= */
-      else if (session.step === 'awaiting_phone') {
-
-        // Basic phone validation
-        if (!text.match(/^[0-9+\-\s()]{7,}$/)) {
-          return bot.sendMessage(chatId, '❌ Please enter a valid phone number:');
-        }
-
-        const result = await BookingService.processPhone(chatId, text, session);
-
-        if (result.success) {
-
-          // IMPORTANT: Set booking step
-          session.step = 'awaiting_start_date';
-          await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
-
-          await bot.sendMessage(chatId,
-            '📅 *Select your Check-In Date*',
-            {
-              parse_mode: 'Markdown',
-              reply_markup: getDateRangePickerKeyboard('start').reply_markup
-            }
-          );
-
-        } else {
-          await bot.sendMessage(chatId, result.message);
-        }
-      }
-
-    } catch (error) {
-      logger.error('Booking message handler error:', error);
-      bot.sendMessage(chatId, '❌ Error processing your request. Please try again.');
     }
+
+    /* ================= DATE CLICK ================= */
+    else if (data.startsWith('date_')) {
+      const selectedDate = data.replace('date_', '');
+      const session = await getSession();
+      if (!session) return;
+
+      if (session.step === 'awaiting_start_date') {
+        session.startDate = selectedDate;
+        session.step = 'awaiting_end_date';
+        await saveSession(session);
+
+        const d = new Date();
+        await bot.editMessageText('📅 *Select Check-Out Date*', {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: getDatePickerKeyboard(
+            d.getFullYear(),
+            d.getMonth(),
+            session.startDate
+          ).reply_markup
+        });
+      }
+
+      else if (session.step === 'awaiting_end_date') {
+        const result = await BookingService.processEndDate(chatId, selectedDate, session);
+
+        await redis.del(`session:${chatId}`);
+
+        await bot.editMessageText(result.message, {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown'
+        });
+      }
+
+      await bot.answerCallbackQuery(cb.id);
+    }
+
   });
 
 };
