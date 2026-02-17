@@ -78,28 +78,49 @@ module.exports = (bot) => {
             return bot.sendMessage(chatId, '📭 No bookings found.');
           }
           
-          let message = '📋 *All Bookings*\n\n';
-          bookings.forEach((booking, index) => {
-            message += `${index+1}. *Booking ${booking.booking_code}*\n`;
-            message += `   Guest: ${booking.user_name || 'N/A'}\n`;
-            message += `   Dates: ${booking.start_date} to ${booking.end_date}\n`;
-            message += `   Amount: ₦${booking.amount}\n`;
-            message += `   Status: ${booking.status || 'Pending'}\n\n`;
-          });
+          // Send each booking as a separate message
+          for (const booking of bookings) {
+            // Format dates properly
+            const startDate = new Date(booking.start_date).toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric'
+            });
+            
+            const endDate = new Date(booking.end_date).toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric'
+            });
+            
+            const message = 
+              `📋 *Booking ${booking.booking_code}*\n` +
+              `👤 Guest: ${booking.user_name || 'N/A'}\n` +
+              `📅 Dates: ${startDate} to ${endDate}\n` +
+              `💰 Amount: ₦${Number(booking.amount).toLocaleString()}\n` +
+              `📊 Status: ${booking.status || 'Pending'}`;
+            
+            const keyboard = {
+              inline_keyboard: [
+                [{ text: `🗑️ Delete Booking`, callback_data: `admin_delete_${booking.booking_code}` }]
+              ]
+            };
+            
+            await bot.sendMessage(chatId, message, { 
+              parse_mode: 'Markdown',
+              reply_markup: keyboard 
+            });
+          }
           
-          const buttons = bookings.map(booking => {
-            return [{ text: `🗑️ Delete ${booking.booking_code}`, callback_data: `admin_delete_${booking.booking_code}` }];
-          });
-          
-          buttons.push([{ text: '« Back to Bookings', callback_data: 'admin_menu_bookings' }]);
-          
-          const keyboard = {
-            inline_keyboard: buttons
+          // Send back button
+          const backKeyboard = {
+            inline_keyboard: [
+              [{ text: '« Back to Bookings Menu', callback_data: 'admin_menu_bookings' }]
+            ]
           };
           
-          await bot.sendMessage(chatId, message, { 
-            parse_mode: 'Markdown',
-            reply_markup: keyboard 
+          await bot.sendMessage(chatId, '------------------\nSelect an option:', { 
+            reply_markup: backKeyboard 
           });
           
         } catch (error) {
