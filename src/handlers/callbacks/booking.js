@@ -1,13 +1,14 @@
 const BookingService = require('../../services/bookingService');
-const { getDatePickerKeyboard } = require('../../utils/datePicker');
 const { getRedis } = require('../../config/redis');
 const logger = require('../../middleware/logger');
+
+// ===== NEW: Import our professional date picker =====
+const datePicker = require('./datePicker');
 
 /* ===== SHORT DATE FORMAT HELPER ===== */
 const formatShortDate = (dateStr) => {
   if (!dateStr) return '';
   const d = new Date(dateStr);
-
   return d.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
@@ -35,115 +36,84 @@ module.exports = (bot) => {
       await redis.setex(`session:${chatId}`, 3600, JSON.stringify(session));
     };
 
-    /* ===== HEADER BUILDER (UPDATED ONLY) ===== */
-    const buildHeader = (session) => {
-
-      // 1. BOTH DATES SELECTED
-      if (session.startDate && session.endDate) {
-        return `📅 *Confirm your dates:*\n\nCheck-in: ${formatShortDate(session.startDate)}\nCheck-out: ${formatShortDate(session.endDate)}`;
-      }
-
-      // 2. SELECT CHECK-IN
-      if (session.step === 'awaiting_start_date') {
-        return '📅 *Select your check-in date:*';
-      }
-
-      // 3. SELECT CHECK-OUT
-      if (session.step === 'awaiting_end_date') {
-        return `📅 *Select your check-out date:*\n\nCheck-in: ${formatShortDate(session.startDate)}`;
-      }
-
-      return '📅 *Select your check-in date:*';
-    };
-
     try {
 
       /* ================= BOOK NOW ================= */
       if (data.startsWith('book_')) {
         const apartmentId = data.replace('book_', '');
 
+        // Store apartment ID in session
         const session = {
           apartmentId,
-          step: 'awaiting_name'
+          step: 'awaiting_dates'
         };
-
         await saveSession(session);
 
-        await bot.sendMessage(
-          chatId,
-          '📝 *Enter Your Full Name:*',
-          {
-            parse_mode: 'Markdown',
-            reply_markup: { force_reply: true }
-          }
-        );
+        // ===== USE OUR NEW DATE PICKER =====
+        await datePicker.startDatePicker(bot, chatId, { apartmentId });
 
+        // Delete the original message with "Book Now" button
+        await bot.deleteMessage(chatId, messageId).catch(() => {});
+        
         await bot.answerCallbackQuery(query.id);
         return;
       }
 
-      /* ================= DATE SELECT ================= */
-      if (data.startsWith('date_')) {
-        const selectedDate = data.replace('date_', '');
-        const session = await getSession();
-        if (!session) return bot.answerCallbackQuery(query.id);
-
-        if (session.step === 'awaiting_start_date') {
-          session.startDate = selectedDate;
-          session.step = 'awaiting_end_date';
+      /* ================= DATE PICKER CALLBACKS ================= */
+      // All date-related callbacks go to our datePicker
+      if (data.startsWith('date_') || 
+          data === 'month_prev' || 
+          data === 'month_next' || 
+          data === 'year_prev' || 
+          data === 'year_next' || 
+          data === 'clear_dates' || 
+          data === 'confirm_dates') {
+        
+        const result = await datePicker.handleCallback(
+          bot, 
+          query, 
+          chatId, 
+          messageId, 
+          data
+        );
+        
+        if (result.action === 'confirm') {
+          // Dates are confirmed! Get the session from datePicker
+          const session = await getSession();
+          
+          // Update session with the confirmed dates
+          session.startDate = result.checkIn;
+          session.endDate = result.checkOut;
+          session.step = 'awaiting_guest_details';
           await saveSession(session);
-
-          const start = new Date(selectedDate);
-          const header = buildHeader(session);
-
-          await bot.editMessageText(header, {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: 'Markdown',
-            reply_markup: getDatePickerKeyboard(
-              start.getFullYear(),
-              start.getMonth(),
-              session.startDate,
-              session.endDate,
-              session.selectedMonth,
-              session.selectedYear
-            ).reply_markup
-          });
-
-          return bot.answerCallbackQuery(query.id, { text: 'Check-in selected' });
+          
+          // Now ask for guest details
+          await bot.sendMessage(
+            chatId,
+            `📝 *Enter Your Full Name:*\n\n` +
+            `Please type your full name to continue with the booking.`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: { force_reply: true }
+            }
+          );
         }
-
-        if (session.step === 'awaiting_end_date') {
-          const start = new Date(session.startDate);
-          const end = new Date(selectedDate);
-
-          if (end <= start) {
-            return bot.answerCallbackQuery(query.id, {
-              text: 'Check-out must be after check-in'
-            });
-          }
-
-          session.endDate = selectedDate;
-          await saveSession(session);
-
-          const header = buildHeader(session);
-
-          await bot.editMessageText(header, {
-            chat_id: chatId,
-            message_id: messageId,
+        else if (result.action === 'cancel') {
+          // User cancelled - clean up session
+          await redis.del(`session:${chatId}`);
+          
+          await bot.sendMessage(chatId, result.message, {
             parse_mode: 'Markdown',
-            reply_markup: getDatePickerKeyboard(
-              start.getFullYear(),
-              start.getMonth(),
-              session.startDate,
-              session.endDate,
-              session.selectedMonth,
-              session.selectedYear
-            ).reply_markup
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🏠 Browse Apartments', callback_data: 'browse_apartments' }],
+                [{ text: '🔍 Search Again', callback_data: 'search_again' }]
+              ]
+            }
           });
-
-          return bot.answerCallbackQuery(query.id, { text: 'Check-out selected' });
         }
+        
+        return;
       }
 
       /* ================= CONFIRM BOOKING ================= */
@@ -166,61 +136,6 @@ module.exports = (bot) => {
         });
 
         return bot.answerCallbackQuery(query.id, { text: 'Booking confirmed' });
-      }
-
-      /* ================= MONTH NAV ================= */
-      if (data.startsWith('month_')) {
-        const parts = data.split('_');
-        const year = Number(parts[1]);
-        const month = Number(parts[2]);
-
-        const session = await getSession();
-        if (!session) return;
-
-        const header = buildHeader(session);
-
-        await bot.editMessageText(header, {
-          chat_id: chatId,
-          message_id: messageId,
-          parse_mode: 'Markdown',
-          reply_markup: getDatePickerKeyboard(
-            year,
-            month,
-            session.startDate,
-            session.endDate,
-            session.selectedMonth,
-            session.selectedYear
-          ).reply_markup
-        });
-
-        return bot.answerCallbackQuery(query.id);
-      }
-
-      /* ================= CLEAR ================= */
-      if (data === 'clear_dates') {
-        const session = await getSession();
-        if (!session) return;
-
-        session.startDate = null;
-        session.endDate = null;
-        session.selectedMonth = null;
-        session.selectedYear = null;
-        session.step = 'awaiting_start_date';
-        await saveSession(session);
-
-        const now = new Date();
-
-        await bot.editMessageText('📅 *Select your check-in date:*', {
-          chat_id: chatId,
-          message_id: messageId,
-          parse_mode: 'Markdown',
-          reply_markup: getDatePickerKeyboard(
-            now.getFullYear(),
-            now.getMonth()
-          ).reply_markup
-        });
-
-        return bot.answerCallbackQuery(query.id, { text: 'Dates cleared' });
       }
 
       /* ================= CANCEL ================= */
