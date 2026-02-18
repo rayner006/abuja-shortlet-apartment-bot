@@ -10,6 +10,7 @@ const bot = new TelegramBot(token, { polling: true });
 // Express app for Railway health checks
 const app = express();
 const PORT = process.env.PORT || 3000;
+const PUBLIC_URL = process.env.PUBLIC_URL || '';
 
 // Serve static files from uploads directory
 app.use('/uploads', express.static('uploads'));
@@ -163,8 +164,45 @@ bot.on('callback_query', async (callbackQuery) => {
                 );
             } else {
                 for (const apt of apartments) {
+                    // Send the apartment details first
                     await bot.sendMessage(chatId, formatApartmentMessage(apt), {
-                        parse_mode: 'Markdown',
+                        parse_mode: 'Markdown'
+                    });
+                    
+                    // Send photos if they exist
+                    if (apt.photo_paths) {
+                        try {
+                            const photos = typeof apt.photo_paths === 'string' 
+                                ? JSON.parse(apt.photo_paths) 
+                                : apt.photo_paths;
+                            
+                            if (Array.isArray(photos) && photos.length > 0) {
+                                // Send up to 5 photos
+                                const photosToSend = photos.slice(0, 5);
+                                
+                                for (const photoPath of photosToSend) {
+                                    try {
+                                        // If it's a local path, prepend PUBLIC_URL
+                                        if (!photoPath.startsWith('http')) {
+                                            const photoUrl = `${PUBLIC_URL}/${photoPath}`;
+                                            await bot.sendPhoto(chatId, photoUrl);
+                                        } else {
+                                            await bot.sendPhoto(chatId, photoPath);
+                                        }
+                                        // Small delay to avoid flooding
+                                        await new Promise(resolve => setTimeout(resolve, 500));
+                                    } catch (photoError) {
+                                        console.log('Failed to send photo:', photoPath, photoError.message);
+                                    }
+                                }
+                            }
+                        } catch (e) {
+                            console.log('Error parsing photos for apartment', apt.id, e);
+                        }
+                    }
+                    
+                    // Send action buttons after photos
+                    await bot.sendMessage(chatId, 'Choose an action:', {
                         reply_markup: {
                             inline_keyboard: [
                                 [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
