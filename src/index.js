@@ -6,6 +6,7 @@ const { initDatabase } = require('./models');
 const logger = require('./config/logger');
 const redis = require('./config/redis');
 const { setupCommands } = require('./bot/commands');
+const { setupAdminCommands } = require('./bot/adminCommands'); // 👈 ADD THIS
 const { handleCallback } = require('./bot/callbacks');
 const { handleMessage } = require('./bot/conversations');
 
@@ -27,6 +28,7 @@ initDatabase().catch(err => {
 
 // Setup bot commands
 setupCommands(bot);
+setupAdminCommands(bot); // 👈 ADD THIS
 
 // --- START BOT SAFELY ---
 (async () => {
