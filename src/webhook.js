@@ -1,32 +1,34 @@
-const config = require('./config/environment');  // ← YOU NEED THIS LINE!
+const config = require('./config/environment');
 const logger = require('./middleware/logger');
 
-module.exports = (app, bot) => {
+async function setupWebhook(app, bot) {
   const token = config.botToken;
-  
-  // Webhook endpoint
-  app.post(`/webhook/${token}`, (req, res) => {
+
+  /* ================= WEBHOOK ENDPOINT ================= */
+  app.post(`/webhook/${token}`, async (req, res) => {
     try {
-      bot.processUpdate(req.body);
+      await bot.processUpdate(req.body);
       res.sendStatus(200);
     } catch (error) {
       logger.error('Error processing webhook:', error);
       res.sendStatus(500);
     }
   });
-  
-  // Set webhook in production
+
+  /* ================= SET WEBHOOK ================= */
   if (config.nodeEnv === 'production' && config.webhookUrl) {
-    const webhookUrl = `${config.webhookUrl}/webhook/${token}`;
-    
-    bot.setWebHook(webhookUrl)
-      .then(() => {
-        logger.info(`✅ Webhook set to: ${webhookUrl}`);
-      })
-      .catch(err => {
-        logger.error('❌ Failed to set webhook:', err);
-      });
+    try {
+      const webhookUrl = `${config.webhookUrl}/webhook/${token}`;
+
+      await bot.setWebHook(webhookUrl);
+
+      logger.info(`✅ Webhook set to: ${webhookUrl}`);
+    } catch (err) {
+      logger.error('❌ Failed to set webhook:', err);
+    }
   }
-  
+
   logger.info('Webhook handler registered');
-};
+}
+
+module.exports = setupWebhook;
