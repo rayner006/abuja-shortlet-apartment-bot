@@ -164,12 +164,7 @@ bot.on('callback_query', async (callbackQuery) => {
                 );
             } else {
                 for (const apt of apartments) {
-                    // Send the apartment details first
-                    await bot.sendMessage(chatId, formatApartmentMessage(apt), {
-                        parse_mode: 'Markdown'
-                    });
-                    
-                    // Send photos as an album if they exist
+                    // Send photos as an album first (if they exist)
                     if (apt.photo_paths) {
                         try {
                             const photos = typeof apt.photo_paths === 'string' 
@@ -214,7 +209,12 @@ bot.on('callback_query', async (callbackQuery) => {
                         }
                     }
                     
-                    // Send action buttons after photos
+                    // Send the apartment details after photos
+                    await bot.sendMessage(chatId, formatApartmentMessage(apt), {
+                        parse_mode: 'Markdown'
+                    });
+                    
+                    // Send action buttons after details
                     await bot.sendMessage(chatId, 'Choose an action:', {
                         reply_markup: {
                             inline_keyboard: [
