@@ -120,4 +120,161 @@ const sendApartmentDetails = async (bot, chatId, apartment) => {
     const amenitiesList = amenities.slice(0, 5).map(a => `• ${a}`).join('\n');
     
     const details = `
-🏠 *
+🏠 *${apartment.title}*
+
+📍 *Location:* ${apartment.location}
+💰 *Price:* ${formatCurrency(apartment.pricePerNight)}/night
+👥 *Max Guests:* ${apartment.maxGuests}
+🛏 *Bedrooms:* ${apartment.bedrooms}
+🚿 *Bathrooms:* ${apartment.bathrooms}
+
+📝 *Description:*
+${apartment.description || 'No description provided.'}
+
+✨ *Key Amenities:*
+${amenitiesList || '• Basic amenities included'}
+
+👤 *Hosted by:* ${apartment.User?.firstName || 'Property Manager'}
+📊 *Views:* ${apartment.views}
+    `;
+    
+    const keyboard = createApartmentKeyboard(apartment.id);
+    
+    if (apartment.images && apartment.images.length > 0) {
+      // Send first photo with details
+      await bot.sendPhoto(chatId, apartment.images[0], {
+        caption: details,
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+      
+      // Send additional photos if any
+      if (apartment.images.length > 1) {
+        const media = apartment.images.slice(1, 5).map(img => ({
+          type: 'photo',
+          media: img
+        }));
+        
+        if (media.length > 0) {
+          await bot.sendMediaGroup(chatId, media);
+        }
+      }
+    } else {
+      await bot.sendMessage(chatId, details, {
+        parse_mode: 'Markdown',
+        reply_markup: keyboard
+      });
+    }
+  } catch (error) {
+    logger.error('Send apartment details error:', error);
+  }
+};
+
+const handleApartmentDetails = async (bot, callbackQuery, apartmentId) => {
+  const chatId = callbackQuery.message.chat.id;
+  
+  try {
+    const apartment = await Apartment.findByPk(apartmentId, {
+      include: [{
+        model: User,
+        attributes: ['id', 'firstName', 'username', 'phone']
+      }]
+    });
+    
+    if (!apartment) {
+      await bot.sendMessage(chatId, 'Apartment not found.');
+      return;
+    }
+    
+    await sendApartmentDetails(bot, chatId, apartment);
+    
+  } catch (error) {
+    logger.error('Apartment details error:', error);
+    bot.sendMessage(chatId, 'Error loading apartment details.');
+  }
+};
+
+const handleAmenities = async (bot, callbackQuery, apartmentId) => {
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+  
+  try {
+    const apartment = await Apartment.findByPk(apartmentId);
+    
+    if (!apartment || !apartment.amenities) {
+      await bot.answerCallbackQuery(callbackQuery.id, {
+        text: 'No amenities listed for this apartment'
+      });
+      return;
+    }
+    
+    const amenities = apartment.amenities;
+    const amenitiesText = amenities.map((a, i) => `${i+1}. ${a}`).join('\n');
+    
+    const text = `
+✨ *Amenities for ${apartment.title}*
+
+${amenitiesText}
+
+${amenities.length} amenities available.
+    `;
+    
+    await bot.editMessageCaption(text, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🔙 Back to Apartment', callback_data: `view_${apartmentId}` }]
+        ]
+      }
+    });
+    
+  } catch (error) {
+    logger.error('Amenities error:', error);
+    bot.answerCallbackQuery(callbackQuery.id, { text: 'Error loading amenities' });
+  }
+};
+
+const handleAddApartment = async (bot, msg) => {
+  const chatId = msg.chat.id;
+  const userId = msg.from.id;
+  
+  try {
+    const user = await User.findOne({ where: { telegramId: userId } });
+    
+    if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
+      await bot.sendMessage(chatId, 
+        'You need to be registered as an owner first.\n\n' +
+        'Use /register\\_owner to get started.'
+      , { parse_mode: 'Markdown' });
+      return;
+    }
+    
+    // Initialize apartment data in redis cache
+    const sessionId = `add_apt_${chatId}`;
+    await redis.set(sessionId, JSON.stringify({
+      step: 'title',
+      data: {}
+    }), 'EX', 3600); // 1 hour expiry
+    
+    await bot.sendMessage(chatId, 
+      "📝 *Let's add your apartment!*\n\n" +
+      "Please enter the *title* of your apartment:",
+      { parse_mode: 'Markdown' }
+    );
+    
+  } catch (error) {
+    logger.error('Add apartment error:', error);
+    bot.sendMessage(chatId, 'Error starting apartment addition. Please try again.');
+  }
+};
+
+module.exports = {
+  handleSearch,
+  processSearch,
+  handleApartmentDetails,
+  handleAmenities,
+  handleAddApartment,
+  searchState
+};
