@@ -15,10 +15,20 @@ async function filterApartmentsByType(location, bedroomCount) {
         let params = [location];
         
         if (bedroomCount === 0) {
-            // Studio apartments
-            query = "SELECT * FROM apartments WHERE location = ? AND (title LIKE '%studio%' OR type = 'studio')";
+            // Studio apartments - check type column or title
+            query = `
+                SELECT a.*, po.business_name, po.phone, po.telegram_chat_id 
+                FROM apartments a 
+                LEFT JOIN property_owners po ON a.property_owner_id = po.id 
+                WHERE a.location = ? AND (a.type = 'studio' OR a.type LIKE '%studio%')
+            `;
         } else {
-            query = "SELECT * FROM apartments WHERE location = ? AND bedrooms = ?";
+            query = `
+                SELECT a.*, po.business_name, po.phone, po.telegram_chat_id 
+                FROM apartments a 
+                LEFT JOIN property_owners po ON a.property_owner_id = po.id 
+                WHERE a.location = ? AND a.bedrooms = ?
+            `;
             params.push(bedroomCount);
         }
         
@@ -31,19 +41,41 @@ async function filterApartmentsByType(location, bedroomCount) {
 }
 
 function formatApartmentMessage(apartment) {
-    return `
-🏠 *${apartment.title}*
+    // Format amenities if they exist
+    let amenitiesText = 'Standard amenities';
+    if (apartment.photo_paths) {
+        try {
+            const paths = typeof apartment.photo_paths === 'string' 
+                ? JSON.parse(apartment.photo_paths) 
+                : apartment.photo_paths;
+            if (Array.isArray(paths) && paths.length > 0) {
+                amenitiesText = paths.join(' • ');
+            }
+        } catch (e) {
+            // Ignore JSON parse error
+        }
+    }
+
+    let message = `
+🏠 *${apartment.name || apartment.title}*
 📍 ${apartment.location}
-💰 ₦${apartment.price}/night
+💰 ₦${apartment.price || apartment.price_per_night}/night
 🛏️ ${apartment.bedrooms} Bedroom(s) | 🚿 ${apartment.bathrooms} Bathroom(s)
-👥 Max ${apartment.max_guests} guests
-⭐ Rating: ${apartment.rating || 'New'}/5
-
-📝 *Description:*
-${apartment.description}
-
-✨ *Amenities:* ${apartment.amenities ? apartment.amenities.join(' • ') : 'Standard amenities'}
     `;
+
+    // Add owner info if available
+    if (apartment.business_name) {
+        message += `👔 *Owner:* ${apartment.business_name}\n`;
+    }
+
+    message += `
+📝 *Description:*
+${apartment.description || 'No description available'}
+
+✨ *Amenities:* ${amenitiesText}
+    `;
+
+    return message;
 }
 
 function getApartmentTypeKeyboard() {
