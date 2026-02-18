@@ -1,58 +1,35 @@
 require('dotenv').config();
 
-const express = require('express');
-const { Sequelize } = require('sequelize');
-const Redis = require('ioredis');
+const http = require('http');
 const logger = require('./middleware/logger');
+const config = require('./config/environment');
 
-// ================= INIT EXPRESS =================
-const app = express();
-app.use(express.json());
+const { connectDatabase } = require('./config/db');
+const createBot = require('./bot');
+const createApp = require('./app');
+const setupWebhook = require('./webhook');
 
-// ================= DATABASE =================
-const sequelize = new Sequelize(
-  process.env.DB_NAME,
-  process.env.DB_USER,
-  process.env.DB_PASS,
-  {
-    host: process.env.DB_HOST || 'localhost',
-    dialect: 'mysql',
-    logging: false,
-  }
-);
-
-// ================= REDIS =================
-const redis = new Redis({
-  host: process.env.REDIS_HOST || '127.0.0.1',
-  port: process.env.REDIS_PORT || 6379,
-});
-
-// ================= TELEGRAM BOT =================
-const initBot = require('./bot');
-
-// ================= HEALTH ROUTE =================
-app.get('/', (req, res) => {
-  res.send('Abuja Apartment Bot is running...');
-});
-
-// ================= START SERVER =================
-const PORT = process.env.PORT || 5000;
-
+/* ================= START APPLICATION ================= */
 async function startApp() {
   try {
-    // DB Connect
-    await sequelize.authenticate();
+    // Database Connect
+    await connectDatabase();
     logger.info('Database connected successfully');
 
-    // Redis Connect
-    await redis.ping();
-    logger.info('Redis connected successfully');
+    // Init Bot
+    const bot = createBot();
 
-    // Start Bot
-    initBot(redis, sequelize);
+    // Express App
+    const app = createApp(bot);
 
-    // Express Server
-    app.listen(PORT, () => {
+    // Webhook Setup
+    await setupWebhook(app, bot);
+
+    // HTTP Server
+    const PORT = process.env.PORT || 5000;
+    const server = http.createServer(app);
+
+    server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
     });
 
@@ -64,11 +41,8 @@ async function startApp() {
 
 startApp();
 
-// ================= GRACEFUL SHUTDOWN =================
+/* ================= GRACEFUL SHUTDOWN ================= */
 process.on('SIGINT', async () => {
   logger.info('Shutting down...');
-  await sequelize.close();
-  redis.disconnect();
   process.exit(0);
 });
-
