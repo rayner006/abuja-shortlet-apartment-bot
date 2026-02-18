@@ -30,10 +30,14 @@ class AdminApartments extends AdminBase {
             const ownerId = data.split('_')[2];
             await this.contactOwner(callbackQuery, ownerId);
         }
+        else if (data.startsWith('view_owner_')) {
+            const ownerId = data.split('_')[2];
+            await this.viewOwnerDetails(callbackQuery, ownerId);
+        }
     }
 
     // ============================================
-    // PENDING APPROVALS (Your exact code)
+    // PENDING APPROVALS (Enhanced)
     // ============================================
     
     async showPendingApprovals(callbackQuery, page = 1) {
@@ -41,47 +45,78 @@ class AdminApartments extends AdminBase {
         const messageId = callbackQuery.message.message_id;
         
         try {
+            // Get total count for pagination
+            const totalPending = await Apartment.count({
+                where: { isApproved: false }
+            });
+            
+            if (totalPending === 0) {
+                const emptyMessage = `
+✅ *No Pending Approvals*
+
+All apartments have been reviewed.
+There are no listings waiting for approval at the moment.
+
+📊 *Quick Stats:*
+• Total Apartments: ${await Apartment.count()}
+• Approved: ${await Apartment.count({ where: { isApproved: true } })}
+• Pending: 0
+                `;
+                
+                await this.bot.editMessageText(emptyMessage, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '🔄 Refresh', callback_data: 'admin_pending_1' }],
+                            [{ text: '🏢 View All Apartments', callback_data: 'admin_apartments_1' }],
+                            [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
+                        ]
+                    }
+                });
+                await this.answerCallback(callbackQuery);
+                return;
+            }
+            
+            // Get paginated pending apartments
+            const itemsPerPage = 1;
+            const totalPages = Math.ceil(totalPending / itemsPerPage);
+            const startIndex = (page - 1) * itemsPerPage;
+            
             const apartments = await Apartment.findAll({
                 where: { isApproved: false },
                 include: [{
                     model: User,
-                    attributes: ['id', 'firstName', 'username', 'phone']
+                    attributes: ['id', 'firstName', 'lastName', 'username', 'phone', 'email']
                 }],
-                order: [['created_at', 'ASC']]
+                order: [['created_at', 'ASC']],
+                limit: itemsPerPage,
+                offset: startIndex
             });
             
-            if (apartments.length === 0) {
-                await this.bot.editMessageText(
-                    '✅ No pending approvals at the moment.\n\nAll apartments have been reviewed.',
-                    {
-                        chat_id: chatId,
-                        message_id: messageId,
-                        reply_markup: {
-                            inline_keyboard: [
-                                [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
-                            ]
-                        }
-                    }
-                );
-                return;
-            }
+            const apt = apartments[0];
             
-            const itemsPerPage = 1;
-            const totalPages = Math.ceil(apartments.length / itemsPerPage);
-            const startIndex = (page - 1) * itemsPerPage;
-            const apt = apartments[startIndex];
-            
+            // Format amenities
             const amenities = apt.amenities || [];
-            const amenitiesText = amenities.length > 0 
-                ? amenities.slice(0, 5).map(a => `• ${a}`).join('\n')
+            const amenitiesList = amenities.length > 0 
+                ? amenities.map(a => `• ${a}`).join('\n')
                 : '• No amenities listed';
+            
+            // Days since listing
+            const daysSinceListed = Math.floor((new Date() - new Date(apt.createdAt)) / (1000 * 60 * 60 * 24));
             
             const text = `
 📋 *Pending Approval (${page}/${totalPages})*
 
 🏠 *${apt.title}*
-👤 *Owner:* ${apt.User?.firstName || 'Unknown'} (@${apt.User?.username || 'N/A'})
-📞 *Phone:* ${apt.User?.phone || 'Not provided'}
+
+👤 *Owner Information:*
+• Name: ${apt.User?.firstName || 'Unknown'} ${apt.User?.lastName || ''}
+• Username: @${apt.User?.username || 'N/A'}
+• Phone: ${apt.User?.phone || 'Not provided'}
+• Email: ${apt.User?.email || 'Not provided'}
+
 📍 *Location:* ${apt.location}
 💰 *Price:* ${this.formatCurrency(apt.pricePerNight)}/night
 🛏 *Bedrooms:* ${apt.bedrooms} | 🚿 *Bathrooms:* ${apt.bathrooms}
@@ -91,9 +126,12 @@ class AdminApartments extends AdminBase {
 ${apt.description || 'No description provided.'}
 
 ✨ *Amenities:*
-${amenitiesText}
+${amenitiesList}
 
-📅 *Listed on:* ${this.formatDate(apt.createdAt)}
+📊 *Listing Details:*
+• Listed: ${this.formatDate(apt.createdAt)} (${daysSinceListed} days ago)
+• Views: ${apt.views || 0}
+• Status: ⏳ Pending Review
             `;
             
             const keyboard = {
@@ -103,22 +141,23 @@ ${amenitiesText}
                         { text: '❌ Reject', callback_data: `reject_${apt.id}` }
                     ],
                     [
-                        { text: '📞 Contact Owner', callback_data: `contact_owner_${apt.ownerId}` }
+                        { text: '📞 Contact Owner', callback_data: `contact_owner_${apt.ownerId}` },
+                        { text: '👤 View Owner', callback_data: `view_owner_${apt.ownerId}` }
                     ]
                 ]
             };
             
-            // Add pagination
+            // Add pagination if needed
             if (totalPages > 1) {
-                const paginationButtons = [];
+                const paginationRow = [];
                 if (page > 1) {
-                    paginationButtons.push({ text: '◀️ Previous', callback_data: `admin_pending_${page - 1}` });
+                    paginationRow.push({ text: '◀️ Previous', callback_data: `admin_pending_${page - 1}` });
                 }
-                paginationButtons.push({ text: `📄 ${page}/${totalPages}`, callback_data: 'noop' });
+                paginationRow.push({ text: `📄 ${page}/${totalPages}`, callback_data: 'noop' });
                 if (page < totalPages) {
-                    paginationButtons.push({ text: 'Next ▶️', callback_data: `admin_pending_${page + 1}` });
+                    paginationRow.push({ text: 'Next ▶️', callback_data: `admin_pending_${page + 1}` });
                 }
-                keyboard.inline_keyboard.push(paginationButtons);
+                keyboard.inline_keyboard.push(paginationRow);
             }
             
             keyboard.inline_keyboard.push([{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]);
@@ -154,12 +193,13 @@ ${amenitiesText}
             await this.answerCallback(callbackQuery);
             
         } catch (error) {
+            console.error('Error in showPendingApprovals:', error);
             await this.handleError(chatId, error, 'showPendingApprovals');
         }
     }
 
     // ============================================
-    // APPROVE APARTMENT (Your exact code)
+    // APPROVE APARTMENT (Enhanced with better messaging)
     // ============================================
     
     async approveApartment(callbackQuery, apartmentId) {
@@ -171,23 +211,35 @@ ${amenitiesText}
             });
             
             if (!apartment) {
-                await this.answerCallback(callbackQuery, 'Apartment not found', true);
+                await this.answerCallback(callbackQuery, '❌ Apartment not found', true);
                 return;
             }
             
             apartment.isApproved = true;
             await apartment.save();
             
+            // Notify owner
             if (apartment.User && apartment.User.telegramId) {
-                await this.bot.sendMessage(apartment.User.telegramId,
-                    `✅ *Great news! Your apartment has been approved!*\n\n` +
-                    `🏠 *${apartment.title}*\n` +
-                    `📍 *Location:* ${apartment.location}\n` +
-                    `💰 *Price:* ${this.formatCurrency(apartment.pricePerNight)}/night\n\n` +
-                    `Your listing is now live and visible to all users searching in Abuja.\n\n` +
-                    `You can manage your apartment using /my\\_apartments`,
-                    { parse_mode: 'Markdown' }
-                );
+                const ownerMessage = `
+✅ *Congratulations! Your Apartment is Approved!*
+
+🏠 *${apartment.title}*
+📍 *Location:* ${apartment.location}
+💰 *Price:* ${this.formatCurrency(apartment.pricePerNight)}/night
+
+Your listing is now LIVE and visible to all users searching in Abuja!
+
+📊 *What happens next:*
+• Users can now search and book your apartment
+• You'll receive notifications for new bookings
+• You can manage your listing with /my_apartments
+
+Need help? Contact support@abujashortlet.com
+                `;
+                
+                await this.bot.sendMessage(apartment.User.telegramId, ownerMessage, {
+                    parse_mode: 'Markdown'
+                }).catch(() => {});
             }
             
             const text = `✅ *Apartment Approved*\n\n${apartment.title} has been approved and is now live.`;
@@ -200,6 +252,7 @@ ${amenitiesText}
                     reply_markup: {
                         inline_keyboard: [
                             [{ text: '📋 Next Pending', callback_data: 'admin_pending_1' }],
+                            [{ text: '🏢 All Apartments', callback_data: 'admin_apartments_1' }],
                             [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
                         ]
                     }
@@ -212,21 +265,23 @@ ${amenitiesText}
                     reply_markup: {
                         inline_keyboard: [
                             [{ text: '📋 Next Pending', callback_data: 'admin_pending_1' }],
+                            [{ text: '🏢 All Apartments', callback_data: 'admin_apartments_1' }],
                             [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
                         ]
                     }
                 });
             }
             
-            await this.answerCallback(callbackQuery, 'Apartment approved successfully!');
+            await this.answerCallback(callbackQuery, '✅ Apartment approved successfully!');
             
         } catch (error) {
+            console.error('Error approving apartment:', error);
             await this.handleError(chatId, error, 'approveApartment');
         }
     }
 
     // ============================================
-    // REJECT APARTMENT (Your exact code)
+    // REJECT APARTMENT (Enhanced with better messaging)
     // ============================================
     
     async rejectApartment(callbackQuery, apartmentId) {
@@ -238,28 +293,51 @@ ${amenitiesText}
             });
             
             if (!apartment) {
-                await this.answerCallback(callbackQuery, 'Apartment not found', true);
+                await this.answerCallback(callbackQuery, '❌ Apartment not found', true);
                 return;
             }
             
+            // Store owner info before deletion
+            const ownerTelegramId = apartment.User?.telegramId;
+            const ownerName = apartment.User?.firstName || 'Owner';
+            const aptTitle = apartment.title;
+            const aptLocation = apartment.location;
+            
+            // Delete the apartment
             await apartment.destroy();
             
-            if (apartment.User && apartment.User.telegramId) {
-                await this.bot.sendMessage(apartment.User.telegramId,
-                    `❌ *Apartment Listing Not Approved*\n\n` +
-                    `We're sorry, but your apartment listing "${apartment.title}" was not approved.\n\n` +
-                    `*Possible reasons:*\n` +
-                    `• Incomplete or unclear information\n` +
-                    `• Missing photos\n` +
-                    `• Price seems unrealistic\n` +
-                    `• Location not clearly specified\n\n` +
-                    `Please review your listing and try again with more details.\n\n` +
-                    `Use /add\\_apartment to create a new listing.`,
-                    { parse_mode: 'Markdown' }
-                );
+            // Notify owner
+            if (ownerTelegramId) {
+                const ownerMessage = `
+❌ *Apartment Listing Not Approved*
+
+🏠 *${aptTitle}*
+📍 *Location:* ${aptLocation}
+
+We're sorry, but your apartment listing was not approved.
+
+📋 *Common reasons for rejection:*
+• Incomplete or unclear information
+• Missing or low-quality photos
+• Price seems unrealistic
+• Location not clearly specified
+• Amenities list is incomplete
+
+📝 *How to resubmit:*
+1. Review and update your apartment details
+2. Add clear, high-quality photos
+3. Ensure accurate pricing
+4. Use /add_apartment to create a new listing
+
+Need help? Contact support@abujashortlet.com
+                `;
+                
+                await this.bot.sendMessage(ownerTelegramId, ownerMessage, {
+                    parse_mode: 'Markdown'
+                }).catch(() => {});
             }
             
-            const text = `❌ *Apartment Rejected*\n\n${apartment.title} has been rejected.`;
+            const text = `❌ *Apartment Rejected*\n\n${aptTitle} has been rejected.`;
             
             if (callbackQuery.message.photo) {
                 await this.bot.editMessageCaption(text, {
@@ -287,15 +365,143 @@ ${amenitiesText}
                 });
             }
             
-            await this.answerCallback(callbackQuery, 'Apartment rejected');
+            await this.answerCallback(callbackQuery, '❌ Apartment rejected');
             
         } catch (error) {
+            console.error('Error rejecting apartment:', error);
             await this.handleError(chatId, error, 'rejectApartment');
         }
     }
 
     // ============================================
-    // SHOW ALL APARTMENTS (Your exact code)
+    // VIEW OWNER DETAILS (New)
+    // ============================================
+    
+    async viewOwnerDetails(callbackQuery, ownerId) {
+        const chatId = callbackQuery.message.chat.id;
+        
+        try {
+            const owner = await User.findByPk(ownerId);
+            
+            if (!owner) {
+                await this.answerCallback(callbackQuery, '❌ Owner not found', true);
+                return;
+            }
+            
+            // Get owner's apartment stats
+            const totalApartments = await Apartment.count({ where: { ownerId: owner.id } });
+            const approvedApartments = await Apartment.count({ 
+                where: { ownerId: owner.id, isApproved: true } 
+            });
+            const pendingApartments = await Apartment.count({ 
+                where: { ownerId: owner.id, isApproved: false } 
+            });
+            
+            const roleEmoji = this.getRoleEmoji(owner.role);
+            const statusEmoji = this.getStatusEmoji(owner.isActive);
+            
+            const text = `
+👤 *Owner Details*
+
+${statusEmoji} ${roleEmoji} *${owner.firstName || ''} ${owner.lastName || ''}*
+
+📱 *Username:* @${owner.username || 'N/A'}
+📞 *Phone:* ${owner.phone || 'Not provided'}
+📧 *Email:* ${owner.email || 'Not provided'}
+🆔 *Telegram ID:* \`${owner.telegramId}\`
+
+📊 *Statistics:*
+• Total Listings: ${totalApartments}
+• ✅ Approved: ${approvedApartments}
+• ⏳ Pending: ${pendingApartments}
+• Member since: ${this.formatDate(owner.createdAt)}
+
+⚙️ *Quick Actions:*
+            `;
+            
+            const keyboard = {
+                inline_keyboard: [
+                    [
+                        { text: '💬 Message Owner', callback_data: `user_message_${owner.id}` },
+                        { text: '📋 View Listings', callback_data: `user_listings_${owner.id}` }
+                    ],
+                    [
+                        { text: owner.isActive ? '🔴 Deactivate' : '🟢 Activate', 
+                          callback_data: `user_toggle_${owner.id}` },
+                        { text: '👑 Change Role', callback_data: `user_role_${owner.id}` }
+                    ],
+                    [{ text: '« Back to Pending', callback_data: 'admin_pending_1' }]
+                ]
+            };
+            
+            await this.bot.sendMessage(chatId, text, {
+                parse_mode: 'Markdown',
+                reply_markup: keyboard
+            });
+            
+            await this.answerCallback(callbackQuery);
+            
+        } catch (error) {
+            console.error('Error viewing owner details:', error);
+            await this.handleError(chatId, error, 'viewOwnerDetails');
+        }
+    }
+
+    // ============================================
+    // CONTACT OWNER (Enhanced with state management)
+    // ============================================
+    
+    async contactOwner(callbackQuery, ownerId) {
+        const chatId = callbackQuery.message.chat.id;
+        const messageId = callbackQuery.message.message_id;
+        
+        try {
+            const owner = await User.findByPk(ownerId);
+            
+            if (!owner) {
+                await this.answerCallback(callbackQuery, '❌ Owner not found', true);
+                return;
+            }
+            
+            const text = `
+📞 *Contact Apartment Owner*
+
+You are about to contact *${owner.firstName || 'Owner'}*.
+
+Type your message below and it will be sent directly to the owner.
+To cancel, type /cancel
+            `;
+            
+            // Set state for message sending
+            if (!global.messageStates) global.messageStates = {};
+            global.messageStates[chatId] = {
+                action: 'sending_message_to_owner',
+                targetUserId: owner.id,
+                targetTelegramId: owner.telegramId,
+                returnTo: 'admin_pending_1'
+            };
+            
+            await this.bot.editMessageText(text, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '« Cancel', callback_data: 'admin_pending_1' }]
+                    ]
+                }
+            });
+            
+            await this.answerCallback(callbackQuery);
+            
+        } catch (error) {
+            console.error('Error contacting owner:', error);
+            await this.handleError(chatId, error, 'contactOwner');
+        }
+    }
+
+    // ============================================
+    // SHOW ALL APARTMENTS (Your existing code)
     // ============================================
     
     async showAllApartments(callbackQuery, page = 1) {
@@ -303,33 +509,31 @@ ${amenitiesText}
         const messageId = callbackQuery.message.message_id;
         
         try {
+            const itemsPerPage = 5;
+            const totalApartments = await Apartment.count();
+            const totalPages = Math.ceil(totalApartments / itemsPerPage);
+            
             const apartments = await Apartment.findAll({
                 include: [{
                     model: User,
                     attributes: ['id', 'firstName', 'username']
                 }],
                 order: [['created_at', 'DESC']],
-                limit: 5,
-                offset: (page - 1) * 5
+                limit: itemsPerPage,
+                offset: (page - 1) * itemsPerPage
             });
             
-            const totalApartments = await Apartment.count();
-            const totalPages = Math.ceil(totalApartments / 5);
-            
             let text = `🏢 *All Apartments* (Page ${page}/${totalPages})\n\n`;
+            text += `📊 Total: ${totalApartments} | ✅ Approved: ${await Apartment.count({ where: { isApproved: true } })} | ⏳ Pending: ${await Apartment.count({ where: { isApproved: false } })}\n\n`;
             
             for (const apt of apartments) {
                 const statusEmoji = apt.isApproved ? '✅' : '⏳';
                 const availabilityEmoji = apt.isAvailable ? '🟢' : '🔴';
                 
                 text += `${statusEmoji} *${apt.title}*\n`;
-                text += `   👤 Owner: ${apt.User?.firstName || 'Unknown'} (@${apt.User?.username || 'N/A'})\n`;
-                text += `   📍 Location: ${apt.location}\n`;
-                text += `   💰 ${this.formatCurrency(apt.pricePerNight)}/night\n`;
-                text += `   📊 Status: ${availabilityEmoji} ${apt.isAvailable ? 'Available' : 'Unavailable'}\n`;
-                text += `   👥 Max guests: ${apt.maxGuests} | 🛏️ ${apt.bedrooms} bed\n`;
-                text += `   📅 Added: ${this.formatDate(apt.createdAt)}\n`;
-                text += `   👁️ Views: ${apt.views}\n\n`;
+                text += `   👤 Owner: ${apt.User?.firstName || 'Unknown'}\n`;
+                text += `   📍 ${apt.location} | 💰 ${this.formatCurrency(apt.pricePerNight)}\n`;
+                text += `   📊 ${availabilityEmoji} ${apt.isAvailable ? 'Available' : 'Unavailable'} | 👁️ ${apt.views || 0} views\n\n`;
             }
             
             const keyboard = {
@@ -349,7 +553,7 @@ ${amenitiesText}
             }
             
             keyboard.inline_keyboard.push(
-                [{ text: '📊 Export Data', callback_data: 'admin_export_apartments' }],
+                [{ text: '📋 Pending Approvals', callback_data: 'admin_pending_1' }],
                 [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
             );
             
@@ -363,47 +567,8 @@ ${amenitiesText}
             await this.answerCallback(callbackQuery);
             
         } catch (error) {
+            console.error('Error showing all apartments:', error);
             await this.handleError(chatId, error, 'showAllApartments');
-        }
-    }
-
-    // ============================================
-    // CONTACT OWNER
-    // ============================================
-    
-    async contactOwner(callbackQuery, ownerId) {
-        const chatId = callbackQuery.message.chat.id;
-        
-        try {
-            const owner = await User.findByPk(ownerId);
-            
-            if (!owner) {
-                await this.answerCallback(callbackQuery, 'Owner not found', true);
-                return;
-            }
-            
-            const text = `
-📞 *Contact Owner*
-
-👤 Name: ${owner.firstName || 'Unknown'} ${owner.lastName || ''}
-📱 Username: @${owner.username || 'N/A'}
-📞 Phone: ${owner.phone || 'Not provided'}
-🆔 Telegram ID: \`${owner.telegramId}\`
-
-You can:
-• Click on the username to message them directly
-• Use the phone number to call/WhatsApp
-• Use /message command with their Telegram ID
-            `;
-            
-            await this.bot.sendMessage(chatId, text, {
-                parse_mode: 'Markdown'
-            });
-            
-            await this.answerCallback(callbackQuery);
-            
-        } catch (error) {
-            await this.handleError(chatId, error, 'contactOwner');
         }
     }
 }
