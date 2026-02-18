@@ -48,8 +48,17 @@ class AdminController extends AdminBase {
             data.startsWith('set_role_') || data.startsWith('confirm_delete_')) {
             await this.users.handleCallback(callbackQuery);
         }
-        else if (data.startsWith('admin_pending') || data.startsWith('approve_') || 
-                 data.startsWith('reject_') || data.startsWith('admin_apartments')) {
+        // Apartment-related callbacks (including pending, approvals, and all apartment actions)
+        else if (data.startsWith('admin_pending') || 
+                 data.startsWith('approve_') || 
+                 data.startsWith('reject_') || 
+                 data.startsWith('admin_apartments') ||
+                 data.startsWith('apt_') ||                    // 👈 ADDED: apartment actions (edit, disable, stats, message, bookings, delete)
+                 data.startsWith('confirm_delete_apt_') ||    // 👈 ADDED: confirm delete apartment
+                 data.startsWith('filter_') ||                 // 👈 ADDED: filter actions
+                 data.startsWith('admin_filter_') ||           // 👈 ADDED: admin filter actions
+                 data.startsWith('sort_') ||                   // 👈 ADDED: sort actions
+                 data.startsWith('admin_sort_')) {             // 👈 ADDED: admin sort actions
             await this.apartments.handleCallback(callbackQuery);
         }
         else if (data === 'admin_stats') {
