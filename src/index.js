@@ -121,4 +121,30 @@ app.get('/stats', async (req, res) => {
 // Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  logger.info(`Server running on port
+  logger.info(`Server running on port ${PORT}`);
+  logger.info('Bot is running...');
+});
+
+// Graceful shutdown
+process.once('SIGINT', async () => {
+  logger.info('Shutting down...');
+  await redis.quit();
+  process.exit(0);
+});
+
+process.once('SIGTERM', async () => {
+  logger.info('Shutting down...');
+  await redis.quit();
+  process.exit(0);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+module.exports = { bot, app };
