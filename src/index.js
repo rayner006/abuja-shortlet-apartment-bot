@@ -169,7 +169,7 @@ bot.on('callback_query', async (callbackQuery) => {
                         parse_mode: 'Markdown'
                     });
                     
-                    // Send photos if they exist
+                    // Send photos as an album if they exist
                     if (apt.photo_paths) {
                         try {
                             const photos = typeof apt.photo_paths === 'string' 
@@ -177,27 +177,40 @@ bot.on('callback_query', async (callbackQuery) => {
                                 : apt.photo_paths;
                             
                             if (Array.isArray(photos) && photos.length > 0) {
-                                // Send up to 5 photos
-                                const photosToSend = photos.slice(0, 5);
+                                // Prepare media group (max 10 photos)
+                                const mediaGroup = [];
+                                const photosToSend = photos.slice(0, 10);
                                 
-                                for (const photoPath of photosToSend) {
-                                    try {
-                                        // If it's a local path, prepend PUBLIC_URL
-                                        if (!photoPath.startsWith('http')) {
-                                            const photoUrl = `${PUBLIC_URL}/${photoPath}`;
-                                            await bot.sendPhoto(chatId, photoUrl);
-                                        } else {
-                                            await bot.sendPhoto(chatId, photoPath);
-                                        }
-                                        // Small delay to avoid flooding
-                                        await new Promise(resolve => setTimeout(resolve, 500));
-                                    } catch (photoError) {
-                                        console.log('Failed to send photo:', photoPath, photoError.message);
+                                for (let i = 0; i < photosToSend.length; i++) {
+                                    const photoPath = photosToSend[i];
+                                    let photoUrl;
+                                    
+                                    if (!photoPath.startsWith('http')) {
+                                        photoUrl = `${PUBLIC_URL}/${photoPath}`;
+                                    } else {
+                                        photoUrl = photoPath;
+                                    }
+                                    
+                                    // First photo can have caption, others just media
+                                    if (i === 0) {
+                                        mediaGroup.push({
+                                            type: 'photo',
+                                            media: photoUrl,
+                                            caption: `📸 Apartment Photos (${photosToSend.length} images)`
+                                        });
+                                    } else {
+                                        mediaGroup.push({
+                                            type: 'photo',
+                                            media: photoUrl
+                                        });
                                     }
                                 }
+                                
+                                // Send as album
+                                await bot.sendMediaGroup(chatId, mediaGroup);
                             }
                         } catch (e) {
-                            console.log('Error parsing photos for apartment', apt.id, e);
+                            console.log('Error sending photo album for apartment', apt.id, e);
                         }
                     }
                     
