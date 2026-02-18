@@ -79,10 +79,10 @@ const setupCommands = (bot) => {
 /my\\_bookings - View your bookings
 /help - Show this help message
 
-*For Apartment Owners:*
-/register\\_owner - Register as an owner
-/add\\_apartment - Add a new apartment
-/my\\_apartments - Manage your apartments
+*For Property Owners:*
+/register\\_owner - Register to list your property
+/add\\_apartment - Add a new apartment listing
+/my\\_apartments - Manage your listings
 
 *For more assistance, contact support*
     `;
@@ -100,14 +100,19 @@ const setupCommands = (bot) => {
         user.role = 'owner';
         await user.save();
         bot.sendMessage(msg.chat.id, 
-          '✅ You are now registered as an apartment owner!\n\n' +
-          'You can now:\n' +
-          '• Add apartments using /add\\_apartment\n' +
-          '• View your apartments with /my\\_apartments\n' +
-          '• Manage bookings from your dashboard'
-        , { parse_mode: 'Markdown' });
+          '✅ *Congratulations! You can now list your property!*\n\n' +
+          'You now have access to:\n' +
+          '• 📋 *List your apartments* using /add\\_apartment\n' +
+          '• 👁️ *View your listings* with /my\\_apartments\n' +
+          '• 📊 *Manage bookings* from your dashboard\n\n' +
+          'Start earning from your property today! 🏠💰',
+        { parse_mode: 'Markdown' });
       } else if (user && (user.role === 'owner' || user.role === 'admin')) {
-        bot.sendMessage(msg.chat.id, 'You are already registered as an owner!');
+        bot.sendMessage(msg.chat.id, 
+          '✅ You are already registered as a property owner!\n\n' +
+          'Use /add\\_apartment to list a new property or /my\\_apartments to manage existing ones.',
+          { parse_mode: 'Markdown' }
+        );
       } else {
         bot.sendMessage(msg.chat.id, 'Please start the bot first with /start');
       }
@@ -124,7 +129,12 @@ const setupCommands = (bot) => {
       const user = await User.findOne({ where: { telegramId: msg.from.id } });
       
       if (!user || (user.role !== 'owner' && user.role !== 'admin')) {
-        bot.sendMessage(msg.chat.id, 'You need to be registered as an owner first. Use /register_owner');
+        bot.sendMessage(msg.chat.id, 
+          '📋 *Want to list your property?*\n\n' +
+          'You need to register as a property owner first.\n\n' +
+          'Use /register\\_owner to get started and start earning!',
+          { parse_mode: 'Markdown' }
+        );
         return;
       }
       
@@ -135,16 +145,21 @@ const setupCommands = (bot) => {
       
       if (apartments.length === 0) {
         bot.sendMessage(msg.chat.id, 
-          'You haven\'t added any apartments yet.\n\n' +
-          'Use /add\\_apartment to list your first property!'
-        , { parse_mode: 'Markdown' });
+          '📋 *You haven\'t listed any apartments yet*\n\n' +
+          'Ready to start earning? Use /add\\_apartment to list your first property!\n\n' +
+          '✨ *Benefits of listing with us:*\n' +
+          '• Reach thousands of potential guests\n' +
+          '• Professional property management\n' +
+          '• Secure payment processing\n' +
+          '• Best rates in Abuja',
+        { parse_mode: 'Markdown' });
         return;
       }
       
-      bot.sendMessage(msg.chat.id, `🏠 You have ${apartments.length} apartment(s):`);
+      bot.sendMessage(msg.chat.id, `🏠 You have *${apartments.length}* apartment(s) listed:`);
       
       for (const apt of apartments) {
-        const status = apt.isApproved ? '✅ Approved' : '⏳ Pending';
+        const status = apt.isApproved ? '✅ Approved' : '⏳ Pending Approval';
         const availability = apt.isAvailable ? '🟢 Available' : '🔴 Unavailable';
         
         const text = `
