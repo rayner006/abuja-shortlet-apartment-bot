@@ -284,16 +284,18 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    // ----- OWNER REGISTRATION -----
-    if (lowerText.includes('become owner') || lowerText.includes('register owner') || lowerText.includes('list apartment')) {
+    // ----- LIST APARTMENT (OWNER REGISTRATION) -----
+    if (lowerText.includes('list apartment') || lowerText.includes('become owner') || lowerText.includes('register owner') || lowerText.includes('list my apartment')) {
       return bot.sendMessage(chatId,
-        `🏢 *Become an Owner*\n\n` +
-        `List your apartment with us!\n\n` +
-        `• Reach thousands of guests\n` +
-        `• Professional management\n` +
-        `• Secure payments\n` +
+        `📋 *List Your Apartment*\n\n` +
+        `Ready to earn from your property?\n\n` +
+        `✅ *Benefits:*\n` +
+        `• Reach thousands of potential guests\n` +
+        `• Professional property management\n` +
+        `• Secure payment processing\n` +
         `• Best rates in Abuja\n\n` +
-        `Type /register_owner to get started!`
+        `Type /register_owner to get started!`,
+        { parse_mode: 'Markdown' }
       );
     }
     
