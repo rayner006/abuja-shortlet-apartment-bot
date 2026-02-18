@@ -22,7 +22,7 @@ bot.onText(/\/start/, (msg) => {
     const chatId = msg.chat.id;
     
     const welcomeMessage = `
- *Welcome To Abuja Shortlet Apartment!*🏠
+ *Welcome To Abuja Shortlet Apartment*🏠
 
  *Choose An Option Below* 👇👇👇
     `;
