@@ -17,10 +17,20 @@ const {
   rejectApartment,
   handleAdminStats,
   handleUserManagement,
-  handleAllApartments
+  handleAllApartments,
+  // 👇 Import all new user management functions
+  handleManageUser,
+  handleEditUser,
+  handleMessageUser,
+  handleUserListings,
+  handleUserBookings,
+  handleChangeRole,
+  handleSetRole,
+  handleToggleUserStatus,
+  handleDeleteUser,
+  handleConfirmDeleteUser
 } = require('../controllers/adminController');
 const { handleMenu } = require('../controllers/userController');
-// 👇 Updated import to include handleApartmentTypeCallback
 const { handleLocationSelection, handleLocationCallback, handleApartmentTypeCallback } = require('../controllers/locationController');
 
 const handleCallback = async (bot, callbackQuery) => {
@@ -31,20 +41,88 @@ const handleCallback = async (bot, callbackQuery) => {
   try {
     logger.info(`Callback received: ${data} from user ${callbackQuery.from.id}`);
     
-    // Location selection callbacks
-    if (data === 'show_locations') {
+    // ============================================
+    // USER MANAGEMENT CALLBACKS
+    // ============================================
+    
+    // Individual user management
+    if (data.startsWith('manage_')) {
+      await handleManageUser(bot, callbackQuery);
+    }
+    
+    // Edit user details
+    else if (data.startsWith('user_edit_')) {
+      await handleEditUser(bot, callbackQuery);
+    }
+    else if (data.startsWith('edit_firstname_')) {
+      // Handle first name edit - you'll need to implement this
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'First name edit coming soon!' });
+    }
+    else if (data.startsWith('edit_lastname_')) {
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Last name edit coming soon!' });
+    }
+    else if (data.startsWith('edit_phone_')) {
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Phone edit coming soon!' });
+    }
+    else if (data.startsWith('edit_email_')) {
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Email edit coming soon!' });
+    }
+    
+    // Message user
+    else if (data.startsWith('user_message_')) {
+      await handleMessageUser(bot, callbackQuery);
+    }
+    
+    // View user listings
+    else if (data.startsWith('user_listings_')) {
+      await handleUserListings(bot, callbackQuery);
+    }
+    
+    // View user bookings
+    else if (data.startsWith('user_bookings_')) {
+      await handleUserBookings(bot, callbackQuery);
+    }
+    
+    // Change user role
+    else if (data.startsWith('user_role_')) {
+      await handleChangeRole(bot, callbackQuery);
+    }
+    else if (data.startsWith('set_role_')) {
+      await handleSetRole(bot, callbackQuery);
+    }
+    
+    // Toggle user status (activate/deactivate)
+    else if (data.startsWith('user_toggle_')) {
+      await handleToggleUserStatus(bot, callbackQuery);
+    }
+    
+    // Delete user
+    else if (data.startsWith('user_delete_')) {
+      await handleDeleteUser(bot, callbackQuery);
+    }
+    else if (data.startsWith('confirm_delete_')) {
+      await handleConfirmDeleteUser(bot, callbackQuery);
+    }
+    
+    // ============================================
+    // LOCATION SELECTION CALLBACKS
+    // ============================================
+    
+    else if (data === 'show_locations') {
       await handleLocationSelection(bot, callbackQuery.message);
       await bot.answerCallbackQuery(callbackQuery.id);
     }
     else if (data.startsWith('location_')) {
       await handleLocationCallback(bot, callbackQuery);
     }
-    // 👇 NEW: Handle apartment type selection
     else if (data.startsWith('type_')) {
       await handleApartmentTypeCallback(bot, callbackQuery);
     }
     
-    // Menu callbacks
+    // ============================================
+    // MENU CALLBACKS
+    // ============================================
+    
     else if (data === 'menu_search') {
       await bot.sendMessage(chatId, '🔍 Use /search to find apartments');
       await bot.answerCallbackQuery(callbackQuery.id);
@@ -93,7 +171,10 @@ const handleCallback = async (bot, callbackQuery) => {
       await bot.answerCallbackQuery(callbackQuery.id);
     }
     
-    // Apartment view callbacks
+    // ============================================
+    // APARTMENT VIEW CALLBACKS
+    // ============================================
+    
     else if (data.startsWith('view_')) {
       const apartmentId = data.split('_')[1];
       await handleApartmentDetails(bot, callbackQuery, apartmentId);
@@ -106,12 +187,11 @@ const handleCallback = async (bot, callbackQuery) => {
       const apartmentId = data.split('_')[1];
       await handleApartmentPhotos(bot, callbackQuery, apartmentId);
     }
-    else if (data.startsWith('location_')) {
-      const apartmentId = data.split('_')[1];
-      await handleApartmentLocation(bot, callbackQuery, apartmentId);
-    }
     
-    // Booking callbacks
+    // ============================================
+    // BOOKING CALLBACKS
+    // ============================================
+    
     else if (data.startsWith('book_')) {
       const apartmentId = data.split('_')[1];
       await handleBookingStart(bot, callbackQuery, apartmentId);
@@ -125,7 +205,10 @@ const handleCallback = async (bot, callbackQuery) => {
       await cancelBooking(bot, callbackQuery, bookingId);
     }
     
-    // Admin callbacks
+    // ============================================
+    // ADMIN CALLBACKS
+    // ============================================
+    
     else if (data === 'admin_pending') {
       await handlePendingApprovals(bot, callbackQuery, 1);
     }
@@ -159,7 +242,10 @@ const handleCallback = async (bot, callbackQuery) => {
       await handleAllApartments(bot, callbackQuery, page);
     }
     
-    // Owner apartment management
+    // ============================================
+    // OWNER APARTMENT MANAGEMENT
+    // ============================================
+    
     else if (data.startsWith('edit_')) {
       const apartmentId = data.split('_')[1];
       await handleEditApartment(bot, callbackQuery, apartmentId);
@@ -185,7 +271,10 @@ const handleCallback = async (bot, callbackQuery) => {
       await bot.answerCallbackQuery(callbackQuery.id);
     }
     
-    // Owner booking management
+    // ============================================
+    // OWNER BOOKING MANAGEMENT
+    // ============================================
+    
     else if (data.startsWith('accept_booking_')) {
       const bookingId = data.split('_')[2];
       await handleAcceptBooking(bot, callbackQuery, bookingId);
@@ -199,18 +288,27 @@ const handleCallback = async (bot, callbackQuery) => {
       await handleContactGuest(bot, callbackQuery, userId);
     }
     
-    // Search navigation
+    // ============================================
+    // SEARCH NAVIGATION
+    // ============================================
+    
     else if (data === 'back_to_search') {
       await bot.sendMessage(chatId, '🔍 Use /search to start a new search');
       await bot.answerCallbackQuery(callbackQuery.id);
     }
     
-    // Noop (do nothing)
+    // ============================================
+    // NOOP (do nothing)
+    // ============================================
+    
     else if (data === 'noop') {
       await bot.answerCallbackQuery(callbackQuery.id);
     }
     
-    // Unknown callback
+    // ============================================
+    // UNKNOWN CALLBACK
+    // ============================================
+    
     else {
       logger.warn(`Unknown callback data: ${data}`);
       await bot.answerCallbackQuery(callbackQuery.id, {
@@ -226,7 +324,10 @@ const handleCallback = async (bot, callbackQuery) => {
   }
 };
 
-// Additional helper functions for owner management
+// ============================================
+// ADDITIONAL HELPER FUNCTIONS
+// ============================================
+
 const handleApartmentPhotos = async (bot, callbackQuery, apartmentId) => {
   const chatId = callbackQuery.message.chat.id;
   
@@ -252,52 +353,6 @@ const handleApartmentPhotos = async (bot, callbackQuery, apartmentId) => {
   } catch (error) {
     logger.error('Apartment photos error:', error);
     bot.answerCallbackQuery(callbackQuery.id, { text: 'Error loading photos' });
-  }
-};
-
-const handleApartmentLocation = async (bot, callbackQuery, apartmentId) => {
-  const chatId = callbackQuery.message.chat.id;
-  const messageId = callbackQuery.message.message_id;
-  
-  try {
-    const { Apartment } = require('../models');
-    const apartment = await Apartment.findByPk(apartmentId);
-    
-    if (!apartment) {
-      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Apartment not found' });
-      return;
-    }
-    
-    const locationText = `
-📍 *Location Details*
-
-🏠 *${apartment.title}*
-📍 *Area:* ${apartment.location}
-📫 *Full Address:* ${apartment.address || 'Not provided'}
-
-📍 *Nearby Places:*
-• Coming soon...
-
-📍 *Map Location:*
-https://maps.google.com/?q=${encodeURIComponent(apartment.address || apartment.location)}
-    `;
-    
-    await bot.editMessageCaption(locationText, {
-      chat_id: chatId,
-      message_id: messageId,
-      parse_mode: 'Markdown',
-      reply_markup: {
-        inline_keyboard: [
-          [{ text: '🔙 Back to Apartment', callback_data: `view_${apartmentId}` }]
-        ]
-      }
-    });
-    
-    await bot.answerCallbackQuery(callbackQuery.id);
-    
-  } catch (error) {
-    logger.error('Apartment location error:', error);
-    bot.answerCallbackQuery(callbackQuery.id, { text: 'Error loading location' });
   }
 };
 
