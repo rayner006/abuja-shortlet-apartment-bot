@@ -3,10 +3,19 @@ const { handleStart, handleMenu } = require('../controllers/userController');  /
 const { handleSearch } = require('../controllers/apartmentController');
 const { handleMyBookings } = require('../controllers/bookingController');
 const { handleAddApartment } = require('../controllers/apartmentController');
-const { handleAdminPanel } = require('../controllers/adminController');
+// 👇 REMOVE this old import
+// const { handleAdminPanel } = require('../controllers/adminController');
+
+// 👇 ADD this new import
+const AdminController = require('../controllers/admin');
+
 const logger = require('../config/logger');
 
 const setupCommands = (bot) => {
+  
+  // 👇 Create admin controller instance
+  const adminController = new AdminController(bot);
+  
   // Start command
   bot.onText(/\/start/, async (msg) => {
     try {
@@ -57,10 +66,11 @@ const setupCommands = (bot) => {
     }
   });
 
-  // Admin command
+  // Admin command - UPDATED to use new controller
   bot.onText(/\/admin/, async (msg) => {
     try {
-      await handleAdminPanel(bot, msg);
+      // Use the new admin controller
+      await adminController.handleAdminPanel(msg);
     } catch (error) {
       logger.error('Admin command error:', error);
       bot.sendMessage(msg.chat.id, 'Error accessing admin panel.');
