@@ -25,21 +25,20 @@ const handleStart = async (bot, msg) => {
       
       logger.info(`New user created: ${from.id} (${from.username})`);
       
-      // 🏖️ WELCOME MESSAGE WITH UPDATED BUTTONS for new users
+      // 🏖️ WELCOME MESSAGE WITH CLEAN TWO-ROW BUTTONS
       const welcomeText = `
 🏖️ *Welcome To Abuja Shortlet Apartments* 🏠
 
 👇🏻 *Click Any Button Below* 👇🏻
       `;
       
-      // Send welcome message with permanent keyboard - UPDATED BUTTONS
+      // Send welcome message with clean two-row keyboard
       await bot.sendMessage(chatId, welcomeText, { 
         parse_mode: 'Markdown',
         reply_markup: {
           keyboard: [
-            ['🔍 Search Apartments', '📅 My Bookings'],
-            ['📋 List Your Apartment', '❓ Help'],      // 👈 Changed from '🏢 Become Owner'
-            ['📍 Popular Areas', '💰 Price Guide']
+            ['🔍 Apartments', '📅 My Bookings'],
+            ['📋 List Property', '❓ Help']
           ],
           resize_keyboard: true,
           persistent: true  // Keyboard stays visible
@@ -51,14 +50,14 @@ const handleStart = async (bot, msg) => {
       user.lastActive = new Date();
       await user.save();
       
-      // Welcome back message for returning users - UPDATED BUTTONS
+      // Welcome back message for returning users - SAME CLEAN LAYOUT
       await bot.sendMessage(chatId, 
         `Welcome back, ${user.firstName || 'there'}! 👋\nUse /menu to continue.`,
         {
           reply_markup: {
             keyboard: [
-              ['🔍 Search Apartments', '📅 My Bookings'],
-              ['📋 List Your Apartment', '❓ Help']      // 👈 Changed from '🏢 Become Owner'
+              ['🔍 Apartments', '📅 My Bookings'],
+              ['📋 List Property', '❓ Help']
             ],
             resize_keyboard: true
           }
