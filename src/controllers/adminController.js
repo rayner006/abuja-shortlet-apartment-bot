@@ -1,9 +1,12 @@
-// src/controllers/adminController.js (COMPLETE FIXED VERSION)
+// src/controllers/adminController.js (UPDATED - Fixed duplicate issue)
 const { User, Apartment, Booking } = require('../models');
 const { Op } = require('sequelize');
 const { createAdminKeyboard, createPaginationKeyboard } = require('../utils/keyboards');
 const { formatCurrency, paginate } = require('../utils/helpers');
 const logger = require('../config/logger');
+
+// Track active admin sessions to prevent duplicates
+const activeAdminPanels = new Set();
 
 const handleAdminPanel = async (bot, msg) => {
   const chatId = msg.chat.id;
@@ -17,11 +20,31 @@ const handleAdminPanel = async (bot, msg) => {
     return;
   }
   
+  // Prevent duplicate admin panels within 2 seconds
+  const panelKey = `${chatId}_admin`;
+  if (activeAdminPanels.has(panelKey)) {
+    logger.info(`Duplicate admin panel prevented for chat ${chatId}`);
+    return;
+  }
+  
+  // Add to active panels
+  activeAdminPanels.add(panelKey);
+  setTimeout(() => activeAdminPanels.delete(panelKey), 2000);
+  
   const adminText = `
 ⚙️ *Admin Panel*
 
 Welcome to the administration panel. Select an option below:
   `;
+  
+  // 👇 Delete previous message if it's an admin panel to avoid duplicates
+  try {
+    if (msg.callback_query && msg.callback_query.message) {
+      await bot.deleteMessage(chatId, msg.callback_query.message.message_id).catch(() => {});
+    }
+  } catch (e) {
+    // Ignore delete errors
+  }
   
   await bot.sendMessage(chatId, adminText, {
     parse_mode: 'Markdown',
