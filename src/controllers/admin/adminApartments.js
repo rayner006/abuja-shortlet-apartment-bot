@@ -1,6 +1,7 @@
 const AdminBase = require('./adminBase');
-const { Apartment, User } = require('../../models');
+const { Apartment, User, Booking } = require('../../models');
 const { Op } = require('sequelize');
+const sequelize = require('../../config/database'); // Add this for aggregate functions
 
 class AdminApartments extends AdminBase {
     constructor(bot) {
@@ -33,6 +34,12 @@ class AdminApartments extends AdminBase {
         else if (data.startsWith('view_owner_')) {
             const ownerId = data.split('_')[2];
             await this.viewOwnerDetails(callbackQuery, ownerId);
+        }
+        else if (data.startsWith('apt_')) {
+            await this.handleApartmentActions(callbackQuery);
+        }
+        else if (data.startsWith('filter_') || data.startsWith('sort_')) {
+            await this.handleApartmentFilters(callbackQuery);
         }
     }
 
@@ -374,7 +381,7 @@ Need help? Contact support@abujashortlet.com
     }
 
     // ============================================
-    // VIEW OWNER DETAILS (New)
+    // VIEW OWNER DETAILS
     // ============================================
     
     async viewOwnerDetails(callbackQuery, ownerId) {
@@ -501,7 +508,7 @@ To cancel, type /cancel
     }
 
     // ============================================
-    // SHOW ALL APARTMENTS (Your existing code)
+    // ENHANCED SHOW ALL APARTMENTS with stats and actions
     // ============================================
     
     async showAllApartments(callbackQuery, page = 1) {
@@ -511,35 +518,146 @@ To cancel, type /cancel
         try {
             const itemsPerPage = 5;
             const totalApartments = await Apartment.count();
+            const activeApartments = await Apartment.count({ where: { isAvailable: true } });
+            const inactiveApartments = await Apartment.count({ where: { isAvailable: false } });
+            const approvedApartments = await Apartment.count({ where: { isApproved: true } });
+            const pendingApartments = await Apartment.count({ where: { isApproved: false } });
+            
+            // Get total views
+            const allApartments = await Apartment.findAll({
+                attributes: ['views'],
+                where: { isApproved: true }
+            });
+            const totalViews = allApartments.reduce((sum, apt) => sum + (apt.views || 0), 0);
+            
+            // Get total bookings
+            const totalBookings = await Booking.count({
+                include: [{
+                    model: Apartment,
+                    where: { isApproved: true }
+                }]
+            });
+            
+            // Get total revenue
+            const revenueResult = await Booking.findAll({
+                attributes: ['totalPrice'],
+                where: { 
+                    paymentStatus: 'paid',
+                    status: 'completed'
+                },
+                include: [{
+                    model: Apartment,
+                    where: { isApproved: true }
+                }]
+            });
+            const totalRevenue = revenueResult.reduce((sum, booking) => sum + parseFloat(booking.totalPrice || 0), 0);
+            
+            // Get location stats
+            const locationStats = await Apartment.findAll({
+                attributes: ['location', [sequelize.fn('COUNT', sequelize.col('location')), 'count']],
+                where: { isApproved: true },
+                group: ['location'],
+                order: [[sequelize.literal('count'), 'DESC']],
+                limit: 3
+            });
+            
+            const topLocations = locationStats.map(l => `${l.location} (${l.dataValues.count})`).join(', ');
+            
             const totalPages = Math.ceil(totalApartments / itemsPerPage);
             
             const apartments = await Apartment.findAll({
                 include: [{
                     model: User,
-                    attributes: ['id', 'firstName', 'username']
+                    attributes: ['id', 'firstName', 'lastName', 'username', 'phone']
                 }],
                 order: [['created_at', 'DESC']],
                 limit: itemsPerPage,
                 offset: (page - 1) * itemsPerPage
             });
             
-            let text = `🏢 *All Apartments* (Page ${page}/${totalPages})\n\n`;
-            text += `📊 Total: ${totalApartments} | ✅ Approved: ${await Apartment.count({ where: { isApproved: true } })} | ⏳ Pending: ${await Apartment.count({ where: { isApproved: false } })}\n\n`;
+            // Header with statistics
+            let text = `🏢 *ALL APARTMENTS* (Page ${page}/${totalPages})\n\n`;
+            text += `📊 *Overview*\n`;
+            text += `• Total: ${totalApartments} | ✅ Active: ${activeApartments} | 🔴 Inactive: ${inactiveApartments}\n`;
+            text += `• Approved: ${approvedApartments} | ⏳ Pending: ${pendingApartments}\n`;
+            text += `• 👁️ Total Views: ${totalViews} | 📅 Bookings: ${totalBookings}\n`;
+            text += `• 💰 Revenue: ${this.formatCurrency(totalRevenue)}\n`;
             
+            if (topLocations) {
+                text += `• 📍 Top Locations: ${topLocations}\n`;
+            }
+            
+            text += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            
+            // Individual apartment listings with enhanced details
             for (const apt of apartments) {
                 const statusEmoji = apt.isApproved ? '✅' : '⏳';
                 const availabilityEmoji = apt.isAvailable ? '🟢' : '🔴';
+                const availabilityText = apt.isAvailable ? 'Active' : 'Inactive';
+                
+                // Get booking count for this apartment
+                const bookingCount = await Booking.count({ where: { apartmentId: apt.id } });
+                
+                // Get revenue for this apartment
+                const aptRevenue = await Booking.sum('totalPrice', {
+                    where: { 
+                        apartmentId: apt.id,
+                        paymentStatus: 'paid'
+                    }
+                }) || 0;
                 
                 text += `${statusEmoji} *${apt.title}*\n`;
-                text += `   👤 Owner: ${apt.User?.firstName || 'Unknown'}\n`;
-                text += `   📍 ${apt.location} | 💰 ${this.formatCurrency(apt.pricePerNight)}\n`;
-                text += `   📊 ${availabilityEmoji} ${apt.isAvailable ? 'Available' : 'Unavailable'} | 👁️ ${apt.views || 0} views\n\n`;
+                text += `   👤 Owner: ${apt.User?.firstName || 'Unknown'} (@${apt.User?.username || 'N/A'})\n`;
+                text += `   📞 Phone: ${apt.User?.phone || 'Not provided'}\n`;
+                text += `   📍 ${apt.location} | 💰 ${this.formatCurrency(apt.pricePerNight)}/night\n`;
+                text += `   🛏️ ${apt.bedrooms} bed | 🚿 ${apt.bathrooms} bath | 👥 ${apt.maxGuests} guests\n`;
+                text += `   📊 ${availabilityEmoji} ${availabilityText} | 👁️ ${apt.views || 0} views\n`;
+                text += `   📅 Bookings: ${bookingCount} | 💰 Revenue: ${this.formatCurrency(aptRevenue)}\n`;
+                
+                // Add warning for problem listings
+                const daysOld = Math.floor((new Date() - new Date(apt.createdAt)) / (1000 * 60 * 60 * 24));
+                if (apt.views === 0 && bookingCount === 0 && daysOld > 7) {
+                    text += `   ⚠️ *Warning:* No activity in ${daysOld} days\n`;
+                }
+                
+                // Add action buttons for this apartment
+                text += `   [✏️ Edit] [🔴 ${apt.isAvailable ? 'Disable' : 'Enable'}] [📊 Stats] [💬 Message] [📋 Bookings] [❌ Delete]\n\n`;
             }
             
+            // Build keyboard with all controls
             const keyboard = {
-                inline_keyboard: []
+                inline_keyboard: [
+                    // Search and filter row
+                    [
+                        { text: '🔍 Search', callback_data: 'admin_search_apartments' },
+                        { text: '📍 Filter', callback_data: 'admin_filter_location' },
+                        { text: '💰 Price', callback_data: 'admin_filter_price' }
+                    ],
+                    [
+                        { text: '📊 Status', callback_data: 'admin_filter_status' },
+                        { text: '👤 Owner', callback_data: 'admin_filter_owner' },
+                        { text: '🔄 Reset', callback_data: 'admin_reset_filters' }
+                    ],
+                    // Sort options
+                    [
+                        { text: '🆕 Newest', callback_data: 'admin_sort_newest' },
+                        { text: '💰 High-Low', callback_data: 'admin_sort_price_high' },
+                        { text: '💰 Low-High', callback_data: 'admin_sort_price_low' }
+                    ],
+                    [
+                        { text: '👁️ Most Views', callback_data: 'admin_sort_views' },
+                        { text: '📅 Most Booked', callback_data: 'admin_sort_bookings' }
+                    ],
+                    // Bulk actions
+                    [
+                        { text: '☑️ Select All', callback_data: 'admin_select_all' },
+                        { text: '📋 Bulk Actions', callback_data: 'admin_bulk_actions' },
+                        { text: '📥 Export', callback_data: 'admin_export' }
+                    ]
+                ]
             };
             
+            // Pagination
             if (totalPages > 1) {
                 const paginationRow = [];
                 if (page > 1) {
@@ -552,6 +670,7 @@ To cancel, type /cancel
                 keyboard.inline_keyboard.push(paginationRow);
             }
             
+            // Navigation
             keyboard.inline_keyboard.push(
                 [{ text: '📋 Pending Approvals', callback_data: 'admin_pending_1' }],
                 [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
@@ -567,9 +686,313 @@ To cancel, type /cancel
             await this.answerCallback(callbackQuery);
             
         } catch (error) {
-            console.error('Error showing all apartments:', error);
+            console.error('Error in showAllApartments:', error);
             await this.handleError(chatId, error, 'showAllApartments');
         }
+    }
+
+    // ============================================
+    // APARTMENT ACTIONS HANDLER
+    // ============================================
+    
+    async handleApartmentActions(callbackQuery) {
+        const data = callbackQuery.data;
+        const parts = data.split('_');
+        const action = parts[1];
+        const apartmentId = parts[2];
+        
+        const chatId = callbackQuery.message.chat.id;
+        
+        try {
+            const apartment = await Apartment.findByPk(apartmentId, {
+                include: [User]
+            });
+            
+            if (!apartment) {
+                await this.answerCallback(callbackQuery, 'Apartment not found', true);
+                return;
+            }
+            
+            switch(action) {
+                case 'edit':
+                    await this.showEditApartmentForm(callbackQuery, apartment);
+                    break;
+                case 'disable':
+                    apartment.isAvailable = !apartment.isAvailable;
+                    await apartment.save();
+                    await this.answerCallback(callbackQuery, 
+                        `Apartment ${apartment.isAvailable ? 'enabled' : 'disabled'}`
+                    );
+                    // Refresh the list
+                    const refreshCallback = {
+                        ...callbackQuery,
+                        data: 'admin_apartments_1'
+                    };
+                    await this.showAllApartments(refreshCallback, 1);
+                    break;
+                case 'stats':
+                    await this.showApartmentStats(callbackQuery, apartment);
+                    break;
+                case 'message':
+                    await this.contactOwner(callbackQuery, apartment.ownerId);
+                    break;
+                case 'bookings':
+                    await this.showApartmentBookings(callbackQuery, apartment);
+                    break;
+                case 'delete':
+                    await this.confirmDeleteApartment(callbackQuery, apartment);
+                    break;
+                default:
+                    await this.answerCallback(callbackQuery, 'Unknown action');
+            }
+        } catch (error) {
+            console.error('Error in apartment actions:', error);
+            await this.handleError(chatId, error, 'apartmentActions');
+        }
+    }
+
+    // ============================================
+    // SHOW APARTMENT STATS
+    // ============================================
+    
+    async showApartmentStats(callbackQuery, apartment) {
+        const chatId = callbackQuery.message.chat.id;
+        
+        try {
+            const bookingCount = await Booking.count({ where: { apartmentId: apartment.id } });
+            const completedBookings = await Booking.count({ 
+                where: { apartmentId: apartment.id, status: 'completed' } 
+            });
+            const revenue = await Booking.sum('totalPrice', {
+                where: { apartmentId: apartment.id, paymentStatus: 'paid' }
+            }) || 0;
+            
+            const stats = `
+📊 *Apartment Statistics*
+
+🏠 *${apartment.title}*
+📍 ${apartment.location}
+
+📈 *Performance*
+• Total Views: ${apartment.views || 0}
+• Total Bookings: ${bookingCount}
+• Completed Stays: ${completedBookings}
+• Conversion Rate: ${apartment.views > 0 ? ((bookingCount / apartment.views) * 100).toFixed(1) : 0}%
+
+💰 *Revenue*
+• Total Revenue: ${this.formatCurrency(revenue)}
+• Average per Booking: ${bookingCount > 0 ? this.formatCurrency(revenue / bookingCount) : '₦0'}
+
+📅 *Listing Info*
+• Listed: ${this.formatDate(apartment.createdAt)}
+• Last Updated: ${this.formatDate(apartment.updatedAt || apartment.createdAt)}
+• Status: ${apartment.isAvailable ? '🟢 Active' : '🔴 Inactive'}
+            `;
+            
+            await this.bot.sendMessage(chatId, stats, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '« Back to Apartments', callback_data: 'admin_apartments_1' }]
+                    ]
+                }
+            });
+            
+            await this.answerCallback(callbackQuery);
+            
+        } catch (error) {
+            await this.handleError(chatId, error, 'showApartmentStats');
+        }
+    }
+
+    // ============================================
+    // SHOW APARTMENT BOOKINGS
+    // ============================================
+    
+    async showApartmentBookings(callbackQuery, apartment) {
+        const chatId = callbackQuery.message.chat.id;
+        
+        try {
+            const bookings = await Booking.findAll({
+                where: { apartmentId: apartment.id },
+                include: [{
+                    model: User,
+                    attributes: ['id', 'firstName', 'username', 'phone']
+                }],
+                order: [['created_at', 'DESC']],
+                limit: 10
+            });
+            
+            if (bookings.length === 0) {
+                await this.bot.sendMessage(chatId, 
+                    `📋 *No Bookings*\n\nThis apartment has no bookings yet.`,
+                    { parse_mode: 'Markdown' }
+                );
+                await this.answerCallback(callbackQuery);
+                return;
+            }
+            
+            let text = `📋 *Bookings for ${apartment.title}*\n\n`;
+            
+            for (const booking of bookings) {
+                const statusEmoji = {
+                    'pending': '⏳',
+                    'confirmed': '✅',
+                    'completed': '🏁',
+                    'cancelled': '❌'
+                }[booking.status] || '📅';
+                
+                text += `${statusEmoji} *${booking.bookingReference}*\n`;
+                text += `   👤 Guest: ${booking.User?.firstName || 'Unknown'}\n`;
+                text += `   📅 ${this.formatDate(booking.checkIn)} - ${this.formatDate(booking.checkOut)}\n`;
+                text += `   👥 ${booking.guests} guests | 💰 ${this.formatCurrency(booking.totalPrice)}\n`;
+                text += `   Status: ${booking.status} | Payment: ${booking.paymentStatus}\n\n`;
+            }
+            
+            await this.bot.sendMessage(chatId, text, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '« Back to Apartments', callback_data: 'admin_apartments_1' }]
+                    ]
+                }
+            });
+            
+            await this.answerCallback(callbackQuery);
+            
+        } catch (error) {
+            await this.handleError(chatId, error, 'showApartmentBookings');
+        }
+    }
+
+    // ============================================
+    // CONFIRM DELETE APARTMENT
+    // ============================================
+    
+    async confirmDeleteApartment(callbackQuery, apartment) {
+        const chatId = callbackQuery.message.chat.id;
+        const messageId = callbackQuery.message.message_id;
+        
+        const text = `
+⚠️ *Confirm Delete*
+
+Are you sure you want to delete *${apartment.title}*?
+
+This will permanently remove:
+• Apartment listing
+• All associated bookings
+• Cannot be undone!
+
+Owner: ${apartment.User?.firstName || 'Unknown'}
+Location: ${apartment.location}
+Price: ${this.formatCurrency(apartment.pricePerNight)}/night
+        `;
+        
+        const keyboard = {
+            inline_keyboard: [
+                [
+                    { text: '✅ Yes, Delete', callback_data: `confirm_delete_apt_${apartment.id}` },
+                    { text: '❌ Cancel', callback_data: 'admin_apartments_1' }
+                ]
+            ]
+        };
+        
+        await this.bot.editMessageText(text, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: 'Markdown',
+            reply_markup: keyboard
+        });
+        
+        await this.answerCallback(callbackQuery);
+    }
+
+    // ============================================
+    // HANDLE APARTMENT FILTERS
+    // ============================================
+    
+    async handleApartmentFilters(callbackQuery) {
+        const data = callbackQuery.data;
+        const chatId = callbackQuery.message.chat.id;
+        const messageId = callbackQuery.message.message_id;
+        
+        try {
+            if (data === 'admin_filter_location') {
+                // Get unique locations
+                const locations = await Apartment.findAll({
+                    attributes: [[sequelize.fn('DISTINCT', sequelize.col('location')), 'location']],
+                    where: { isApproved: true }
+                });
+                
+                const locationButtons = locations.map(l => ([{
+                    text: l.location,
+                    callback_data: `filter_loc_${l.location}`
+                }]));
+                
+                // Split into rows of 2
+                const keyboard = [];
+                for (let i = 0; i < locationButtons.length; i += 2) {
+                    keyboard.push(locationButtons.slice(i, i + 2).flat());
+                }
+                keyboard.push([{ text: '« Back', callback_data: 'admin_apartments_1' }]);
+                
+                await this.bot.editMessageText('📍 *Select Location to Filter*', {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: keyboard }
+                });
+            }
+            else if (data === 'admin_filter_price') {
+                const priceRanges = [
+                    ['₦0 - ₦50,000', 'filter_price_0_50000'],
+                    ['₦50,000 - ₦100,000', 'filter_price_50000_100000'],
+                    ['₦100,000 - ₦200,000', 'filter_price_100000_200000'],
+                    ['₦200,000+', 'filter_price_200000_plus']
+                ];
+                
+                const keyboard = priceRanges.map(range => ([{
+                    text: range[0],
+                    callback_data: range[1]
+                }]));
+                keyboard.push([{ text: '« Back', callback_data: 'admin_apartments_1' }]);
+                
+                await this.bot.editMessageText('💰 *Select Price Range*', {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: keyboard }
+                });
+            }
+            
+            await this.answerCallback(callbackQuery);
+            
+        } catch (error) {
+            await this.handleError(chatId, error, 'handleApartmentFilters');
+        }
+    }
+
+    // ============================================
+    // EDIT APARTMENT FORM (Placeholder)
+    // ============================================
+    
+    async showEditApartmentForm(callbackQuery, apartment) {
+        const chatId = callbackQuery.message.chat.id;
+        
+        await this.bot.sendMessage(chatId, 
+            `✏️ *Edit Apartment*\n\n` +
+            `Editing functionality for "${apartment.title}" will be available soon.\n\n` +
+            `You'll be able to:\n` +
+            `• Update title and description\n` +
+            `• Change price\n` +
+            `• Modify amenities\n` +
+            `• Update photos\n` +
+            `• Change location\n\n` +
+            `For now, use the owner dashboard for updates.`,
+            { parse_mode: 'Markdown' }
+        );
+        
+        await this.answerCallback(callbackQuery);
     }
 }
 
