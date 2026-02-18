@@ -9,7 +9,7 @@ const { setupCommands } = require('./bot/commands');
 const { handleCallback } = require('./bot/callbacks');
 const { handleMessage } = require('./bot/conversations');
 
-// Initialize bot (FIXED POLLING CONFIG)
+// Initialize bot (fixed polling config)
 const bot = new TelegramBot(process.env.BOT_TOKEN, {
   polling: {
     interval: 300,
@@ -18,7 +18,7 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, {
   }
 });
 
-// Delete webhook to avoid 409 conflict
+// Delete webhook to avoid 409 conflicts
 bot.deleteWebHook().catch(() => {});
 
 const app = express();
@@ -63,4 +63,52 @@ bot.on('callback_query', async (callbackQuery) => {
   try {
     await handleCallback(bot, callbackQuery);
   } catch (error) {
-    logger.error('C
+    logger.error('Callback handler error:', error);
+    bot.answerCallbackQuery(callbackQuery.id, {
+      text: 'An error occurred. Please try again.'
+    }).catch(() => {});
+  }
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date(),
+    uptime: process.uptime(),
+    bot: 'running'
+  });
+});
+
+// Start server
+const PORT = process.env.PORT || 8888;
+const server = app.listen(PORT, () => {
+  logger.info(`Server running on port ${PORT}`);
+  logger.info('Bot is running...');
+});
+
+// Graceful shutdown function
+async function shutdown() {
+  logger.info('Shutting down gracefully...');
+  try {
+    await bot.stopPolling().catch(() => {});
+    if (redis) await redis.quit().catch(() => {});
+  } catch (e) {
+    logger.error('Shutdown error:', e);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception:', error);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+module.exports = { bot, app, server };
