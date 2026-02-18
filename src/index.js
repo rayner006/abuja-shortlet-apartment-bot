@@ -31,7 +31,7 @@ bot.onText(/\/start/, (msg) => {
         parse_mode: 'Markdown',
         reply_markup: {
             keyboard: [
-                ['📅 View Apartment', '📞 Contact Support'],
+                ['📅 View Apartment', '📞 Contact Admin'],
                 ['ℹ️ About Us']
             ],
             resize_keyboard: true,
@@ -60,7 +60,7 @@ bot.on('message', (msg) => {
             }
         });
     }
-    else if (text === '📞 Contact Support') {
+    else if (text === '📞 Contact Admin') {
         bot.sendMessage(chatId, '📱 Contact us on: 08012345678\n📧 Email: support@abujashortlet.com');
     }
     else if (text === 'ℹ️ About Us') {
@@ -77,7 +77,7 @@ bot.on('message', (msg) => {
             parse_mode: 'Markdown',
             reply_markup: {
                 keyboard: [
-                    ['📅 View Apartment', '📞 Contact Support'],
+                    ['📅 View Apartment', '📞 Contact Admin'],
                     ['ℹ️ About Us']
                 ],
                 resize_keyboard: true
