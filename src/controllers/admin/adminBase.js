@@ -1,67 +1,63 @@
-const AdminBase = require('./adminBase');
-const AdminCore = require('./adminCore');
-const AdminUsers = require('./adminUsers');
-const AdminApartments = require('./adminApartments');
-const AdminStats = require('./adminStats');
+const { User, Apartment, Booking } = require('../../models');
+const logger = require('../../config/logger');
 
-class AdminController extends AdminBase {
+class AdminBase {
     constructor(bot) {
-        super(bot);
-        this.core = new AdminCore(bot);
-        this.users = new AdminUsers(bot);
-        this.apartments = new AdminApartments(bot);
-        this.stats = new AdminStats(bot);
-        
-        // Bind methods to preserve 'this'
-        this.handleCallback = this.handleCallback.bind(this);
+        this.bot = bot;
     }
 
-    // Main entry point for admin panel
-    async handleAdminPanel(msg) {
-        const chatId = msg.chat.id;
-        const userId = msg.from.id;
-
-        // Check admin access
-        if (!(await this.isAdmin(userId))) {
-            await this.bot.sendMessage(chatId, '⛔ Access denied. This command is for admins only.');
-            return;
-        }
-
-        await this.core.showAdminPanel(chatId, msg);
+    // Check if user is admin
+    async isAdmin(userId) {
+        const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+        return adminIds.includes(userId);
     }
 
-    // Route all admin callbacks to appropriate handlers
-    async handleCallback(callbackQuery) {
-        const data = callbackQuery.data;
-        const chatId = callbackQuery.message.chat.id;
-        const userId = callbackQuery.from.id;
+    // Format date consistently
+    formatDate(date) {
+        return new Date(date).toLocaleDateString('en-NG', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    }
 
-        // Verify admin access for all admin callbacks
-        if (!(await this.isAdmin(userId))) {
-            await this.answerCallback(callbackQuery, '⛔ Admin access required');
-            return;
-        }
+    // Format currency
+    formatCurrency(amount) {
+        return `₦${Number(amount).toLocaleString()}`;
+    }
 
-        // Route to appropriate module
-        if (data.startsWith('admin_users') || data.startsWith('user_') || 
-            data.startsWith('manage_') || data.startsWith('edit_') ||
-            data.startsWith('set_role_') || data.startsWith('confirm_delete_')) {
-            await this.users.handleCallback(callbackQuery);
-        }
-        else if (data.startsWith('admin_pending') || data.startsWith('approve_') || 
-                 data.startsWith('reject_') || data.startsWith('admin_apartments')) {
-            await this.apartments.handleCallback(callbackQuery);
-        }
-        else if (data === 'admin_stats') {
-            await this.stats.handleStats(callbackQuery);
-        }
-        else if (data === 'menu_admin' || data === 'admin_back') {
-            await this.core.showAdminPanel(chatId, callbackQuery.message);
-        }
-        else {
-            await this.answerCallback(callbackQuery, 'Unknown command');
+    // Get role emoji
+    getRoleEmoji(role) {
+        const emojis = {
+            'admin': '👑',
+            'owner': '🏠',
+            'user': '👤'
+        };
+        return emojis[role] || '👤';
+    }
+
+    // Get status emoji
+    getStatusEmoji(isActive) {
+        return isActive !== false ? '🟢' : '🔴';
+    }
+
+    // Handle errors
+    async handleError(chatId, error, context) {
+        logger.error(`Error in ${context}:`, error);
+        await this.bot.sendMessage(chatId, '❌ An error occurred. Please try again.');
+    }
+
+    // Answer callback query safely
+    async answerCallback(callbackQuery, text = '', showAlert = false) {
+        try {
+            await this.bot.answerCallbackQuery(callbackQuery.id, {
+                text: text,
+                show_alert: showAlert
+            });
+        } catch (e) {
+            // Ignore callback answer errors
         }
     }
 }
 
-module.exports = AdminController;
+module.exports = AdminBase;
