@@ -1,5 +1,5 @@
 // src/bot/commands.js
-const { handleStart } = require('../controllers/userController');
+const { handleStart, handleMenu } = require('../controllers/userController');  // 👈 FIXED: Added handleMenu
 const { handleSearch } = require('../controllers/apartmentController');
 const { handleMyBookings } = require('../controllers/bookingController');
 const { handleAddApartment } = require('../controllers/apartmentController');
@@ -20,7 +20,7 @@ const setupCommands = (bot) => {
   // Menu command
   bot.onText(/\/menu/, async (msg) => {
     try {
-      await handleMenu(bot, msg);
+      await handleMenu(bot, msg);  // 👈 Now this will work!
     } catch (error) {
       logger.error('Menu command error:', error);
       bot.sendMessage(msg.chat.id, 'Error loading menu. Please try again.');
