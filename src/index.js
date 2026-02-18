@@ -11,6 +11,9 @@ const bot = new TelegramBot(token, { polling: true });
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Serve static files from uploads directory
+app.use('/uploads', express.static('uploads'));
+
 app.get('/', (req, res) => {
     res.send('Bot is running');
 });
