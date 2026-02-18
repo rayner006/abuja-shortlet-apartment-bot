@@ -53,7 +53,14 @@ bot.on('message', (msg) => {
             reply_markup: {
                 keyboard: [
                     ['Asokoro', 'Maitama'],
-                    ['Wuse 2', 'Jabi'],
+                    ['Wuse (Zones 1-6)', 'Garki (I & II)'],
+                    ['Utako', 'Central Business District (CBD)'],
+                    ['Gwarinpa', 'Wuye'],
+                    ['Life Camp', 'Gaduwa'],
+                    ['Apo', 'Jahi'],
+                    ['Lokogoma', 'Kubwa'],
+                    ['Lugbe', 'Jikwoyi'],
+                    ['Gwagwalada'],
                     ['🔙 Main Menu']
                 ],
                 resize_keyboard: true
