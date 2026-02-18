@@ -120,6 +120,26 @@ bot.on('message', async (msg) => {
           }
         );
         return;
+      } else if (state.action === 'sending_message_to_owner') {
+        // Handle sending message to apartment owner
+        await bot.sendMessage(state.targetTelegramId,
+          `📨 *Message from Admin regarding your apartment listing:*\n\n${msg.text}`,
+          { parse_mode: 'Markdown' }
+        );
+        
+        delete global.messageStates[msg.chat.id];
+        
+        await bot.sendMessage(msg.chat.id,
+          '✅ Message sent to owner successfully!',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '« Back to Pending', callback_data: state.returnTo || 'admin_pending_1' }]
+              ]
+            }
+          }
+        );
+        return;
       }
     }
     
