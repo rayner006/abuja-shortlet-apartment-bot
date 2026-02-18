@@ -2,6 +2,8 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 require('dotenv').config();
 
+const { getApartmentTypeKeyboard, filterApartmentsByType, formatApartmentMessage } = require('./handlers/apartmentHandler');
+
 const token = process.env.BOT_TOKEN;
 const bot = new TelegramBot(token, { polling: true });
 
@@ -16,6 +18,9 @@ app.get('/', (req, res) => {
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+// Store selected location temporarily
+const userSessions = {};
 
 // /start command
 bot.onText(/\/start/, (msg) => {
@@ -90,6 +95,115 @@ bot.on('message', (msg) => {
                 resize_keyboard: true
             }
         });
+    }
+    else {
+        // Check if the message is a location name
+        const locations = [
+            'Asokoro', 'Maitama', 'Wuse (Zones 1-6)', 'Garki (I & II)',
+            'Utako', 'Central Business District (CBD)', 'Gwarinpa', 'Wuye',
+            'Life Camp', 'Gaduwa', 'Apo', 'Jahi', 'Lokogoma', 'Kubwa',
+            'Lugbe', 'Jikwoyi', 'Gwagwalada'
+        ];
+        
+        if (locations.includes(text)) {
+            // Store selected location
+            userSessions[chatId] = { location: text };
+            
+            // Show apartment type selection
+            bot.sendMessage(
+                chatId, 
+                `📍 *Selected Location:* ${text}\n\n🏢 *Select Apartment Type:*`,
+                {
+                    parse_mode: 'Markdown',
+                    ...getApartmentTypeKeyboard()
+                }
+            );
+        }
+    }
+});
+
+// Handle callback queries (for inline buttons)
+bot.on('callback_query', async (callbackQuery) => {
+    const msg = callbackQuery.message;
+    const chatId = msg.chat.id;
+    const data = callbackQuery.data;
+    
+    if (data.startsWith('type_')) {
+        const bedroomCount = parseInt(data.split('_')[1]);
+        const session = userSessions[chatId];
+        
+        if (!session || !session.location) {
+            await bot.sendMessage(chatId, 'Please select a location first.');
+            return;
+        }
+        
+        const location = session.location;
+        const apartments = filterApartmentsByType(location, bedroomCount);
+        
+        if (apartments.length === 0) {
+            await bot.sendMessage(
+                chatId, 
+                `No ${bedroomCount === 0 ? 'Studio' : bedroomCount + '-Bedroom'} apartments found in ${location}.`,
+                {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '🔙 Back to Types', callback_data: 'back_to_types' }]
+                        ]
+                    }
+                }
+            );
+        } else {
+            for (const apt of apartments) {
+                await bot.sendMessage(chatId, formatApartmentMessage(apt), {
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
+                            [{ text: '🔙 Back to Types', callback_data: 'back_to_types' }]
+                        ]
+                    }
+                });
+            }
+        }
+        
+        await bot.answerCallbackQuery(callbackQuery.id);
+    }
+    else if (data === 'back_to_types') {
+        const session = userSessions[chatId];
+        if (session && session.location) {
+            await bot.sendMessage(
+                chatId,
+                `📍 *Location:* ${session.location}\n\n🏢 *Select Apartment Type:*`,
+                {
+                    parse_mode: 'Markdown',
+                    ...getApartmentTypeKeyboard()
+                }
+            );
+        } else {
+            await bot.sendMessage(chatId, 'Please select a location first.');
+        }
+        await bot.answerCallbackQuery(callbackQuery.id);
+    }
+    else if (data === 'back_to_locations') {
+        await bot.sendMessage(chatId, '📍 *Select Location*', {
+            parse_mode: 'Markdown',
+            reply_markup: {
+                keyboard: [
+                    ['Asokoro', 'Maitama'],
+                    ['Wuse (Zones 1-6)', 'Garki (I & II)'],
+                    ['Utako', 'Central Business District (CBD)'],
+                    ['Gwarinpa', 'Wuye'],
+                    ['Life Camp', 'Gaduwa'],
+                    ['Apo', 'Jahi'],
+                    ['Lokogoma', 'Kubwa'],
+                    ['Lugbe', 'Jikwoyi'],
+                    ['Gwagwalada'],
+                    ['🔙 Main Menu']
+                ],
+                resize_keyboard: true
+            }
+        });
+        await bot.answerCallbackQuery(callbackQuery.id);
     }
 });
 
