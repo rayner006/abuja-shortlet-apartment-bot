@@ -1,4 +1,4 @@
-const { getApartmentsByLocation } = require('../data/apartments');
+const db = require('../config/database');
 
 function getApartmentTypes() {
     return [
@@ -9,17 +9,24 @@ function getApartmentTypes() {
     ];
 }
 
-function filterApartmentsByType(location, bedroomCount) {
-    const apartments = getApartmentsByLocation(location);
-    
-    if (bedroomCount === 0) {
-        // Studio apartments (bedrooms = 1 but studio type)
-        return apartments.filter(apt => 
-            apt.title.toLowerCase().includes('studio') || 
-            (apt.bedrooms === 1 && apt.title.toLowerCase().includes('studio'))
-        );
-    } else {
-        return apartments.filter(apt => apt.bedrooms === bedroomCount);
+async function filterApartmentsByType(location, bedroomCount) {
+    try {
+        let query;
+        let params = [location];
+        
+        if (bedroomCount === 0) {
+            // Studio apartments
+            query = "SELECT * FROM apartments WHERE location = ? AND (title LIKE '%studio%' OR type = 'studio')";
+        } else {
+            query = "SELECT * FROM apartments WHERE location = ? AND bedrooms = ?";
+            params.push(bedroomCount);
+        }
+        
+        const [rows] = await db.query(query, params);
+        return rows;
+    } catch (error) {
+        console.error('Error filtering apartments:', error);
+        return [];
     }
 }
 
@@ -27,15 +34,15 @@ function formatApartmentMessage(apartment) {
     return `
 🏠 *${apartment.title}*
 📍 ${apartment.location}
-💰 ${apartment.price}
+💰 ₦${apartment.price}/night
 🛏️ ${apartment.bedrooms} Bedroom(s) | 🚿 ${apartment.bathrooms} Bathroom(s)
 👥 Max ${apartment.max_guests} guests
-⭐ Rating: ${apartment.rating}/5
+⭐ Rating: ${apartment.rating || 'New'}/5
 
 📝 *Description:*
 ${apartment.description}
 
-✨ *Amenities:* ${apartment.amenities.join(' • ')}
+✨ *Amenities:* ${apartment.amenities ? apartment.amenities.join(' • ') : 'Standard amenities'}
     `;
 }
 
