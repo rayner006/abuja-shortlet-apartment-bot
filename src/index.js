@@ -24,7 +24,7 @@ bot.onText(/\/start/, (msg) => {
     const welcomeMessage = `
  🏠*Welcome To Abuja Shortlet Apartment!*🏠
 
- *Click Any Button Below To Continue*👇👇👇
+ *Click Any Button Below To Continue* 👇👇👇
     `;
     
     const options = {
