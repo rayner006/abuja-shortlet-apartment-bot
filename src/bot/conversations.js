@@ -3,6 +3,8 @@ const logger = require('../config/logger');
 const redis = require('../config/redis');
 const { processSearch, searchState } = require('../controllers/apartmentController');
 const { processBookingDates, processBookingGuests, bookingState } = require('../controllers/bookingController');
+// 👇 Add this import
+const { handleLocationSelection } = require('../controllers/locationController');
 
 // Popular Abuja areas for quick responses
 const areaList = {
@@ -77,12 +79,77 @@ const handleMessage = async (bot, msg) => {
     }
     
     // ============================================
-    // PRIORITY 3: Skip commands
+    // PRIORITY 3: Handle button clicks from keyboard
+    // ============================================
+    
+    // 🔍 Handle "Apartments" button
+    if (text === '🔍 Apartments') {
+      await handleLocationSelection(bot, msg);
+      return;
+    }
+    
+    // 📅 Handle "My Bookings" button
+    if (text === '📅 My Bookings') {
+      const { handleMyBookings } = require('../controllers/bookingController');
+      await handleMyBookings(bot, { 
+        chat: { id: chatId }, 
+        from: msg.from 
+      });
+      return;
+    }
+    
+    // 📋 Handle "List Property" button
+    if (text === '📋 List Property') {
+      const { User } = require('../models');
+      const user = await User.findOne({ where: { telegramId: msg.from.id } });
+      
+      if (user && (user.role === 'owner' || user.role === 'admin')) {
+        // User is already an owner
+        await bot.sendMessage(chatId, 
+          '📋 *List Your Property*\n\n' +
+          'Use /add_apartment to list a new property or /my_apartments to manage existing ones.',
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        // User needs to register as owner
+        await bot.sendMessage(chatId,
+          '🏠 *Become a Property Owner*\n\n' +
+          'To list your property, you need to register as an owner first.\n\n' +
+          'Type /register_owner to get started!',
+          { parse_mode: 'Markdown' }
+        );
+      }
+      return;
+    }
+    
+    // ❓ Handle "Help" button
+    if (text === '❓ Help') {
+      const helpText = `
+🤖 *Abuja Shortlet Apartment Bot - Help*
+
+*Available Commands:*
+/start - Start the bot
+/menu - Show main menu
+/search - Search for apartments
+/my\\_bookings - View your bookings
+/help - Show this help message
+
+*For Property Owners:*
+/register\\_owner - Register to list your property
+/add\\_apartment - Add a new apartment listing
+/my\\_apartments - Manage your listings
+      `;
+      await bot.sendMessage(chatId, helpText, { parse_mode: 'Markdown' });
+      return;
+    }
+    
+    // ============================================
+    // PRIORITY 4: Skip commands
     // ============================================
     if (text.startsWith('/')) return;
     
     // ============================================
-    // PRIORITY 4: Natural language processing
+    // PRIORITY 5: Natural language processing
     // ============================================
     
     const lowerText = text.toLowerCase().trim();
