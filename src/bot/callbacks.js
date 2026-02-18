@@ -20,6 +20,8 @@ const {
   handleAllApartments
 } = require('../controllers/adminController');
 const { handleMenu } = require('../controllers/userController');
+// 👇 Add this import
+const { handleLocationSelection, handleLocationCallback } = require('../controllers/locationController');
 
 const handleCallback = async (bot, callbackQuery) => {
   const data = callbackQuery.data;
@@ -29,8 +31,17 @@ const handleCallback = async (bot, callbackQuery) => {
   try {
     logger.info(`Callback received: ${data} from user ${callbackQuery.from.id}`);
     
+    // 👇 NEW: Location selection callbacks
+    if (data === 'show_locations') {
+      await handleLocationSelection(bot, callbackQuery.message);
+      await bot.answerCallbackQuery(callbackQuery.id);
+    }
+    else if (data.startsWith('location_')) {
+      await handleLocationCallback(bot, callbackQuery);
+    }
+    
     // Menu callbacks
-    if (data === 'menu_search') {
+    else if (data === 'menu_search') {
       await bot.sendMessage(chatId, '🔍 Use /search to find apartments');
       await bot.answerCallbackQuery(callbackQuery.id);
     }
@@ -386,7 +397,7 @@ const handleApartmentBookings = async (bot, callbackQuery, apartmentId) => {
       text += `${statusEmoji} *${booking.bookingReference}*\n`;
       text += `   👤 Guest: ${booking.User?.firstName || 'Unknown'} (@${booking.User?.username || 'N/A'})\n`;
       text += `   📅 ${new Date(booking.checkIn).toLocaleDateString()} - ${new Date(booking.checkOut).toLocaleDateString()}\n`;
-      text += `   👥 ${booking.guests} guests | 💰 ${formatCurrency(booking.totalPrice)}\n`;
+      text += `   👥 ${booking.guests} guests | 💰 ₦${booking.totalPrice.toLocaleString()}\n`;
       text += `   Status: ${booking.status.toUpperCase()}\n\n`;
     }
     
@@ -421,7 +432,7 @@ const handleApartmentStats = async (bot, callbackQuery, apartmentId) => {
 🏠 *${apartment.title}*
 
 📈 *Performance*
-• Total Views: ${apartment.views}
+• Total Views: ${apartment.views || 0}
 • Total Bookings: ${totalBookings}
 • Conversion Rate: ${apartment.views > 0 ? ((totalBookings / apartment.views) * 100).toFixed(1) : 0}%
 
@@ -431,8 +442,8 @@ const handleApartmentStats = async (bot, callbackQuery, apartmentId) => {
 • ❌ Cancelled: ${cancelledBookings}
 
 💰 *Revenue*
-• Total Revenue: ${formatCurrency(revenue || 0)}
-• Average per Booking: ${totalBookings > 0 ? formatCurrency((revenue || 0) / totalBookings) : formatCurrency(0)}
+• Total Revenue: ₦${(revenue || 0).toLocaleString()}
+• Average per Booking: ${totalBookings > 0 ? `₦${((revenue || 0) / totalBookings).toLocaleString()}` : '₦0'}
 
 📊 *Status*
 • Availability: ${apartment.isAvailable ? '🟢 Available' : '🔴 Unavailable'}
@@ -489,7 +500,7 @@ const handleAcceptBooking = async (bot, callbackQuery, bookingId) => {
         `Good news! Your booking for *${booking.Apartment.title}* has been confirmed.\n\n` +
         `📋 *Reference:* ${booking.bookingReference}\n` +
         `📅 *Dates:* ${new Date(booking.checkIn).toLocaleDateString()} to ${new Date(booking.checkOut).toLocaleDateString()}\n` +
-        `💰 *Total:* ${formatCurrency(booking.totalPrice)}\n\n` +
+        `💰 *Total:* ₦${booking.totalPrice.toLocaleString()}\n\n` +
         `The owner will contact you soon with check-in details.`,
         { parse_mode: 'Markdown' }
       );
