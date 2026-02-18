@@ -1,7 +1,7 @@
 const AdminBase = require('./adminBase');
 const { Apartment, User, Booking } = require('../../models');
 const { Op } = require('sequelize');
-const sequelize = require('../../config/database'); // Add this for aggregate functions
+const sequelize = require('../../config/database');
 
 class AdminApartments extends AdminBase {
     constructor(bot) {
@@ -37,6 +37,10 @@ class AdminApartments extends AdminBase {
         }
         else if (data.startsWith('apt_')) {
             await this.handleApartmentActions(callbackQuery);
+        }
+        else if (data.startsWith('confirm_delete_apt_')) {
+            const apartmentId = data.split('_')[3];
+            await this.deleteApartment(callbackQuery, apartmentId);
         }
         else if (data.startsWith('filter_') || data.startsWith('sort_')) {
             await this.handleApartmentFilters(callbackQuery);
@@ -508,7 +512,7 @@ To cancel, type /cancel
     }
 
     // ============================================
-    // ENHANCED SHOW ALL APARTMENTS with stats and actions
+    // ENHANCED SHOW ALL APARTMENTS with individual cards
     // ============================================
     
     async showAllApartments(callbackQuery, page = 1) {
@@ -516,7 +520,7 @@ To cancel, type /cancel
         const messageId = callbackQuery.message.message_id;
         
         try {
-            const itemsPerPage = 5;
+            const itemsPerPage = 3; // Show 3 apartments per page
             const totalApartments = await Apartment.count();
             const activeApartments = await Apartment.count({ where: { isAvailable: true } });
             const inactiveApartments = await Apartment.count({ where: { isAvailable: false } });
@@ -575,59 +579,130 @@ To cancel, type /cancel
                 offset: (page - 1) * itemsPerPage
             });
             
-            // Header with statistics
-            let text = `🏢 *ALL APARTMENTS* (Page ${page}/${totalPages})\n\n`;
-            text += `📊 *Overview*\n`;
-            text += `• Total: ${totalApartments} | ✅ Active: ${activeApartments} | 🔴 Inactive: ${inactiveApartments}\n`;
-            text += `• Approved: ${approvedApartments} | ⏳ Pending: ${pendingApartments}\n`;
-            text += `• 👁️ Total Views: ${totalViews} | 📅 Bookings: ${totalBookings}\n`;
-            text += `• 💰 Revenue: ${this.formatCurrency(totalRevenue)}\n`;
+            // Delete the previous message
+            await this.bot.deleteMessage(chatId, messageId).catch(() => {});
+            
+            // Send header with statistics
+            let headerText = `🏢 *ALL APARTMENTS* (Page ${page}/${totalPages})\n\n`;
+            headerText += `📊 *Overview*\n`;
+            headerText += `• Total: ${totalApartments} | ✅ Active: ${activeApartments} | 🔴 Inactive: ${inactiveApartments}\n`;
+            headerText += `• Approved: ${approvedApartments} | ⏳ Pending: ${pendingApartments}\n`;
+            headerText += `• 👁️ Total Views: ${totalViews} | 📅 Bookings: ${totalBookings}\n`;
+            headerText += `• 💰 Revenue: ${this.formatCurrency(totalRevenue)}\n`;
             
             if (topLocations) {
-                text += `• 📍 Top Locations: ${topLocations}\n`;
+                headerText += `• 📍 Top Locations: ${topLocations}\n`;
             }
             
-            text += `\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+            await this.bot.sendMessage(chatId, headerText, {
+                parse_mode: 'Markdown'
+            });
             
-            // Individual apartment listings with enhanced details
+            // Send each apartment as an individual card
             for (const apt of apartments) {
-                const statusEmoji = apt.isApproved ? '✅' : '⏳';
-                const availabilityEmoji = apt.isAvailable ? '🟢' : '🔴';
-                const availabilityText = apt.isAvailable ? 'Active' : 'Inactive';
-                
-                // Get booking count for this apartment
-                const bookingCount = await Booking.count({ where: { apartmentId: apt.id } });
-                
-                // Get revenue for this apartment
-                const aptRevenue = await Booking.sum('totalPrice', {
-                    where: { 
-                        apartmentId: apt.id,
-                        paymentStatus: 'paid'
-                    }
-                }) || 0;
-                
-                text += `${statusEmoji} *${apt.title}*\n`;
-                text += `   👤 Owner: ${apt.User?.firstName || 'Unknown'} (@${apt.User?.username || 'N/A'})\n`;
-                text += `   📞 Phone: ${apt.User?.phone || 'Not provided'}\n`;
-                text += `   📍 ${apt.location} | 💰 ${this.formatCurrency(apt.pricePerNight)}/night\n`;
-                text += `   🛏️ ${apt.bedrooms} bed | 🚿 ${apt.bathrooms} bath | 👥 ${apt.maxGuests} guests\n`;
-                text += `   📊 ${availabilityEmoji} ${availabilityText} | 👁️ ${apt.views || 0} views\n`;
-                text += `   📅 Bookings: ${bookingCount} | 💰 Revenue: ${this.formatCurrency(aptRevenue)}\n`;
-                
-                // Add warning for problem listings
-                const daysOld = Math.floor((new Date() - new Date(apt.createdAt)) / (1000 * 60 * 60 * 24));
-                if (apt.views === 0 && bookingCount === 0 && daysOld > 7) {
-                    text += `   ⚠️ *Warning:* No activity in ${daysOld} days\n`;
-                }
-                
-                // Add action buttons for this apartment
-                text += `   [✏️ Edit] [🔴 ${apt.isAvailable ? 'Disable' : 'Enable'}] [📊 Stats] [💬 Message] [📋 Bookings] [❌ Delete]\n\n`;
+                await this.sendApartmentCard(chatId, apt);
             }
             
-            // Build keyboard with all controls
+            // Send controls
+            await this.sendApartmentControls(chatId, page, totalPages);
+            
+            await this.answerCallback(callbackQuery);
+            
+        } catch (error) {
+            console.error('Error in showAllApartments:', error);
+            await this.handleError(chatId, error, 'showAllApartments');
+        }
+    }
+
+    // ============================================
+    // SEND INDIVIDUAL APARTMENT CARD
+    // ============================================
+    
+    async sendApartmentCard(chatId, apt) {
+        try {
+            // Get booking count for this apartment
+            const bookingCount = await Booking.count({ where: { apartmentId: apt.id } });
+            
+            // Get revenue for this apartment
+            const aptRevenue = await Booking.sum('totalPrice', {
+                where: { 
+                    apartmentId: apt.id,
+                    paymentStatus: 'paid'
+                }
+            }) || 0;
+            
+            const statusEmoji = apt.isApproved ? '✅' : '⏳';
+            const availabilityEmoji = apt.isAvailable ? '🟢' : '🔴';
+            const availabilityText = apt.isAvailable ? 'Active' : 'Inactive';
+            
+            // Calculate days old for warning
+            const daysOld = Math.floor((new Date() - new Date(apt.createdAt)) / (1000 * 60 * 60 * 24));
+            
+            // Format the apartment card with a box
+            const cardText = `
+┌────────────────────────────────────┐
+│ ${statusEmoji} *${apt.title}*
+├────────────────────────────────────┤
+│ 👤 *Owner:* ${apt.User?.firstName || 'Unknown'} (@${apt.User?.username || 'N/A'})
+│ 📞 *Phone:* ${apt.User?.phone || 'Not provided'}
+│
+│ 📍 *Location:* ${apt.location}
+│ 💰 *Price:* ${this.formatCurrency(apt.pricePerNight)}/night
+│ 🛏️ *Bedrooms:* ${apt.bedrooms} | 🚿 *Bathrooms:* ${apt.bathrooms} | 👥 *Max:* ${apt.maxGuests}
+│
+│ 📊 *Status:* ${availabilityEmoji} ${availabilityText}
+│ 👁️ *Views:* ${apt.views || 0}
+│ 📅 *Bookings:* ${bookingCount}
+│ 💰 *Revenue:* ${this.formatCurrency(aptRevenue)}
+│
+${apt.views === 0 && bookingCount === 0 && daysOld > 7 ? '│ ⚠️ *Warning:* No activity in ' + daysOld + ' days\n' : ''}└────────────────────────────────────┘
+            `;
+            
+            // Create working buttons for this apartment
             const keyboard = {
                 inline_keyboard: [
-                    // Search and filter row
+                    [
+                        { text: '✏️ Edit', callback_data: `apt_edit_${apt.id}` },
+                        { text: apt.isAvailable ? '🔴 Disable' : '🟢 Enable', 
+                          callback_data: `apt_disable_${apt.id}` },
+                        { text: '📊 Stats', callback_data: `apt_stats_${apt.id}` }
+                    ],
+                    [
+                        { text: '💬 Message', callback_data: `apt_message_${apt.id}` },
+                        { text: '📋 Bookings', callback_data: `apt_bookings_${apt.id}` },
+                        { text: '❌ Delete', callback_data: `apt_delete_${apt.id}` }
+                    ]
+                ]
+            };
+            
+            // Send with photo if available
+            if (apt.images && apt.images.length > 0) {
+                await this.bot.sendPhoto(chatId, apt.images[0], {
+                    caption: cardText,
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboard
+                });
+            } else {
+                await this.bot.sendMessage(chatId, cardText, {
+                    parse_mode: 'Markdown',
+                    reply_markup: keyboard
+                });
+            }
+            
+        } catch (error) {
+            console.error('Error sending apartment card:', error);
+        }
+    }
+
+    // ============================================
+    // SEND APARTMENT CONTROLS
+    // ============================================
+    
+    async sendApartmentControls(chatId, currentPage, totalPages) {
+        try {
+            const keyboard = {
+                inline_keyboard: [
+                    // Filter row
                     [
                         { text: '🔍 Search', callback_data: 'admin_search_apartments' },
                         { text: '📍 Filter', callback_data: 'admin_filter_location' },
@@ -638,7 +713,7 @@ To cancel, type /cancel
                         { text: '👤 Owner', callback_data: 'admin_filter_owner' },
                         { text: '🔄 Reset', callback_data: 'admin_reset_filters' }
                     ],
-                    // Sort options
+                    // Sort row
                     [
                         { text: '🆕 Newest', callback_data: 'admin_sort_newest' },
                         { text: '💰 High-Low', callback_data: 'admin_sort_price_high' },
@@ -647,47 +722,36 @@ To cancel, type /cancel
                     [
                         { text: '👁️ Most Views', callback_data: 'admin_sort_views' },
                         { text: '📅 Most Booked', callback_data: 'admin_sort_bookings' }
-                    ],
-                    // Bulk actions
-                    [
-                        { text: '☑️ Select All', callback_data: 'admin_select_all' },
-                        { text: '📋 Bulk Actions', callback_data: 'admin_bulk_actions' },
-                        { text: '📥 Export', callback_data: 'admin_export' }
                     ]
                 ]
             };
             
-            // Pagination
+            // Pagination row
             if (totalPages > 1) {
                 const paginationRow = [];
-                if (page > 1) {
-                    paginationRow.push({ text: '◀️ Prev', callback_data: `admin_apartments_${page - 1}` });
+                if (currentPage > 1) {
+                    paginationRow.push({ text: '◀️ Prev', callback_data: `admin_apartments_${currentPage - 1}` });
                 }
-                paginationRow.push({ text: `📄 ${page}/${totalPages}`, callback_data: 'noop' });
-                if (page < totalPages) {
-                    paginationRow.push({ text: 'Next ▶️', callback_data: `admin_apartments_${page + 1}` });
+                paginationRow.push({ text: `📄 ${currentPage}/${totalPages}`, callback_data: 'noop' });
+                if (currentPage < totalPages) {
+                    paginationRow.push({ text: 'Next ▶️', callback_data: `admin_apartments_${currentPage + 1}` });
                 }
                 keyboard.inline_keyboard.push(paginationRow);
             }
             
-            // Navigation
+            // Navigation row
             keyboard.inline_keyboard.push(
                 [{ text: '📋 Pending Approvals', callback_data: 'admin_pending_1' }],
                 [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
             );
             
-            await this.bot.editMessageText(text, {
-                chat_id: chatId,
-                message_id: messageId,
+            await this.bot.sendMessage(chatId, '🔧 *Controls*', {
                 parse_mode: 'Markdown',
                 reply_markup: keyboard
             });
             
-            await this.answerCallback(callbackQuery);
-            
         } catch (error) {
-            console.error('Error in showAllApartments:', error);
-            await this.handleError(chatId, error, 'showAllApartments');
+            console.error('Error sending apartment controls:', error);
         }
     }
 
@@ -702,6 +766,7 @@ To cancel, type /cancel
         const apartmentId = parts[2];
         
         const chatId = callbackQuery.message.chat.id;
+        const messageId = callbackQuery.message.message_id;
         
         try {
             const apartment = await Apartment.findByPk(apartmentId, {
@@ -709,7 +774,7 @@ To cancel, type /cancel
             });
             
             if (!apartment) {
-                await this.answerCallback(callbackQuery, 'Apartment not found', true);
+                await this.answerCallback(callbackQuery, '❌ Apartment not found', true);
                 return;
             }
             
@@ -717,33 +782,39 @@ To cancel, type /cancel
                 case 'edit':
                     await this.showEditApartmentForm(callbackQuery, apartment);
                     break;
+                    
                 case 'disable':
                     apartment.isAvailable = !apartment.isAvailable;
                     await apartment.save();
                     await this.answerCallback(callbackQuery, 
-                        `Apartment ${apartment.isAvailable ? 'enabled' : 'disabled'}`
+                        `✅ Apartment ${apartment.isAvailable ? 'enabled' : 'disabled'}`
                     );
-                    // Refresh the list
-                    const refreshCallback = {
-                        ...callbackQuery,
-                        data: 'admin_apartments_1'
-                    };
-                    await this.showAllApartments(refreshCallback, 1);
+                    // Refresh the view
+                    await this.bot.deleteMessage(chatId, messageId).catch(() => {});
+                    await this.showAllApartments({ ...callbackQuery, data: 'admin_apartments_1' }, 1);
                     break;
+                    
                 case 'stats':
                     await this.showApartmentStats(callbackQuery, apartment);
                     break;
+                    
                 case 'message':
-                    await this.contactOwner(callbackQuery, apartment.ownerId);
+                    await this.contactOwner({
+                        ...callbackQuery,
+                        data: `contact_owner_${apartment.ownerId}`
+                    }, apartment.ownerId);
                     break;
+                    
                 case 'bookings':
                     await this.showApartmentBookings(callbackQuery, apartment);
                     break;
+                    
                 case 'delete':
                     await this.confirmDeleteApartment(callbackQuery, apartment);
                     break;
+                    
                 default:
-                    await this.answerCallback(callbackQuery, 'Unknown action');
+                    await this.answerCallback(callbackQuery, '❌ Unknown action');
             }
         } catch (error) {
             console.error('Error in apartment actions:', error);
@@ -874,25 +945,23 @@ To cancel, type /cancel
         const messageId = callbackQuery.message.message_id;
         
         const text = `
-⚠️ *Confirm Delete*
+⚠️ *Confirm Delete Apartment*
 
-Are you sure you want to delete *${apartment.title}*?
+Are you sure you want to delete this apartment?
 
-This will permanently remove:
-• Apartment listing
-• All associated bookings
-• Cannot be undone!
+🏠 *${apartment.title}*
+📍 *Location:* ${apartment.location}
+👤 *Owner:* ${apartment.User?.firstName || 'Unknown'}
 
-Owner: ${apartment.User?.firstName || 'Unknown'}
-Location: ${apartment.location}
-Price: ${this.formatCurrency(apartment.pricePerNight)}/night
+This action CANNOT be undone!
+All bookings for this apartment will also be deleted.
         `;
         
         const keyboard = {
             inline_keyboard: [
                 [
                     { text: '✅ Yes, Delete', callback_data: `confirm_delete_apt_${apartment.id}` },
-                    { text: '❌ Cancel', callback_data: 'admin_apartments_1' }
+                    { text: '❌ No, Cancel', callback_data: 'admin_apartments_1' }
                 ]
             ]
         };
@@ -905,6 +974,34 @@ Price: ${this.formatCurrency(apartment.pricePerNight)}/night
         });
         
         await this.answerCallback(callbackQuery);
+    }
+
+    // ============================================
+    // DELETE APARTMENT (Final deletion)
+    // ============================================
+    
+    async deleteApartment(callbackQuery, apartmentId) {
+        const chatId = callbackQuery.message.chat.id;
+        
+        try {
+            const apartment = await Apartment.findByPk(apartmentId);
+            
+            if (!apartment) {
+                await this.answerCallback(callbackQuery, '❌ Apartment not found', true);
+                return;
+            }
+            
+            await apartment.destroy();
+            
+            await this.answerCallback(callbackQuery, '✅ Apartment deleted successfully');
+            
+            // Go back to apartments list
+            await this.showAllApartments({ ...callbackQuery, data: 'admin_apartments_1' }, 1);
+            
+        } catch (error) {
+            console.error('Error deleting apartment:', error);
+            await this.handleError(chatId, error, 'deleteApartment');
+        }
     }
 
     // ============================================
