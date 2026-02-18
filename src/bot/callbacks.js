@@ -20,8 +20,8 @@ const {
   handleAllApartments
 } = require('../controllers/adminController');
 const { handleMenu } = require('../controllers/userController');
-// 👇 Add this import
-const { handleLocationSelection, handleLocationCallback } = require('../controllers/locationController');
+// 👇 Updated import to include handleApartmentTypeCallback
+const { handleLocationSelection, handleLocationCallback, handleApartmentTypeCallback } = require('../controllers/locationController');
 
 const handleCallback = async (bot, callbackQuery) => {
   const data = callbackQuery.data;
@@ -31,13 +31,17 @@ const handleCallback = async (bot, callbackQuery) => {
   try {
     logger.info(`Callback received: ${data} from user ${callbackQuery.from.id}`);
     
-    // 👇 NEW: Location selection callbacks
+    // Location selection callbacks
     if (data === 'show_locations') {
       await handleLocationSelection(bot, callbackQuery.message);
       await bot.answerCallbackQuery(callbackQuery.id);
     }
     else if (data.startsWith('location_')) {
       await handleLocationCallback(bot, callbackQuery);
+    }
+    // 👇 NEW: Handle apartment type selection
+    else if (data.startsWith('type_')) {
+      await handleApartmentTypeCallback(bot, callbackQuery);
     }
     
     // Menu callbacks
