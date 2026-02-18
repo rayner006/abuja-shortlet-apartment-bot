@@ -1,12 +1,19 @@
 const TelegramBot = require('node-telegram-bot-api');
 const logger = require('./middleware/logger');
+const config = require('./config/environment');
 
-module.exports = function initBot(redis, sequelize) {
-  const token = process.env.BOT_TOKEN;
-  const nodeEnv = process.env.NODE_ENV || 'development';
+/* ================= HANDLERS ================= */
+const StartHandler = require('./handlers/startHandler');
+const MessageHandler = require('./handlers/messageHandler');
+const CallbackHandler = require('./handlers/callbackHandler');
+const AdminHandler = require('./handlers/adminHandler');
+
+function createBot() {
+  const token = config.botToken;
+  const nodeEnv = config.nodeEnv || 'development';
 
   if (!token) {
-    throw new Error('BOT_TOKEN is missing in .env');
+    throw new Error('BOT_TOKEN is missing in environment variables');
   }
 
   let bot;
@@ -14,10 +21,10 @@ module.exports = function initBot(redis, sequelize) {
   // ================= INIT MODE =================
   if (nodeEnv === 'production') {
     // Webhook Mode
-    bot = new TelegramBot(token);
+    bot = new TelegramBot(token, { polling: false });
     logger.info('Bot running in WEBHOOK mode');
   } else {
-    // Polling Mode
+    // Polling Mode (optional local dev)
     bot = new TelegramBot(token, {
       polling: {
         params: {
@@ -46,10 +53,20 @@ module.exports = function initBot(redis, sequelize) {
   bot.on('webhook_error', err => logger.error('Webhook error:', err.message));
 
   // ================= REGISTER HANDLERS =================
-  require('./handlers/commands/start')(bot, redis, sequelize);
-  require('./handlers/commands/admin')(bot, redis, sequelize);
-  require('./handlers/callbacks/navigation')(bot, redis, sequelize);
-  require('./handlers/callbacks/booking')(bot, redis, sequelize);
+  bot.onText(/\/start/, (msg) => StartHandler.handle(bot, msg));
+  bot.onText(/\/stats/, (msg) => AdminHandler.systemStats(bot, msg));
+  bot.onText(/\/makeowner (.+)/, (msg, match) => {
+    const targetId = match[1];
+    AdminHandler.makeOwner(bot, msg, targetId);
+  });
+
+  bot.on('callback_query', (query) => CallbackHandler.handle(bot, query));
+  bot.on('message', (msg) => {
+    if (msg.text && msg.text.startsWith('/')) return;
+    MessageHandler.handle(bot, msg);
+  });
 
   return bot;
-};
+}
+
+module.exports = createBot;
