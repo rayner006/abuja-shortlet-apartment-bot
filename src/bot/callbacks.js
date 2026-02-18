@@ -10,28 +10,14 @@ const {
   cancelBooking,
   handleMyBookings 
 } = require('../controllers/bookingController');
-const { 
-  handleAdminPanel,
-  handlePendingApprovals,
-  approveApartment,
-  rejectApartment,
-  handleAdminStats,
-  handleUserManagement,
-  handleAllApartments,
-  // 👇 Import all new user management functions
-  handleManageUser,
-  handleEditUser,
-  handleMessageUser,
-  handleUserListings,
-  handleUserBookings,
-  handleChangeRole,
-  handleSetRole,
-  handleToggleUserStatus,
-  handleDeleteUser,
-  handleConfirmDeleteUser
-} = require('../controllers/adminController');
 const { handleMenu } = require('../controllers/userController');
 const { handleLocationSelection, handleLocationCallback, handleApartmentTypeCallback } = require('../controllers/locationController');
+
+// ============================================
+// NOTE: All admin callbacks are now handled in index.js
+// by the new AdminController. This file ONLY handles
+// user-facing callbacks.
+// ============================================
 
 const handleCallback = async (bot, callbackQuery) => {
   const data = callbackQuery.data;
@@ -42,73 +28,10 @@ const handleCallback = async (bot, callbackQuery) => {
     logger.info(`Callback received: ${data} from user ${callbackQuery.from.id}`);
     
     // ============================================
-    // USER MANAGEMENT CALLBACKS
-    // ============================================
-    
-    // Individual user management
-    if (data.startsWith('manage_')) {
-      await handleManageUser(bot, callbackQuery);
-    }
-    
-    // Edit user details
-    else if (data.startsWith('user_edit_')) {
-      await handleEditUser(bot, callbackQuery);
-    }
-    else if (data.startsWith('edit_firstname_')) {
-      // Handle first name edit - you'll need to implement this
-      await bot.answerCallbackQuery(callbackQuery.id, { text: 'First name edit coming soon!' });
-    }
-    else if (data.startsWith('edit_lastname_')) {
-      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Last name edit coming soon!' });
-    }
-    else if (data.startsWith('edit_phone_')) {
-      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Phone edit coming soon!' });
-    }
-    else if (data.startsWith('edit_email_')) {
-      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Email edit coming soon!' });
-    }
-    
-    // Message user
-    else if (data.startsWith('user_message_')) {
-      await handleMessageUser(bot, callbackQuery);
-    }
-    
-    // View user listings
-    else if (data.startsWith('user_listings_')) {
-      await handleUserListings(bot, callbackQuery);
-    }
-    
-    // View user bookings
-    else if (data.startsWith('user_bookings_')) {
-      await handleUserBookings(bot, callbackQuery);
-    }
-    
-    // Change user role
-    else if (data.startsWith('user_role_')) {
-      await handleChangeRole(bot, callbackQuery);
-    }
-    else if (data.startsWith('set_role_')) {
-      await handleSetRole(bot, callbackQuery);
-    }
-    
-    // Toggle user status (activate/deactivate)
-    else if (data.startsWith('user_toggle_')) {
-      await handleToggleUserStatus(bot, callbackQuery);
-    }
-    
-    // Delete user
-    else if (data.startsWith('user_delete_')) {
-      await handleDeleteUser(bot, callbackQuery);
-    }
-    else if (data.startsWith('confirm_delete_')) {
-      await handleConfirmDeleteUser(bot, callbackQuery);
-    }
-    
-    // ============================================
     // LOCATION SELECTION CALLBACKS
     // ============================================
     
-    else if (data === 'show_locations') {
+    if (data === 'show_locations') {
       await handleLocationSelection(bot, callbackQuery.message);
       await bot.answerCallbackQuery(callbackQuery.id);
     }
@@ -145,13 +68,6 @@ const handleCallback = async (bot, callbackQuery) => {
     else if (data === 'menu_owner_dashboard') {
       await bot.sendMessage(chatId, '📊 Owner dashboard coming soon!');
       await bot.answerCallbackQuery(callbackQuery.id);
-    }
-    else if (data === 'menu_admin') {
-      await handleAdminPanel(bot, { 
-        chat: { id: chatId }, 
-        from: callbackQuery.from,
-        message: { message_id: messageId }
-      });
     }
     else if (data === 'menu_help') {
       await bot.sendMessage(chatId, 
@@ -206,59 +122,22 @@ const handleCallback = async (bot, callbackQuery) => {
     }
     
     // ============================================
-    // ADMIN CALLBACKS
+    // OWNER APARTMENT MANAGEMENT (Non-admin)
     // ============================================
     
-    else if (data === 'admin_pending') {
-      await handlePendingApprovals(bot, callbackQuery, 1);
-    }
-    else if (data.startsWith('admin_pending_')) {
-      const page = parseInt(data.split('_')[2]);
-      await handlePendingApprovals(bot, callbackQuery, page);
-    }
-    else if (data.startsWith('approve_')) {
-      const apartmentId = data.split('_')[1];
-      await approveApartment(bot, callbackQuery, apartmentId);
-    }
-    else if (data.startsWith('reject_')) {
-      const apartmentId = data.split('_')[1];
-      await rejectApartment(bot, callbackQuery, apartmentId);
-    }
-    else if (data === 'admin_stats') {
-      await handleAdminStats(bot, callbackQuery);
-    }
-    else if (data === 'admin_users') {
-      await handleUserManagement(bot, callbackQuery, 1);
-    }
-    else if (data.startsWith('admin_users_')) {
-      const page = parseInt(data.split('_')[2]);
-      await handleUserManagement(bot, callbackQuery, page);
-    }
-    else if (data === 'admin_apartments') {
-      await handleAllApartments(bot, callbackQuery, 1);
-    }
-    else if (data.startsWith('admin_apartments_')) {
-      const page = parseInt(data.split('_')[2]);
-      await handleAllApartments(bot, callbackQuery, page);
-    }
-    
-    // ============================================
-    // OWNER APARTMENT MANAGEMENT
-    // ============================================
-    
-    else if (data.startsWith('edit_')) {
-      const apartmentId = data.split('_')[1];
+    else if (data.startsWith('edit_apt_')) {
+      const apartmentId = data.split('_')[2];
       await handleEditApartment(bot, callbackQuery, apartmentId);
     }
-    else if (data.startsWith('toggle_')) {
-      const apartmentId = data.split('_')[1];
+    else if (data.startsWith('toggle_apt_')) {
+      const apartmentId = data.split('_')[2];
       await handleToggleAvailability(bot, callbackQuery, apartmentId);
     }
-    else if (data.startsWith('apartment_bookings_')) {
+    else if (data.startsWith('apt_bookings_')) {
       const apartmentId = data.split('_')[2];
       await handleApartmentBookings(bot, callbackQuery, apartmentId);
     }
-    else if (data.startsWith('apartment_stats_')) {
+    else if (data.startsWith('apt_stats_')) {
       const apartmentId = data.split('_')[2];
       await handleApartmentStats(bot, callbackQuery, apartmentId);
     }
@@ -272,7 +151,7 @@ const handleCallback = async (bot, callbackQuery) => {
     }
     
     // ============================================
-    // OWNER BOOKING MANAGEMENT
+    // OWNER BOOKING MANAGEMENT (Non-admin)
     // ============================================
     
     else if (data.startsWith('accept_booking_')) {
@@ -325,7 +204,7 @@ const handleCallback = async (bot, callbackQuery) => {
 };
 
 // ============================================
-// ADDITIONAL HELPER FUNCTIONS
+// ADDITIONAL HELPER FUNCTIONS (Keep these)
 // ============================================
 
 const handleApartmentPhotos = async (bot, callbackQuery, apartmentId) => {
