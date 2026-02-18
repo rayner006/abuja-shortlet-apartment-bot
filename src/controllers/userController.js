@@ -3,6 +3,8 @@ const { User } = require('../models');
 const { createMainMenuKeyboard } = require('../utils/keyboards');
 const logger = require('../config/logger');
 const redis = require('../config/redis');
+// 👇 Add this line to import the location handler
+const { handleLocationSelection } = require('./locationController');
 
 const handleStart = async (bot, msg) => {
   const chatId = msg.chat.id;
@@ -160,9 +162,83 @@ Use /edit\\_profile to update your information.
   }
 };
 
+// 👇 Add this new message handler for text messages
+const handleTextMessage = async (bot, msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text;
+  
+  try {
+    // Handle "🔍 Apartments" button click
+    if (text === '🔍 Apartments') {
+      await handleLocationSelection(bot, msg);
+      return;
+    }
+    
+    // Handle "📅 My Bookings" button click
+    if (text === '📅 My Bookings') {
+      // You can add booking handler here later
+      await bot.sendMessage(chatId, '📅 *My Bookings*\n\nThis feature is coming soon!', {
+        parse_mode: 'Markdown'
+      });
+      return;
+    }
+    
+    // Handle "📋 List Property" button click
+    if (text === '📋 List Property') {
+      // Check if user is owner or redirect to registration
+      const user = await User.findOne({ where: { telegramId: msg.from.id } });
+      
+      if (user && (user.role === 'owner' || user.role === 'admin')) {
+        // User is already an owner
+        await bot.sendMessage(chatId, 
+          '📋 *List Your Property*\n\n' +
+          'Use /add_apartment to list a new property or /my_apartments to manage existing ones.',
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        // User needs to register as owner
+        await bot.sendMessage(chatId,
+          '🏠 *Become a Property Owner*\n\n' +
+          'To list your property, you need to register as an owner first.\n\n' +
+          'Type /register_owner to get started!',
+          { parse_mode: 'Markdown' }
+        );
+      }
+      return;
+    }
+    
+    // Handle "❓ Help" button click
+    if (text === '❓ Help') {
+      // Trigger help command
+      const helpText = `
+🤖 *Abuja Shortlet Apartment Bot - Help*
+
+*Available Commands:*
+/start - Start the bot
+/menu - Show main menu
+/search - Search for apartments
+/my\\_bookings - View your bookings
+/help - Show this help message
+
+*For Property Owners:*
+/register\\_owner - Register to list your property
+/add\\_apartment - Add a new apartment listing
+/my\\_apartments - Manage your listings
+      `;
+      await bot.sendMessage(chatId, helpText, { parse_mode: 'Markdown' });
+      return;
+    }
+    
+  } catch (error) {
+    logger.error('Text message handler error:', error);
+    bot.sendMessage(chatId, 'An error occurred. Please try again.');
+  }
+};
+
 module.exports = {
   handleStart,
   handleMenu,
   handleContact,
-  handleProfile
+  handleProfile,
+  handleTextMessage  // 👈 Export the new handler
 };
