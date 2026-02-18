@@ -1,4 +1,4 @@
-// src/controllers/adminController.js (UPDATED - With Full User Management)
+// src/controllers/adminController.js (UPDATED - With Individual User Cards)
 const { User, Apartment, Booking } = require('../models');
 const { Op } = require('sequelize');
 const { createAdminKeyboard, createPaginationKeyboard } = require('../utils/keyboards');
@@ -53,7 +53,7 @@ Welcome to the administration panel. Select an option below:
 };
 
 // ============================================
-// USER MANAGEMENT WITH FULL CONTROLS
+// USER MANAGEMENT WITH INDIVIDUAL CARDS
 // ============================================
 
 const handleUserManagement = async (bot, callbackQuery, page = 1) => {
@@ -63,71 +63,51 @@ const handleUserManagement = async (bot, callbackQuery, page = 1) => {
   try {
     const users = await User.findAll({
       order: [['role', 'ASC'], ['created_at', 'DESC']],
-      limit: 5,
-      offset: (page - 1) * 5
+      limit: 3, // Show 3 users per page for better visibility
+      offset: (page - 1) * 3
     });
     
     const totalUsers = await User.count();
-    const totalPages = Math.ceil(totalUsers / 5);
+    const totalPages = Math.ceil(totalUsers / 3);
     
-    let text = `👥 *User Management* (Page ${page}/${totalPages})\n\n`;
-    text += `Select a user to manage or use buttons below:\n\n`;
+    // Delete the previous message to avoid clutter
+    await bot.deleteMessage(chatId, messageId).catch(() => {});
     
+    // Send header
+    await bot.sendMessage(chatId, 
+      `👥 *User Management* (Page ${page}/${totalPages})\n\n` +
+      `Each user has their own management card below:`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    // Send each user as an individual card
     for (const user of users) {
-      const roleEmoji = {
-        'admin': '👑',
-        'owner': '🏠',
-        'user': '👤'
-      }[user.role] || '👤';
-      
-      // Check if user has isActive field (if not, assume true)
-      const isActive = user.isActive !== false;
-      const statusEmoji = isActive ? '🟢' : '🔴';
-      const status = isActive ? 'Active' : 'Inactive';
-      
-      const userBookings = await Booking.count({ where: { userId: user.id } });
-      const userApartments = await Apartment.count({ where: { ownerId: user.id } });
-      
-      text += `${statusEmoji} ${roleEmoji} *${user.firstName || 'Unknown'}* ${user.lastName || ''}\n`;
-      text += `   🆔 \`${user.telegramId}\`\n`;
-      text += `   📱 @${user.username || 'N/A'}\n`;
-      text += `   📞 ${user.phone || 'Not provided'}\n`;
-      text += `   👑 Role: ${user.role} | ${status}\n`;
-      text += `   📊 Stats: ${userBookings} bookings | ${userApartments} properties\n`;
-      text += `   📅 Joined: ${new Date(user.createdAt).toLocaleDateString()}\n`;
-      text += `   [🔧 Manage] → /manage_${user.id}\n\n`;
+      await sendUserCard(bot, chatId, user);
+    }
+    
+    // Send navigation buttons
+    const navButtons = [];
+    
+    if (page > 1) {
+      navButtons.push({ text: '◀️ Previous Page', callback_data: `admin_users_${page - 1}` });
+    }
+    
+    if (page < totalPages) {
+      navButtons.push({ text: 'Next Page ▶️', callback_data: `admin_users_${page + 1}` });
     }
     
     const keyboard = {
       inline_keyboard: [
+        navButtons,
         [
           { text: '➕ Add New User', callback_data: 'admin_add_user' },
           { text: '📊 Export All', callback_data: 'admin_export_users' }
-        ]
+        ],
+        [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
       ]
     };
     
-    // Pagination
-    if (totalPages > 1) {
-      const paginationRow = [];
-      if (page > 1) {
-        paginationRow.push({ text: '◀️ Prev', callback_data: `admin_users_${page - 1}` });
-      }
-      paginationRow.push({ text: `📄 ${page}/${totalPages}`, callback_data: 'noop' });
-      if (page < totalPages) {
-        paginationRow.push({ text: 'Next ▶️', callback_data: `admin_users_${page + 1}` });
-      }
-      keyboard.inline_keyboard.push(paginationRow);
-    }
-    
-    keyboard.inline_keyboard.push(
-      [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
-    );
-    
-    await bot.editMessageText(text, {
-      chat_id: chatId,
-      message_id: messageId,
-      parse_mode: 'Markdown',
+    await bot.sendMessage(chatId, 'Navigation:', {
       reply_markup: keyboard
     });
     
@@ -140,7 +120,313 @@ const handleUserManagement = async (bot, callbackQuery, page = 1) => {
 };
 
 // ============================================
-// INDIVIDUAL USER MANAGEMENT
+// SEND INDIVIDUAL USER CARD
+// ============================================
+
+const sendUserCard = async (bot, chatId, user) => {
+  try {
+    const roleEmoji = {
+      'admin': '👑',
+      'owner': '🏠',
+      'user': '👤'
+    }[user.role] || '👤';
+    
+    const isActive = user.isActive !== false;
+    const statusEmoji = isActive ? '🟢' : '🔴';
+    const statusText = isActive ? 'Active' : 'Inactive';
+    
+    const userBookings = await Booking.count({ where: { userId: user.id } });
+    const userApartments = await Apartment.count({ where: { ownerId: user.id } });
+    
+    const cardText = `
+${statusEmoji} ${roleEmoji} *${user.firstName || 'Unknown'} ${user.lastName || ''}*
+
+🆔 \`${user.telegramId}\`
+📱 @${user.username || 'N/A'}
+📞 ${user.phone || 'Not provided'}
+👑 Role: ${user.role} | ${statusText}
+📊 Stats: ${userBookings} bookings | ${userApartments} properties
+📅 Joined: ${new Date(user.createdAt).toLocaleDateString()}
+    `;
+    
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '✏️ Edit', callback_data: `user_edit_${user.id}` },
+          { text: isActive ? '🔴 Deactivate' : '🟢 Activate', callback_data: `user_toggle_${user.id}` },
+          { text: '💬 Message', callback_data: `user_message_${user.id}` }
+        ],
+        [
+          { text: '👑 Change Role', callback_data: `user_role_${user.id}` },
+          { text: '📋 Listings', callback_data: `user_listings_${user.id}` },
+          { text: '📅 Bookings', callback_data: `user_bookings_${user.id}` }
+        ],
+        [
+          { text: '❌ Delete User', callback_data: `user_delete_${user.id}` }
+        ]
+      ]
+    };
+    
+    await bot.sendMessage(chatId, cardText, {
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
+    
+  } catch (error) {
+    logger.error('Send user card error:', error);
+  }
+};
+
+// ============================================
+// EDIT USER DETAILS
+// ============================================
+
+const handleEditUser = async (bot, callbackQuery) => {
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+  const userId = callbackQuery.data.split('_')[2];
+  
+  try {
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'User not found' });
+      return;
+    }
+    
+    const text = `
+✏️ *Edit User: ${user.firstName || 'Unknown'}*
+
+Current Details:
+• First Name: ${user.firstName || 'Not set'}
+• Last Name: ${user.lastName || 'Not set'}
+• Phone: ${user.phone || 'Not set'}
+• Email: ${user.email || 'Not set'}
+
+Select what you want to edit:
+    `;
+    
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '📝 First Name', callback_data: `edit_firstname_${user.id}` },
+          { text: '📝 Last Name', callback_data: `edit_lastname_${user.id}` }
+        ],
+        [
+          { text: '📞 Phone', callback_data: `edit_phone_${user.id}` },
+          { text: '📧 Email', callback_data: `edit_email_${user.id}` }
+        ],
+        [
+          { text: '« Back', callback_data: `manage_${user.id}` }
+        ]
+      ]
+    };
+    
+    await bot.editMessageText(text, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: keyboard
+    });
+    
+    await bot.answerCallbackQuery(callbackQuery.id);
+    
+  } catch (error) {
+    logger.error('Edit user error:', error);
+    bot.answerCallbackQuery(callbackQuery.id, { text: 'Error' });
+  }
+};
+
+// ============================================
+// MESSAGE USER
+// ============================================
+
+const handleMessageUser = async (bot, callbackQuery) => {
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+  const userId = callbackQuery.data.split('_')[2];
+  
+  try {
+    const user = await User.findByPk(userId);
+    
+    if (!user) {
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'User not found' });
+      return;
+    }
+    
+    const text = `
+💬 *Send Message to ${user.firstName || 'User'}*
+
+Type your message below.
+The user will receive it immediately.
+
+To cancel, type /cancel
+    `;
+    
+    // Store state that we're waiting for a message
+    if (!global.messageStates) global.messageStates = {};
+    global.messageStates[chatId] = {
+      action: 'sending_message',
+      targetUserId: user.id,
+      targetTelegramId: user.telegramId
+    };
+    
+    await bot.editMessageText(text, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '« Cancel', callback_data: `manage_${user.id}` }]
+        ]
+      }
+    });
+    
+    await bot.answerCallbackQuery(callbackQuery.id);
+    
+  } catch (error) {
+    logger.error('Message user error:', error);
+    bot.answerCallbackQuery(callbackQuery.id, { text: 'Error' });
+  }
+};
+
+// ============================================
+// VIEW USER LISTINGS
+// ============================================
+
+const handleUserListings = async (bot, callbackQuery) => {
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+  const userId = callbackQuery.data.split('_')[2];
+  
+  try {
+    const user = await User.findByPk(userId);
+    const apartments = await Apartment.findAll({
+      where: { ownerId: user.id }
+    });
+    
+    if (apartments.length === 0) {
+      await bot.editMessageText(
+        `📋 *No Listings*\n\n${user.firstName || 'User'} has no apartment listings.`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '« Back', callback_data: `manage_${user.id}` }]
+            ]
+          }
+        }
+      );
+      await bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+    
+    let text = `📋 *${user.firstName || 'User'}'s Listings*\n\n`;
+    
+    for (const apt of apartments) {
+      const statusEmoji = apt.isAvailable ? '🟢' : '🔴';
+      text += `🏠 *${apt.title}*\n`;
+      text += `   📍 ${apt.location}\n`;
+      text += `   💰 ₦${apt.pricePerNight.toLocaleString()}/night\n`;
+      text += `   📊 ${statusEmoji} ${apt.isAvailable ? 'Available' : 'Unavailable'}\n`;
+      text += `   👁️ Views: ${apt.views || 0}\n\n`;
+    }
+    
+    await bot.editMessageText(text, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '« Back', callback_data: `manage_${user.id}` }]
+        ]
+      }
+    });
+    
+    await bot.answerCallbackQuery(callbackQuery.id);
+    
+  } catch (error) {
+    logger.error('User listings error:', error);
+    bot.answerCallbackQuery(callbackQuery.id, { text: 'Error loading listings' });
+  }
+};
+
+// ============================================
+// VIEW USER BOOKINGS
+// ============================================
+
+const handleUserBookings = async (bot, callbackQuery) => {
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+  const userId = callbackQuery.data.split('_')[2];
+  
+  try {
+    const user = await User.findByPk(userId);
+    const bookings = await Booking.findAll({
+      where: { userId: user.id },
+      include: [{ model: Apartment, attributes: ['title', 'location'] }],
+      order: [['created_at', 'DESC']],
+      limit: 10
+    });
+    
+    if (bookings.length === 0) {
+      await bot.editMessageText(
+        `📅 *No Bookings*\n\n${user.firstName || 'User'} has no booking history.`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '« Back', callback_data: `manage_${user.id}` }]
+            ]
+          }
+        }
+      );
+      await bot.answerCallbackQuery(callbackQuery.id);
+      return;
+    }
+    
+    let text = `📅 *${user.firstName || 'User'}'s Bookings*\n\n`;
+    
+    for (const booking of bookings) {
+      const statusEmoji = {
+        'pending': '⏳',
+        'confirmed': '✅',
+        'completed': '🏁',
+        'cancelled': '❌'
+      }[booking.status] || '📅';
+      
+      text += `${statusEmoji} *${booking.Apartment?.title || 'Apartment'}*\n`;
+      text += `   📍 ${booking.Apartment?.location || 'N/A'}\n`;
+      text += `   📅 ${new Date(booking.checkIn).toLocaleDateString()} - ${new Date(booking.checkOut).toLocaleDateString()}\n`;
+      text += `   💰 ₦${booking.totalPrice.toLocaleString()}\n`;
+      text += `   Status: ${booking.status}\n\n`;
+    }
+    
+    await bot.editMessageText(text, {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '« Back', callback_data: `manage_${user.id}` }]
+        ]
+      }
+    });
+    
+    await bot.answerCallbackQuery(callbackQuery.id);
+    
+  } catch (error) {
+    logger.error('User bookings error:', error);
+    bot.answerCallbackQuery(callbackQuery.id, { text: 'Error loading bookings' });
+  }
+};
+
+// ============================================
+// INDIVIDUAL USER MANAGEMENT (Original - Keep for backward compatibility)
 // ============================================
 
 const handleManageUser = async (bot, callbackQuery) => {
@@ -340,7 +626,7 @@ const handleToggleUserStatus = async (bot, callbackQuery) => {
       return;
     }
     
-    // Toggle status (if isActive doesn't exist, add it)
+    // Toggle status
     user.isActive = user.isActive === false ? true : false;
     await user.save();
     
@@ -819,7 +1105,7 @@ const handleAdminStats = async (bot, callbackQuery) => {
 
 const handleAllApartments = async (bot, callbackQuery, page = 1) => {
   const chatId = callbackQuery.message.chat.id;
-  const messageId = callbackQuery.message.message_id;
+  const messageId =callbackQuery.message.message_id;
   
   try {
     const apartments = await Apartment.findAll({
@@ -895,8 +1181,15 @@ module.exports = {
   // Main admin
   handleAdminPanel,
   
-  // User management
+  // User management - New card-based functions
   handleUserManagement,
+  sendUserCard,
+  handleEditUser,
+  handleMessageUser,
+  handleUserListings,
+  handleUserBookings,
+  
+  // User management - Original functions (keep for compatibility)
   handleManageUser,
   handleChangeRole,
   handleSetRole,
