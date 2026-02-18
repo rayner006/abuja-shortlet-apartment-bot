@@ -9,19 +9,17 @@ const { setupCommands } = require('./bot/commands');
 const { handleCallback } = require('./bot/callbacks');
 const { handleMessage } = require('./bot/conversations');
 
-// Initialize bot with better error handling
-const bot = new TelegramBot(process.env.BOT_TOKEN, { 
-  polling: true,
-  filepath: false,
-  // Add these options for stability
+// Initialize bot (FIXED POLLING CONFIG)
+const bot = new TelegramBot(process.env.BOT_TOKEN, {
   polling: {
     interval: 300,
     autoStart: true,
-    params: {
-      timeout: 10
-    }
+    params: { timeout: 10 }
   }
 });
+
+// Delete webhook to avoid 409 conflict
+bot.deleteWebHook().catch(() => {});
 
 const app = express();
 app.use(express.json());
@@ -37,27 +35,23 @@ initDatabase().catch(err => {
 // Setup bot commands
 setupCommands(bot);
 
-// Error handling for bot
+// Bot error handling
 bot.on('polling_error', (error) => {
-  logger.error('Polling error:', error);
-  // Don't exit, just log
+  logger.error('Polling error:', error.message);
 });
 
 bot.on('webhook_error', (error) => {
-  logger.error('Webhook error:', error);
+  logger.error('Webhook error:', error.message);
 });
 
-// Handle bot errors
 bot.on('error', (error) => {
-  logger.error('Bot error:', error);
+  logger.error('Bot error:', error.message);
 });
 
 // Message handler
 bot.on('message', async (msg) => {
   try {
-    if (msg.text && msg.text.startsWith('/')) {
-      return;
-    }
+    if (msg.text && msg.text.startsWith('/')) return;
     await handleMessage(bot, msg);
   } catch (error) {
     logger.error('Message handler error:', error);
@@ -69,61 +63,4 @@ bot.on('callback_query', async (callbackQuery) => {
   try {
     await handleCallback(bot, callbackQuery);
   } catch (error) {
-    logger.error('Callback handler error:', error);
-    bot.answerCallbackQuery(callbackQuery.id, {
-      text: 'An error occurred. Please try again.'
-    }).catch(() => {});
-  }
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date(),
-    uptime: process.uptime(),
-    bot: bot.isPolling() ? 'running' : 'stopped'
-  });
-});
-
-// Keep process alive with proper error handling
-const PORT = process.env.PORT || 8888;
-const server = app.listen(PORT, () => {
-  logger.info(`Server running on port ${PORT}`);
-  logger.info('Bot is running...');
-});
-
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    bot.stopPolling().then(() => {
-      redis.quit().then(() => {
-        process.exit(0);
-      });
-    });
-  });
-});
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully...');
-  server.close(() => {
-    bot.stopPolling().then(() => {
-      redis.quit().then(() => {
-        process.exit(0);
-      });
-    });
-  });
-});
-
-// Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception:', error);
-  // Keep running despite error
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
-});
-
-module.exports = { bot, app, server };
+    logger.error('C
