@@ -24,15 +24,15 @@ bot.onText(/\/start/, (msg) => {
     const welcomeMessage = `
  *Welcome To Abuja Shortlet Apartment!*🏠
 
- *Click Any Button Below To Continue* 👇👇👇
+ *Choose An Option Below* 👇👇👇
     `;
     
     const options = {
         parse_mode: 'Markdown',
         reply_markup: {
             keyboard: [
-                ['🔍 Search Apartments', '📅 My Bookings'],
-                ['ℹ️ About Us', '📞 Contact Support']
+                ['📅 View Apartment', '📞 Contact Support'],
+                ['ℹ️ About Us']
             ],
             resize_keyboard: true,
             one_time_keyboard: false
@@ -47,7 +47,7 @@ bot.on('message', (msg) => {
     const chatId = msg.chat.id;
     const text = msg.text;
     
-    if (text === '🔍 Search Apartments') {
+    if (text === '📅 View Apartment') {
         bot.sendMessage(chatId, '📍 *Select Location*', {
             parse_mode: 'Markdown',
             reply_markup: {
@@ -60,14 +60,11 @@ bot.on('message', (msg) => {
             }
         });
     }
-    else if (text === '📅 My Bookings') {
-        bot.sendMessage(chatId, 'You have no active bookings.');
+    else if (text === '📞 Contact Support') {
+        bot.sendMessage(chatId, '📱 Contact us on: 08012345678\n📧 Email: support@abujashortlet.com');
     }
     else if (text === 'ℹ️ About Us') {
         bot.sendMessage(chatId, '🏢 Abuja Shortlet Apartment - Your trusted partner for shortlet apartments in Abuja.');
-    }
-    else if (text === '📞 Contact Support') {
-        bot.sendMessage(chatId, '📱 Contact us on: 08012345678\n📧 Email: support@abujashortlet.com');
     }
     else if (text === '🔙 Main Menu') {
         const welcomeMessage = `
@@ -80,8 +77,8 @@ bot.on('message', (msg) => {
             parse_mode: 'Markdown',
             reply_markup: {
                 keyboard: [
-                    ['🔍 Search Apartments', '📅 My Bookings'],
-                    ['ℹ️ About Us', '📞 Contact Support']
+                    ['📅 View Apartment', '📞 Contact Support'],
+                    ['ℹ️ About Us']
                 ],
                 resize_keyboard: true
             }
