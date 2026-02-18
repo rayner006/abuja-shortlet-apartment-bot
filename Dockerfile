@@ -6,20 +6,21 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 
-# Copy source code and uploads
+# Copy source code
 COPY . .
 
 # Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
-    adduser -S nodejs -u 1001 && \
+RUN addgroup -S nodejs && \
+    adduser -S nodejs -G nodejs && \
     chown -R nodejs:nodejs /app
 
 USER nodejs
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:'+process.env.PORT+'/health', (r) => {r.statusCode === 200 ? process.exit(0) : process.exit(1)})"
+# Railway uses dynamic PORT
+EXPOSE 8080
 
-EXPOSE 3000
+# Health check with longer startup time
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:'+process.env.PORT+'/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
 CMD ["node", "src/index.js"]
