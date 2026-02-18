@@ -25,37 +25,49 @@ const handleStart = async (bot, msg) => {
       
       logger.info(`New user created: ${from.id} (${from.username})`);
       
-      // Welcome message for new users
+      // 🏖️ NEW WELCOME MESSAGE WITH BUTTONS for new users
       const welcomeText = `
-🏢 *Welcome to Abuja Shortlet Apartments!*
+🏖️ *Welcome To Abuja Shortlet Apartments* 🏠
 
-Hello ${from.first_name || 'there'}! I'm your personal assistant for finding and booking shortlet apartments in Abuja.
-
-✨ *What I can do for you:*
-• Search for apartments by location, price, and guests
-• View detailed apartment information and photos
-• Make bookings and manage your reservations
-• For property owners: List and manage your apartments
-
-Use /menu to see all available options or /help for assistance.
-
-Happy apartment hunting! 🏠
+👇🏻 *Click Any Button Below* 👇🏻
       `;
       
-      await bot.sendMessage(chatId, welcomeText, { parse_mode: 'Markdown' });
+      // Send welcome message with permanent keyboard
+      await bot.sendMessage(chatId, welcomeText, { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          keyboard: [
+            ['🔍 Search Apartments', '📅 My Bookings'],
+            ['🏢 Become Owner', '❓ Help'],
+            ['📍 Popular Areas', '💰 Price Guide']
+          ],
+          resize_keyboard: true,
+          persistent: true  // Keyboard stays visible
+        }
+      });
+      
     } else {
       // Update last active
       user.lastActive = new Date();
       await user.save();
       
-      // Welcome back message
+      // Welcome back message for returning users
       await bot.sendMessage(chatId, 
-        `Welcome back, ${user.firstName || 'there'}! 👋\nUse /menu to continue.`
+        `Welcome back, ${user.firstName || 'there'}! 👋\nUse /menu to continue.`,
+        {
+          reply_markup: {
+            keyboard: [
+              ['🔍 Search Apartments', '📅 My Bookings'],
+              ['🏢 Become Owner', '❓ Help']
+            ],
+            resize_keyboard: true
+          }
+        }
       );
     }
     
-    // Show main menu
-    await handleMenu(bot, msg);
+    // Show main menu (optional - you can remove this if you want)
+    // await handleMenu(bot, msg);
     
   } catch (error) {
     logger.error('Start handler error:', error);
