@@ -3,7 +3,6 @@ const logger = require('../config/logger');
 
 // Import the NEW admin controller
 const AdminController = require('../controllers/admin');
-// We'll create the instance in the setup function since we need the bot instance
 
 const setupAdminCommands = (bot) => {
   
@@ -13,7 +12,13 @@ const setupAdminCommands = (bot) => {
   // Admin panel command
   bot.onText(/\/admin/, async (msg) => {
     try {
-      // Use the new admin controller's handleAdminPanel method
+      // Check if user is admin
+      const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+      if (!adminIds.includes(msg.from.id)) {
+        await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+        return;
+      }
+      
       await adminController.handleAdminPanel(msg);
     } catch (error) {
       logger.error('Admin command error:', error);
@@ -21,9 +26,16 @@ const setupAdminCommands = (bot) => {
     }
   });
 
-  // Optional: Quick stats command
+  // Quick stats command
   bot.onText(/\/stats/, async (msg) => {
     try {
+      // Check if user is admin
+      const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+      if (!adminIds.includes(msg.from.id)) {
+        await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+        return;
+      }
+      
       // Create a mock callback query for the stats
       const mockCallback = {
         id: 'stats',
@@ -32,7 +44,6 @@ const setupAdminCommands = (bot) => {
         data: 'admin_stats'
       };
       
-      // Use the new admin controller's callback handler
       await adminController.handleCallback(mockCallback);
     } catch (error) {
       logger.error('Stats command error:', error);
@@ -40,18 +51,24 @@ const setupAdminCommands = (bot) => {
     }
   });
 
-  // Optional: Quick pending approvals
+  // Quick pending approvals
   bot.onText(/\/pending/, async (msg) => {
     try {
+      // Check if user is admin
+      const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+      if (!adminIds.includes(msg.from.id)) {
+        await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+        return;
+      }
+      
       // Create a mock callback query for pending approvals
       const mockCallback = {
         id: 'pending',
         message: msg,
         from: msg.from,
-        data: 'admin_pending_1' // Start at page 1
+        data: 'admin_pending_1'
       };
       
-      // Use the new admin controller's callback handler
       await adminController.handleCallback(mockCallback);
     } catch (error) {
       logger.error('Pending command error:', error);
@@ -59,18 +76,24 @@ const setupAdminCommands = (bot) => {
     }
   });
   
-  // Optional: Quick users list
+  // Quick users list
   bot.onText(/\/users/, async (msg) => {
     try {
+      // Check if user is admin
+      const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+      if (!adminIds.includes(msg.from.id)) {
+        await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+        return;
+      }
+      
       // Create a mock callback query for users list
       const mockCallback = {
         id: 'users',
         message: msg,
         from: msg.from,
-        data: 'admin_users_1' // Start at page 1
+        data: 'admin_users_1'
       };
       
-      // Use the new admin controller's callback handler
       await adminController.handleCallback(mockCallback);
     } catch (error) {
       logger.error('Users command error:', error);
@@ -78,18 +101,24 @@ const setupAdminCommands = (bot) => {
     }
   });
   
-  // Optional: Quick apartments list
+  // Quick apartments list
   bot.onText(/\/allapartments/, async (msg) => {
     try {
+      // Check if user is admin
+      const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+      if (!adminIds.includes(msg.from.id)) {
+        await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+        return;
+      }
+      
       // Create a mock callback query for apartments list
       const mockCallback = {
         id: 'allapartments',
         message: msg,
         from: msg.from,
-        data: 'admin_apartments_1' // Start at page 1
+        data: 'admin_apartments_1'
       };
       
-      // Use the new admin controller's callback handler
       await adminController.handleCallback(mockCallback);
     } catch (error) {
       logger.error('Apartments command error:', error);
