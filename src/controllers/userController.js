@@ -52,23 +52,25 @@ const handleStart = async (bot, msg) => {
       user.lastActive = new Date();
       await user.save();
       
-      // Welcome back message for returning users - SAME CLEAN LAYOUT
-      await bot.sendMessage(chatId, 
-        `Welcome back, ${user.firstName || 'there'}! 👋\nUse /menu to continue.`,
-        {
-          reply_markup: {
-            keyboard: [
-              ['🔍 Apartments', '📅 My Bookings'],
-              ['📋 List Property', '❓ Help']
-            ],
-            resize_keyboard: true
-          }
+      // ✅ FIXED: Welcome back message with proper text AND keyboard
+      const welcomeBackText = `
+👋 *Welcome back, ${user.firstName || 'there'}!*
+
+👇🏻 *Click Any Button Below* 👇🏻
+      `;
+      
+      await bot.sendMessage(chatId, welcomeBackText, { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          keyboard: [
+            ['🔍 Apartments', '📅 My Bookings'],
+            ['📋 List Property', '❓ Help']
+          ],
+          resize_keyboard: true,
+          persistent: true
         }
-      );
+      });
     }
-    
-    // Show main menu (optional - you can remove this if you want)
-    // await handleMenu(bot, msg);
     
   } catch (error) {
     logger.error('Start handler error:', error);
@@ -176,10 +178,9 @@ const handleTextMessage = async (bot, msg) => {
     
     // Handle "📅 My Bookings" button click
     if (text === '📅 My Bookings') {
-      // You can add booking handler here later
-      await bot.sendMessage(chatId, '📅 *My Bookings*\n\nThis feature is coming soon!', {
-        parse_mode: 'Markdown'
-      });
+      // Import here to avoid circular dependency
+      const { handleMyBookings } = require('./bookingController');
+      await handleMyBookings(bot, msg);
       return;
     }
     
