@@ -9,14 +9,14 @@ const { setupAdminCommands } = require('./bot/adminCommands');
 const { handleCallback } = require('./bot/callbacks');
 const { handleMessage } = require('./bot/conversations');
 
-// Import NEW admin controller
-const AdminController = require('./controllers/admin');
-const adminController = new AdminController(bot);
-
-// Initialize bot WITHOUT polling
+// ✅ 1. FIRST initialize the bot
 const bot = new TelegramBot(process.env.BOT_TOKEN, {
   polling: false
 });
+
+// ✅ 2. THEN import and create AdminController with the bot
+const AdminController = require('./controllers/admin');
+const adminController = new AdminController(bot);
 
 const app = express();
 app.use(express.json());
