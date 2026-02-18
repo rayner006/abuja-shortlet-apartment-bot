@@ -2,7 +2,7 @@
 const { Apartment } = require('../models');
 const logger = require('../config/logger');
 
-// Popular Abuja locations with coordinates (for future use)
+// Popular Abuja locations with emojis
 const popularLocations = [
   { id: 'asokoro', name: 'Asokoro', emoji: '🏛️' },
   { id: 'maitama', name: 'Maitama', emoji: '🏰' },
@@ -19,7 +19,7 @@ const popularLocations = [
   { id: 'lugbe', name: 'Lugbe', emoji: '🏡' }
 ];
 
-// Handle location selection
+// Handle showing location selection menu
 const handleLocationSelection = async (bot, msg) => {
   const chatId = msg.chat.id;
   
@@ -38,7 +38,7 @@ const handleLocationSelection = async (bot, msg) => {
     
     // Add back button
     locationKeyboard.push([
-      { text: '« Back to Menu', callback_data: 'back_to_menu' }
+      { text: '« Back to Menu', callback_data: 'back_to_main' }
     ]);
     
     await bot.sendMessage(chatId, 
@@ -58,7 +58,7 @@ const handleLocationSelection = async (bot, msg) => {
   }
 };
 
-// Handle location selection callback
+// Handle when user clicks on a location
 const handleLocationCallback = async (bot, callbackQuery) => {
   const chatId = callbackQuery.message.chat.id;
   const messageId = callbackQuery.message.message_id;
@@ -109,7 +109,7 @@ const handleLocationCallback = async (bot, callbackQuery) => {
           reply_markup: {
             inline_keyboard: [
               [{ text: '📍 Choose Another Location', callback_data: 'show_locations' }],
-              [{ text: '« Back to Menu', callback_data: 'back_to_menu' }]
+              [{ text: '« Back to Menu', callback_data: 'back_to_main' }]
             ]
           }
         }
@@ -128,16 +128,24 @@ const handleLocationCallback = async (bot, callbackQuery) => {
 // Send apartment result with navigation
 const sendApartmentResult = async (bot, chatId, apartment, index, total, location) => {
   try {
+    // Format amenities if available
+    let amenitiesText = '';
+    if (apartment.amenities) {
+      const amenities = Array.isArray(apartment.amenities) 
+        ? apartment.amenities.join(', ') 
+        : apartment.amenities;
+      amenitiesText = `✨ *Amenities:* ${amenities}\n`;
+    }
+    
     const text = `
 ${index + 1}/${total} ${location.emoji} *${apartment.title}*
 
 📍 *Location:* ${apartment.location}
-💰 *Price:* ₦${apartment.pricePerNight}/night
+💰 *Price:* ₦${apartment.pricePerNight?.toLocaleString() || 'N/A'}/night
 🛏️ *Bedrooms:* ${apartment.bedrooms || 'N/A'}
 🛁 *Bathrooms:* ${apartment.bathrooms || 'N/A'}
 📝 *Description:* ${apartment.description || 'No description available'}
-
-✨ *Amenities:* ${apartment.amenities || 'Standard amenities included'}
+${amenitiesText}
     `;
     
     // Create navigation keyboard
@@ -157,9 +165,10 @@ ${index + 1}/${total} ${location.emoji} *${apartment.title}*
     keyboard.push(navRow);
     keyboard.push([
       { text: '📍 Change Location', callback_data: 'show_locations' },
-      { text: '« Menu', callback_data: 'back_to_menu' }
+      { text: '« Menu', callback_data: 'back_to_main' }
     ]);
     
+    // Send with photo if available
     if (apartment.images && apartment.images.length > 0) {
       await bot.sendPhoto(chatId, apartment.images[0], {
         caption: text,
