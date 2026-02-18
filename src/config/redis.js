@@ -1,92 +1,67 @@
-// src/config/redis.js - Railway Optimized Version
+// src/config/redis.js - Railway Optimized Version (No .env needed)
 const Redis = require('ioredis');
-require('dotenv').config();
 
 console.log('🔌 Initializing Redis connection...');
+console.log('Environment variables available:', Object.keys(process.env).filter(k => k.includes('REDIS')));
 
-// Check if we have Redis variables
-if (!process.env.REDISHOST && !process.env.REDIS_URL) {
-  console.error('❌ No Redis configuration found in environment variables!');
-  console.log('📝 Please add REDISHOST, REDISPORT, and REDISPASSWORD to your .env file');
-  console.log('   Or use REDIS_URL from Railway dashboard');
-  process.exit(1); // Exit if no Redis config - since you don't want to disable
-}
-
-// Method 1: Using REDIS_URL (most common on Railway)
-let redis;
-if (process.env.REDIS_URL) {
-  console.log('🔗 Using REDIS_URL connection');
-  redis = new Redis(process.env.REDIS_URL, {
-    retryStrategy: (times) => {
-      const delay = Math.min(times * 1000, 10000);
-      console.log(`🔄 Redis reconnecting in ${delay}ms (attempt ${times})`);
-      return delay;
-    },
-    maxRetriesPerRequest: 5
-  });
-} 
-// Method 2: Using individual host/port/password
-else {
-  console.log('🔗 Using individual Redis connection parameters');
-  console.log(`   Host: ${process.env.REDISHOST}`);
-  console.log(`   Port: ${process.env.REDISPORT}`);
-  
-  redis = new Redis({
+// Railway provides these variables automatically when services are linked
+const redisConfig = {
+  // Try REDIS_URL first (most common)
+  ...(process.env.REDIS_URL ? { 
+    host: new URL(process.env.REDIS_URL).hostname,
+    port: parseInt(new URL(process.env.REDIS_URL).port) || 6379,
+    password: new URL(process.env.REDIS_URL).password ? decodeURIComponent(new URL(process.env.REDIS_URL).password) : null,
+    username: new URL(process.env.REDIS_URL).username || 'default'
+  } : {
+    // Fall back to individual variables
     host: process.env.REDISHOST,
     port: parseInt(process.env.REDISPORT) || 6379,
     password: process.env.REDISPASSWORD,
-    username: process.env.REDISUSER || 'default',
-    retryStrategy: (times) => {
-      const delay = Math.min(times * 1000, 10000);
-      console.log(`🔄 Redis reconnecting in ${delay}ms (attempt ${times})`);
-      return delay;
-    },
-    maxRetriesPerRequest: 5,
-    enableReadyCheck: true,
-    lazyConnect: false
-  });
-}
+    username: process.env.REDISUSER || 'default'
+  }),
+  family: 4, // Force IPv4
+  retryStrategy: (times) => {
+    const delay = Math.min(times * 1000, 10000);
+    console.log(`🔄 Redis reconnecting in ${delay}ms (attempt ${times})`);
+    return delay;
+  },
+  maxRetriesPerRequest: 5,
+  enableReadyCheck: true,
+  connectTimeout: 10000
+};
 
-// Connection event handlers
+console.log('📊 Redis configuration loaded from Railway environment');
+console.log('Host:', redisConfig.host);
+console.log('Port:', redisConfig.port);
+console.log('Username:', redisConfig.username);
+
+const redis = new Redis(redisConfig);
+
 redis.on('connect', () => {
-  console.log('✅ Redis: Connection established');
+  console.log('✅ Redis: Connection established to Railway');
 });
 
 redis.on('ready', () => {
   console.log('✅ Redis: Ready to accept commands');
+  
+  // Test the connection
+  redis.ping().then(() => {
+    console.log('✅ Redis: Ping successful');
+  }).catch(err => {
+    console.error('❌ Redis: Ping failed:', err.message);
+  });
 });
 
 redis.on('error', (err) => {
   console.error('❌ Redis error:', err.message);
-  console.log('   Please verify your Redis credentials from Railway dashboard');
-  console.log('   REDISHOST:', process.env.REDISHOST || 'not set');
-  console.log('   REDISPORT:', process.env.REDISPORT || 'not set');
-  console.log('   REDIS_URL:', process.env.REDIS_URL ? 'set' : 'not set');
+  console.log('   Please verify your Redis service is linked to this app');
+  console.log('   Check Railway dashboard → Variables tab for:');
+  console.log('   - REDISHOST, REDISPORT, REDISPASSWORD');
+  console.log('   - or REDIS_URL');
 });
 
 redis.on('close', () => {
   console.log('⚠️ Redis: Connection closed');
 });
-
-redis.on('reconnecting', (delay) => {
-  console.log(`🔄 Redis: Reconnecting in ${delay}ms...`);
-});
-
-// Test the connection immediately
-(async () => {
-  try {
-    await redis.ping();
-    console.log('✅ Redis: Ping successful');
-    
-    // Test set/get
-    await redis.set('test_key', 'connected');
-    const test = await redis.get('test_key');
-    console.log('✅ Redis: Read/write test successful:', test);
-    await redis.del('test_key');
-    
-  } catch (error) {
-    console.error('❌ Redis: Initial connection test failed:', error.message);
-  }
-})();
 
 module.exports = redis;
