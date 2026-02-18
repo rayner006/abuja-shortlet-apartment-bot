@@ -9,17 +9,10 @@ const { setupCommands } = require('./bot/commands');
 const { handleCallback } = require('./bot/callbacks');
 const { handleMessage } = require('./bot/conversations');
 
-// Initialize bot (fixed polling config)
+// Initialize bot WITHOUT polling
 const bot = new TelegramBot(process.env.BOT_TOKEN, {
-  polling: {
-    interval: 300,
-    autoStart: true,
-    params: { timeout: 10 }
-  }
+  polling: false
 });
-
-// Delete webhook to avoid 409 conflicts
-bot.deleteWebHook().catch(() => {});
 
 const app = express();
 app.use(express.json());
@@ -34,6 +27,28 @@ initDatabase().catch(err => {
 
 // Setup bot commands
 setupCommands(bot);
+
+// --- START BOT SAFELY ---
+(async () => {
+  try {
+    // Stop any previous polling just in case
+    await bot.stopPolling().catch(() => {});
+
+    // Delete webhook before polling
+    await bot.deleteWebHook();
+    logger.info('Webhook deleted successfully');
+
+    // Start polling manually
+    await bot.startPolling({
+      interval: 300,
+      params: { timeout: 10 }
+    });
+
+    logger.info('Bot polling started');
+  } catch (error) {
+    logger.error('Bot startup error:', error.message);
+  }
+})();
 
 // Bot error handling
 bot.on('polling_error', (error) => {
@@ -84,10 +99,10 @@ app.get('/health', (req, res) => {
 const PORT = process.env.PORT || 8888;
 const server = app.listen(PORT, () => {
   logger.info(`Server running on port ${PORT}`);
-  logger.info('Bot is running...');
+  logger.info('Bot server ready...');
 });
 
-// Graceful shutdown function
+// Graceful shutdown
 async function shutdown() {
   logger.info('Shutting down gracefully...');
   try {
