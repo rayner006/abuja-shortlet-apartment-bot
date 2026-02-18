@@ -134,36 +134,46 @@ bot.on('callback_query', async (callbackQuery) => {
         
         if (!session || !session.location) {
             await bot.sendMessage(chatId, 'Please select a location first.');
+            await bot.answerCallbackQuery(callbackQuery.id);
             return;
         }
         
         const location = session.location;
-        const apartments = filterApartmentsByType(location, bedroomCount);
         
-        if (apartments.length === 0) {
-            await bot.sendMessage(
-                chatId, 
-                `No ${bedroomCount === 0 ? 'Studio' : bedroomCount + '-Bedroom'} apartments found in ${location}.`,
-                {
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: '🔙 Back to Types', callback_data: 'back_to_types' }]
-                        ]
+        // Send "Searching..." message
+        await bot.sendMessage(chatId, `🔍 Searching for ${bedroomCount === 0 ? 'Studio' : bedroomCount + '-Bedroom'} apartments in ${location}...`);
+        
+        try {
+            const apartments = await filterApartmentsByType(location, bedroomCount);
+            
+            if (!apartments || apartments.length === 0) {
+                await bot.sendMessage(
+                    chatId, 
+                    `No ${bedroomCount === 0 ? 'Studio' : bedroomCount + '-Bedroom'} apartments found in ${location}.`,
+                    {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: '🔙 Back to Types', callback_data: 'back_to_types' }]
+                            ]
+                        }
                     }
+                );
+            } else {
+                for (const apt of apartments) {
+                    await bot.sendMessage(chatId, formatApartmentMessage(apt), {
+                        parse_mode: 'Markdown',
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
+                                [{ text: '🔙 Back to Types', callback_data: 'back_to_types' }]
+                            ]
+                        }
+                    });
                 }
-            );
-        } else {
-            for (const apt of apartments) {
-                await bot.sendMessage(chatId, formatApartmentMessage(apt), {
-                    parse_mode: 'Markdown',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }],
-                            [{ text: '🔙 Back to Types', callback_data: 'back_to_types' }]
-                        ]
-                    }
-                });
             }
+        } catch (error) {
+            console.error('Error fetching apartments:', error);
+            await bot.sendMessage(chatId, '❌ An error occurred while searching. Please try again.');
         }
         
         await bot.answerCallbackQuery(callbackQuery.id);
@@ -203,6 +213,11 @@ bot.on('callback_query', async (callbackQuery) => {
                 resize_keyboard: true
             }
         });
+        await bot.answerCallbackQuery(callbackQuery.id);
+    }
+    else if (data.startsWith('book_')) {
+        const apartmentId = data.split('_')[1];
+        await bot.sendMessage(chatId, `📅 Booking feature coming soon for apartment ID: ${apartmentId}`);
         await bot.answerCallbackQuery(callbackQuery.id);
     }
 });
