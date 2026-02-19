@@ -908,3 +908,34 @@ const handleContactGuest = async (bot, callbackQuery, userId) => {
     const user = await User.findByPk(userId);
     
     if (!user) {
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'User not found' });
+      return;
+    }
+    
+    const contactInfo = `
+📞 *Guest Contact Information*
+
+👤 *Name:* ${user.firstName || 'N/A'} ${user.lastName || ''}
+🆔 *Username:* ${user.username ? '@' + user.username : 'Not set'}
+📱 *Phone:* ${user.phone || 'Not provided'}
+📧 *Email:* ${user.email || 'Not provided'}
+
+You can contact the guest directly using the information above.
+    `;
+    
+    await bot.sendMessage(chatId, contactInfo, { parse_mode: 'Markdown' });
+    await bot.answerCallbackQuery(callbackQuery.id);
+    
+  } catch (error) {
+    logger.error('Contact guest error:', error);
+    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Error loading contact info' });
+  }
+};
+
+// ============================================
+// EXPORTS
+// ============================================
+
+module.exports = {
+  handleCallback
+};
