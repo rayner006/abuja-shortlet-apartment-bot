@@ -522,8 +522,7 @@ To cancel, type /cancel
         try {
             const itemsPerPage = 3; // Show 3 apartments per page
             const totalApartments = await Apartment.count();
-            const activeApartments = await Apartment.count({ where: { isAvailable: true } });
-            const inactiveApartments = await Apartment.count({ where: { isAvailable: false } });
+            // Removed active/inactive counts
             const approvedApartments = await Apartment.count({ where: { isApproved: true } });
             const pendingApartments = await Apartment.count({ where: { isApproved: false } });
             
@@ -582,11 +581,10 @@ To cancel, type /cancel
             // Delete the previous message
             await this.bot.deleteMessage(chatId, messageId).catch(() => {});
             
-            // Send header with statistics
+            // Send header with statistics - REMOVED active/inactive
             let headerText = `🏢 *ALL APARTMENTS* (Page ${page}/${totalPages})\n\n`;
             headerText += `📊 *Overview*\n`;
-            headerText += `• Total: ${totalApartments} | ✅ Active: ${activeApartments} | 🔴 Inactive: ${inactiveApartments}\n`;
-            headerText += `• Approved: ${approvedApartments} | ⏳ Pending: ${pendingApartments}\n`;
+            headerText += `• Total: ${totalApartments} | ✅ Approved: ${approvedApartments} | ⏳ Pending: ${pendingApartments}\n`;
             headerText += `• 👁️ Total Views: ${totalViews} | 📅 Bookings: ${totalBookings}\n`;
             headerText += `• 💰 Revenue: ${this.formatCurrency(totalRevenue)}\n`;
             
@@ -615,7 +613,7 @@ To cancel, type /cancel
     }
 
     // ============================================
-    // SEND INDIVIDUAL APARTMENT CARD
+    // SEND INDIVIDUAL APARTMENT CARD - UPDATED (removed availability)
     // ============================================
     
     async sendApartmentCard(chatId, apt) {
@@ -632,13 +630,12 @@ To cancel, type /cancel
             }) || 0;
             
             const statusEmoji = apt.isApproved ? '✅' : '⏳';
-            const availabilityEmoji = apt.isAvailable ? '🟢' : '🔴';
-            const availabilityText = apt.isAvailable ? 'Active' : 'Inactive';
+            // Removed availability emoji and text
             
             // Calculate days old for warning
             const daysOld = Math.floor((new Date() - new Date(apt.createdAt)) / (1000 * 60 * 60 * 24));
             
-            // Format the apartment card with a box
+            // Format the apartment card with a box - REMOVED availability
             const cardText = `
 ┌────────────────────────────────────┐
 │ ${statusEmoji} *${apt.title}*
@@ -650,7 +647,6 @@ To cancel, type /cancel
 │ 💰 *Price:* ${this.formatCurrency(apt.pricePerNight)}/night
 │ 🛏️ *Bedrooms:* ${apt.bedrooms} | 🚿 *Bathrooms:* ${apt.bathrooms} | 👥 *Max:* ${apt.maxGuests}
 │
-│ 📊 *Status:* ${availabilityEmoji} ${availabilityText}
 │ 👁️ *Views:* ${apt.views || 0}
 │ 📅 *Bookings:* ${bookingCount}
 │ 💰 *Revenue:* ${this.formatCurrency(aptRevenue)}
@@ -658,17 +654,15 @@ To cancel, type /cancel
 ${apt.views === 0 && bookingCount === 0 && daysOld > 7 ? '│ ⚠️ *Warning:* No activity in ' + daysOld + ' days\n' : ''}└────────────────────────────────────┘
             `;
             
-            // Create working buttons for this apartment
+            // Create working buttons for this apartment - REMOVED Disable/Enable button
             const keyboard = {
                 inline_keyboard: [
                     [
                         { text: '✏️ Edit', callback_data: `apt_edit_${apt.id}` },
-                        { text: apt.isAvailable ? '🔴 Disable' : '🟢 Enable', 
-                          callback_data: `apt_disable_${apt.id}` },
-                        { text: '📊 Stats', callback_data: `apt_stats_${apt.id}` }
+                        { text: '📊 Stats', callback_data: `apt_stats_${apt.id}` },
+                        { text: '💬 Message', callback_data: `apt_message_${apt.id}` }
                     ],
                     [
-                        { text: '💬 Message', callback_data: `apt_message_${apt.id}` },
                         { text: '📋 Bookings', callback_data: `apt_bookings_${apt.id}` },
                         { text: '❌ Delete', callback_data: `apt_delete_${apt.id}` }
                     ]
@@ -756,7 +750,7 @@ ${apt.views === 0 && bookingCount === 0 && daysOld > 7 ? '│ ⚠️ *Warning:* 
     }
 
     // ============================================
-    // APARTMENT ACTIONS HANDLER
+    // APARTMENT ACTIONS HANDLER - UPDATED (removed disable case)
     // ============================================
     
     async handleApartmentActions(callbackQuery) {
@@ -783,16 +777,7 @@ ${apt.views === 0 && bookingCount === 0 && daysOld > 7 ? '│ ⚠️ *Warning:* 
                     await this.showEditApartmentForm(callbackQuery, apartment);
                     break;
                     
-                case 'disable':
-                    apartment.isAvailable = !apartment.isAvailable;
-                    await apartment.save();
-                    await this.answerCallback(callbackQuery, 
-                        `✅ Apartment ${apartment.isAvailable ? 'enabled' : 'disabled'}`
-                    );
-                    // Refresh the view
-                    await this.bot.deleteMessage(chatId, messageId).catch(() => {});
-                    await this.showAllApartments({ ...callbackQuery, data: 'admin_apartments_1' }, 1);
-                    break;
+                // REMOVED disable case
                     
                 case 'stats':
                     await this.showApartmentStats(callbackQuery, apartment);
@@ -823,7 +808,7 @@ ${apt.views === 0 && bookingCount === 0 && daysOld > 7 ? '│ ⚠️ *Warning:* 
     }
 
     // ============================================
-    // SHOW APARTMENT STATS
+    // SHOW APARTMENT STATS - UPDATED (removed status)
     // ============================================
     
     async showApartmentStats(callbackQuery, apartment) {
@@ -857,7 +842,6 @@ ${apt.views === 0 && bookingCount === 0 && daysOld > 7 ? '│ ⚠️ *Warning:* 
 📅 *Listing Info*
 • Listed: ${this.formatDate(apartment.createdAt)}
 • Last Updated: ${this.formatDate(apartment.updatedAt || apartment.createdAt)}
-• Status: ${apartment.isAvailable ? '🟢 Active' : '🔴 Inactive'}
             `;
             
             await this.bot.sendMessage(chatId, stats, {
