@@ -1,6 +1,7 @@
 const AdminBase = require('./adminBase');
 const { User, Apartment, Booking } = require('../../models');
 const { Op } = require('sequelize');
+const logger = require('../../config/logger');  // 👈 ADDED
 
 class AdminCore extends AdminBase {
     constructor(bot) {
@@ -51,7 +52,7 @@ ${pendingApprovals > 0 ? `🚨 *${pendingApprovals} pending approval*` : ''}
             // Create clean keyboard with just buttons
             const keyboard = this.createAdminKeyboard(pendingApprovals);
 
-            // FIXED: Safely handle message deletion
+            // Safely handle message deletion
             try {
                 if (msg && msg.callback_query && msg.callback_query.message) {
                     await this.bot.deleteMessage(chatId, msg.callback_query.message.message_id).catch(() => {});
