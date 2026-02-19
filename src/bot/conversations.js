@@ -1,9 +1,9 @@
 // src/bot/conversations.js
 const logger = require('../config/logger');
 const redis = require('../config/redis');
-const { processSearch, searchState } = require('../controllers/apartmentController');
-const { processBookingDates, processBookingGuests, bookingState } = require('../controllers/bookingController');
-// 👇 Add this import
+const stateManager = require('../services/stateManager');
+const { processSearch } = require('../controllers/apartmentController');
+const { processBookingDates, processBookingGuests } = require('../controllers/bookingController');
 const { handleLocationSelection } = require('../controllers/locationController');
 
 // Popular Abuja areas for quick responses
@@ -107,6 +107,7 @@ const extractLocation = (text) => {
 
 const handleMessage = async (bot, msg) => {
   const chatId = msg.chat.id;
+  const userId = msg.from.id;
   const text = msg.text;
   const firstName = msg.from.first_name || "there";
   
@@ -116,17 +117,19 @@ const handleMessage = async (bot, msg) => {
     // ============================================
     
     // Check if user is in a search conversation
-    if (searchState[chatId] && searchState[chatId].step === 'awaiting_input') {
+    const searchState = stateManager.getSearchState(userId);
+    if (searchState && searchState.step === 'awaiting_input') {
       await processSearch(bot, msg);
       return;
     }
     
     // Check if user is in a booking conversation
-    if (bookingState[chatId]) {
-      if (bookingState[chatId].step === 'dates') {
+    const bookingState = stateManager.getBookingState(userId);
+    if (bookingState) {
+      if (bookingState.step === 'dates') {
         await processBookingDates(bot, msg);
         return;
-      } else if (bookingState[chatId].step === 'guests') {
+      } else if (bookingState.step === 'guests') {
         await processBookingGuests(bot, msg);
         return;
       }
@@ -139,7 +142,7 @@ const handleMessage = async (bot, msg) => {
     // Handle contact sharing
     if (msg.contact) {
       const { User } = require('../models');
-      const user = await User.findOne({ where: { telegramId: msg.from.id } });
+      const user = await User.findOne({ where: { telegramId: userId } });
       
       if (user) {
         user.phone = msg.contact.phone_number;
@@ -180,7 +183,7 @@ const handleMessage = async (bot, msg) => {
     // 📋 Handle "List Property" button
     if (text === '📋 List Property') {
       const { User } = require('../models');
-      const user = await User.findOne({ where: { telegramId: msg.from.id } });
+      const user = await User.findOne({ where: { telegramId: userId } });
       
       if (user && (user.role === 'owner' || user.role === 'admin')) {
         // User is already an owner
@@ -564,14 +567,10 @@ const handleMessage = async (bot, msg) => {
 // Conversation cancellation handler
 const cancelConversation = async (bot, msg) => {
   const chatId = msg.chat.id;
+  const userId = msg.from.id;
   
   // Clear any active conversations
-  if (searchState[chatId]) {
-    delete searchState[chatId];
-  }
-  if (bookingState[chatId]) {
-    delete bookingState[chatId];
-  }
+  stateManager.clearAllStates(userId);
   
   await bot.sendMessage(chatId, 
     '❌ Conversation cancelled. Use /menu to start over.'
