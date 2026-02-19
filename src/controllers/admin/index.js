@@ -16,9 +16,22 @@ class AdminController extends AdminBase {
         this.handleCallback = this.handleCallback.bind(this);
     }
 
-    // Main entry point for admin panel
+    // Main entry point for admin panel (original)
     async handleAdminPanel(msg) {
         const chatId = msg.chat.id;
+        const userId = msg.from.id;
+
+        // Check admin access
+        if (!(await this.isAdmin(userId))) {
+            await this.bot.sendMessage(chatId, '⛔ Access denied. This command is for admins only.');
+            return;
+        }
+
+        await this.core.showAdminPanel(chatId, msg);
+    }
+
+    // ✅ NEW METHOD: Show admin panel with chatId and msg parameters
+    async showAdminPanel(chatId, msg) {
         const userId = msg.from.id;
 
         // Check admin access
@@ -53,12 +66,12 @@ class AdminController extends AdminBase {
                  data.startsWith('approve_') || 
                  data.startsWith('reject_') || 
                  data.startsWith('admin_apartments') ||
-                 data.startsWith('apt_') ||                    // 👈 ADDED: apartment actions (edit, disable, stats, message, bookings, delete)
-                 data.startsWith('confirm_delete_apt_') ||    // 👈 ADDED: confirm delete apartment
-                 data.startsWith('filter_') ||                 // 👈 ADDED: filter actions
-                 data.startsWith('admin_filter_') ||           // 👈 ADDED: admin filter actions
-                 data.startsWith('sort_') ||                   // 👈 ADDED: sort actions
-                 data.startsWith('admin_sort_')) {             // 👈 ADDED: admin sort actions
+                 data.startsWith('apt_') ||                    // apartment actions (edit, disable, stats, message, bookings, delete)
+                 data.startsWith('confirm_delete_apt_') ||    // confirm delete apartment
+                 data.startsWith('filter_') ||                 // filter actions
+                 data.startsWith('admin_filter_') ||           // admin filter actions
+                 data.startsWith('sort_') ||                   // sort actions
+                 data.startsWith('admin_sort_')) {             // admin sort actions
             await this.apartments.handleCallback(callbackQuery);
         }
         else if (data === 'admin_stats') {
