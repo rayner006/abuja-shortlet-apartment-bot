@@ -15,7 +15,9 @@ const setupAdminCommands = (bot, adminController) => {  // 👈 UPDATED: receive
         return;
       }
       
-      await adminController.handleAdminPanel(msg);
+      // ✅ FIXED: Call the correct function with proper parameters
+      await adminController.showAdminPanel(msg.chat.id, msg);
+      
     } catch (error) {
       logger.error('Admin command error:', error);
       bot.sendMessage(msg.chat.id, 'Error accessing admin panel.');
