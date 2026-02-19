@@ -2,21 +2,34 @@
 const { Apartment } = require('../models');
 const logger = require('../config/logger');
 
-// Popular Abuja locations with emojis - UPDATED
+// Popular Abuja locations with emojis - COMPLETE LIST
 const popularLocations = [
+  // Premium & Central 🏙
   { id: 'asokoro', name: 'Asokoro', emoji: '🏛️' },
   { id: 'maitama', name: 'Maitama', emoji: '🏰' },
-  { id: 'wuse', name: 'Wuse', emoji: '🏢' }, // 👈 CHANGED: from 'wuse2' to 'wuse', from 'Wuse 2' to 'Wuse'
-  { id: 'garki', name: 'Garki', emoji: '🏙️' },
-  { id: 'jabi', name: 'Jabi', emoji: '🌳' },
-  { id: 'gwarinpa', name: 'Gwarinpa', emoji: '🏘️' },
-  { id: 'utako', name: 'Utako', emoji: '🏬' },
   { id: 'central', name: 'Central Area', emoji: '🏛️' },
+  { id: 'cbd', name: 'CBD', emoji: '🏢' },
+  { id: 'wuse', name: 'Wuse', emoji: '🏢' },
+  { id: 'garki', name: 'Garki', emoji: '🏙️' },
+  
+  // Mid-Central Areas 🏢
+  { id: 'jabi', name: 'Jabi', emoji: '🌳' },
+  { id: 'utako', name: 'Utako', emoji: '🏬' },
+  { id: 'wuye', name: 'Wuye', emoji: '🏗️' },
+  { id: 'mabushi', name: 'Mabushi', emoji: '🏢' },
+  { id: 'katampe', name: 'Katampe', emoji: '🏞️' },
+  { id: 'jahi', name: 'Jahi', emoji: '🏡' },
   { id: 'life-camp', name: 'Life Camp', emoji: '🏡' },
   { id: 'guzape', name: 'Guzape', emoji: '🏠' },
-  { id: 'katampe', name: 'Katampe', emoji: '🏞️' },
+  { id: 'lokogoma', name: 'Lokogoma', emoji: '🏘️' },
+  
+  // Outer & Budget Areas 🏘️
+  { id: 'gwarinpa', name: 'Gwarinpa', emoji: '🏘️' },
   { id: 'kubwa', name: 'Kubwa', emoji: '🏘️' },
-  { id: 'lugbe', name: 'Lugbe', emoji: '🏡' }
+  { id: 'lugbe', name: 'Lugbe', emoji: '🏡' },
+  { id: 'apo', name: 'Apo', emoji: '🏠' },
+  { id: 'nyanya', name: 'Nyanya', emoji: '🏘️' },
+  { id: 'karu', name: 'Karu', emoji: '🏘️' }
 ];
 
 // Apartment types for filtering
@@ -73,10 +86,10 @@ const handleLocationCallback = async (bot, callbackQuery) => {
   const data = callbackQuery.data;
   
   try {
-    // Extract location ID from callback data (format: "location_asokoro")
+    // Extract location ID from callback data
     const locationId = data.replace('location_', '');
     
-    // Find the location name
+    // Find the location
     const location = popularLocations.find(loc => loc.id === locationId);
     
     if (!location) {
@@ -84,7 +97,6 @@ const handleLocationCallback = async (bot, callbackQuery) => {
       return;
     }
     
-    // Acknowledge the callback
     await bot.answerCallbackQuery(callbackQuery.id);
     
     // Show apartment type selection menu
@@ -143,12 +155,10 @@ const handleApartmentTypeCallback = async (bot, callbackQuery) => {
   const data = callbackQuery.data;
   
   try {
-    // Extract data (format: "type_locationId_typeId")
     const parts = data.split('_');
     const locationId = parts[1];
     const typeId = parts[2];
     
-    // Find location and type
     const location = popularLocations.find(loc => loc.id === locationId);
     const type = apartmentTypes.find(t => t.id === typeId);
     
@@ -159,7 +169,6 @@ const handleApartmentTypeCallback = async (bot, callbackQuery) => {
     
     await bot.answerCallbackQuery(callbackQuery.id);
     
-    // Show loading message
     await bot.editMessageText(
       `🔍 *Searching ${type.emoji} ${type.name}s in ${location.emoji} ${location.name}...*`,
       {
@@ -169,20 +178,14 @@ const handleApartmentTypeCallback = async (bot, callbackQuery) => {
       }
     );
     
-    // Build bedroom filter based on type
-    let bedroomFilter = {};
-    if (typeId === 'studio') {
-      bedroomFilter = { bedrooms: 0 };
-    } else if (typeId === '1bed') {
-      bedroomFilter = { bedrooms: 1 };
-    } else if (typeId === '2bed') {
-      bedroomFilter = { bedrooms: 2 };
-    } else if (typeId === '3bed') {
-      bedroomFilter = { bedrooms: { [Op.gte]: 3 } };
-    }
-    
-    // Fetch apartments matching location and type
     const { Op } = require('sequelize');
+    
+    let bedroomFilter = {};
+    if (typeId === 'studio') bedroomFilter = { bedrooms: 0 };
+    else if (typeId === '1bed') bedroomFilter = { bedrooms: 1 };
+    else if (typeId === '2bed') bedroomFilter = { bedrooms: 2 };
+    else if (typeId === '3bed') bedroomFilter = { bedrooms: { [Op.gte]: 3 } };
+    
     const apartments = await Apartment.findAll({
       where: {
         location: location.name,
@@ -194,7 +197,6 @@ const handleApartmentTypeCallback = async (bot, callbackQuery) => {
     });
     
     if (apartments.length === 0) {
-      // No apartments found
       await bot.sendMessage(chatId,
         `🏠 *No ${type.name}s found in ${location.emoji} ${location.name}*\n\n` +
         `Would you like to try another type or location?`,
@@ -210,20 +212,17 @@ const handleApartmentTypeCallback = async (bot, callbackQuery) => {
         }
       );
     } else {
-      // Send first result
       await sendApartmentResult(bot, chatId, apartments[0], 0, apartments.length, location, type);
     }
     
   } catch (error) {
     logger.error('Apartment type callback error:', error);
-    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Error fetching apartments.' });
   }
 };
 
 // Send apartment result
 const sendApartmentResult = async (bot, chatId, apartment, index, total, location, type = null) => {
   try {
-    // Format amenities if available
     let amenitiesText = '';
     if (apartment.amenities) {
       const amenities = Array.isArray(apartment.amenities) 
@@ -232,7 +231,6 @@ const sendApartmentResult = async (bot, chatId, apartment, index, total, locatio
       amenitiesText = `✨ *Amenities:* ${amenities}\n`;
     }
     
-    // Get bedroom emoji based on bedroom count
     let bedroomEmoji = '🛏️';
     if (apartment.bedrooms >= 3) bedroomEmoji = '🏰';
     else if (apartment.bedrooms === 2) bedroomEmoji = '🛏️🛏️';
@@ -251,7 +249,6 @@ ${bedroomEmoji} *Type:* ${apartment.bedrooms === 0 ? 'Studio' : apartment.bedroo
 ${amenitiesText}
     `;
     
-    // Create navigation keyboard
     const keyboard = [];
     const navRow = [];
     
@@ -259,7 +256,7 @@ ${amenitiesText}
       navRow.push({ text: '« Previous', callback_data: `apt_prev_${index}_${location.id}_${type?.id || 'all'}` });
     }
     
-    navRow.push({ text: '📅 Request Booking', callback_data: `book_${apartment.id}` }); // UPDATED: Book Now → Request Booking
+    navRow.push({ text: '📅 Request Booking', callback_data: `book_${apartment.id}` });
     
     if (index < total - 1) {
       navRow.push({ text: 'Next »', callback_data: `apt_next_${index}_${location.id}_${type?.id || 'all'}` });
@@ -272,7 +269,6 @@ ${amenitiesText}
       { text: '« Menu', callback_data: 'back_to_main' }
     ]);
     
-    // Send with photo if available
     if (apartment.images && apartment.images.length > 0) {
       await bot.sendPhoto(chatId, apartment.images[0], {
         caption: text,
