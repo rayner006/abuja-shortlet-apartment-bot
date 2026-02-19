@@ -5,6 +5,7 @@ const stateManager = require('../services/stateManager');
 const { processSearch } = require('../controllers/apartmentController');
 const { processBookingDates, processBookingGuests } = require('../controllers/bookingController');
 const { handleLocationSelection } = require('../controllers/locationController');
+const { Apartment } = require('../models');  // 👈 ADD THIS
 
 // Popular Abuja areas for quick responses
 const areaList = {
@@ -99,6 +100,27 @@ const extractLocation = (text) => {
     }
   }
   return null;
+};
+
+// ============================================
+// HELPER FUNCTION TO FORMAT APARTMENT LISTING
+// ============================================
+
+const formatApartmentListing = (apartment, index) => {
+  let amenities = [];
+  try {
+    amenities = JSON.parse(apartment.amenities) || [];
+  } catch (e) {
+    amenities = [];
+  }
+  
+  const amenitiesPreview = amenities.slice(0, 3).join(' • ');
+  
+  return `*${index}. ${apartment.title}*\n` +
+         `📍 ${apartment.address}\n` +
+         `💰 ₦${apartment.price_per_night}/night\n` +
+         `🚽 ${apartment.bathrooms} bathroom(s) | 👥 Max ${apartment.max_guests} guests\n` +
+         `✨ ${amenitiesPreview}\n`;
 };
 
 // ============================================
@@ -231,7 +253,7 @@ const handleMessage = async (bot, msg) => {
     if (text.startsWith('/')) return;
     
     // ============================================
-    // PRIORITY 5: Natural language processing
+    // PRIORITY 5: Natural language processing with REAL DATABASE QUERIES
     // ============================================
     
     const lowerText = text.toLowerCase().trim();
@@ -259,127 +281,263 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    // ----- AREA/LOCATION SEARCH (Enhanced) -----
+    // ----- AREA/LOCATION SEARCH WITH APARTMENT TYPE -----
     const detectedLocation = extractLocation(lowerText);
-    if (detectedLocation) {
-      // Check if also asking about specific type
-      if (apartmentTypeKeywords['1bed'].some(keyword => lowerText.includes(keyword))) {
+    
+    // Check for STUDIO apartments
+    if (apartmentTypeKeywords.studio.some(keyword => lowerText.includes(keyword))) {
+      if (detectedLocation) {
+        try {
+          const apartments = await Apartment.findAll({
+            where: {
+              location: detectedLocation,
+              bedrooms: 0,
+              is_available: 1
+            }
+          });
+          
+          if (apartments.length > 0) {
+            let response = `🏠 *Studio Apartments in ${detectedLocation}*\n\n`;
+            apartments.forEach((apt, index) => {
+              response += formatApartmentListing(apt, index + 1);
+            });
+            response += `\nUse /search to see more options or book!`;
+            return bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+          } else {
+            return bot.sendMessage(chatId,
+              `😔 Sorry, no studio apartments found in ${detectedLocation} right now.\n\n` +
+              `Try:\n` +
+              `• A different location\n` +
+              `• 1-Bedroom apartments\n` +
+              `• Check back later\n\n` +
+              `Use /search to explore other options.`
+            );
+          }
+        } catch (error) {
+          logger.error('Database query error:', error);
+          return bot.sendMessage(chatId, 'Error searching for apartments. Please try again.');
+        }
+      } else {
         return bot.sendMessage(chatId,
-          `🛏️ *1-Bedroom Apartments in ${detectedLocation}*\n\n` +
-          `Use /search to find available 1-bedroom apartments in ${detectedLocation}.\n\n` +
-          `Or type /search 1bedroom ${detectedLocation} for direct results.`,
-          { parse_mode: 'Markdown' }
-        );
-      }
-      else if (apartmentTypeKeywords['2bed'].some(keyword => lowerText.includes(keyword))) {
-        return bot.sendMessage(chatId,
-          `🛏️🛏️ *2-Bedroom Apartments in ${detectedLocation}*\n\n` +
-          `Use /search to find available 2-bedroom apartments in ${detectedLocation}.\n\n` +
-          `Or type /search 2bedroom ${detectedLocation} for direct results.`,
-          { parse_mode: 'Markdown' }
-        );
-      }
-      else if (apartmentTypeKeywords['3bed'].some(keyword => lowerText.includes(keyword))) {
-        return bot.sendMessage(chatId,
-          `🏰 *3-Bedroom Apartments in ${detectedLocation}*\n\n` +
-          `Use /search to find available 3-bedroom apartments in ${detectedLocation}.\n\n` +
-          `Or type /search 3bedroom ${detectedLocation} for direct results.`,
-          { parse_mode: 'Markdown' }
-        );
-      }
-      else {
-        return bot.sendMessage(chatId, 
-          `📍 *Looking for apartments in ${detectedLocation}?*\n\n` +
-          `I have Studio, 1, 2, & 3 bedroom apartments available there.\n\n` +
-          `Use: /search ${detectedLocation}\n` +
-          `Or tell me: "2 bedroom in ${detectedLocation}" for specific search.`,
+          `🏠 *Studio Apartments*\n\n` +
+          `I have studio apartments in:\n` +
+          `• Asokoro\n` +
+          `• Maitama\n` +
+          `• Wuse Zone 1-7\n` +
+          `• Garki Area 1-11\n` +
+          `• Jabi\n` +
+          `• Gwarinpa\n\n` +
+          `Tell me which area you're interested in!\n` +
+          `Example: "studio in kubwa"`,
           { parse_mode: 'Markdown' }
         );
       }
     }
     
-    // ----- GENERAL APARTMENT SEARCH (NEW) -----
-    if (apartmentTypeKeywords.general.some(keyword => lowerText.includes(keyword))) {
-      const location = extractLocation(lowerText);
-      if (location) {
+    // Check for 1-BEDROOM apartments
+    if (apartmentTypeKeywords['1bed'].some(keyword => lowerText.includes(keyword))) {
+      if (detectedLocation) {
+        try {
+          const apartments = await Apartment.findAll({
+            where: {
+              location: detectedLocation,
+              bedrooms: 1,
+              is_available: 1
+            }
+          });
+          
+          if (apartments.length > 0) {
+            let response = `🛏️ *1-Bedroom Apartments in ${detectedLocation}*\n\n`;
+            apartments.forEach((apt, index) => {
+              response += formatApartmentListing(apt, index + 1);
+            });
+            response += `\nUse /search to see more options or book!`;
+            return bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+          } else {
+            return bot.sendMessage(chatId,
+              `😔 Sorry, no 1-bedroom apartments found in ${detectedLocation} right now.\n\n` +
+              `Try:\n` +
+              `• A different location\n` +
+              `• Studio or 2-Bedroom apartments\n` +
+              `• Check back later\n\n` +
+              `Use /search to explore other options.`
+            );
+          }
+        } catch (error) {
+          logger.error('Database query error:', error);
+          return bot.sendMessage(chatId, 'Error searching for apartments. Please try again.');
+        }
+      } else {
         return bot.sendMessage(chatId,
-          `🔍 *Finding ${location} apartments for you...*\n\n` +
-          `Use /search to see all available options in ${location}.\n\n` +
-          `You can also specify:\n` +
-          `• Apartment type (studio, 1-bed, 2-bed, 3-bed)\n` +
-          `• Budget (e.g., "under ₦100k")\n` +
-          `• Amenities (e.g., "with pool")`,
+          `🛏️ *1-Bedroom Apartments*\n\n` +
+          `I have 1-bedroom apartments in:\n` +
+          `• Asokoro\n` +
+          `• Maitama\n` +
+          `• Wuse Zone 1-7\n` +
+          `• Garki Area 1-11\n` +
+          `• Jabi\n` +
+          `• Gwarinpa\n\n` +
+          `Tell me which area you're interested in!\n` +
+          `Example: "1 bedroom in maitama"`,
           { parse_mode: 'Markdown' }
         );
+      }
+    }
+    
+    // Check for 2-BEDROOM apartments (FIX FOR KUBWA!)
+    if (apartmentTypeKeywords['2bed'].some(keyword => lowerText.includes(keyword))) {
+      if (detectedLocation) {
+        try {
+          const apartments = await Apartment.findAll({
+            where: {
+              location: detectedLocation,
+              bedrooms: 2,
+              is_available: 1
+            }
+          });
+          
+          if (apartments.length > 0) {
+            let response = `🛏️🛏️ *2-Bedroom Apartments in ${detectedLocation}*\n\n`;
+            apartments.forEach((apt, index) => {
+              response += formatApartmentListing(apt, index + 1);
+            });
+            response += `\nUse /search to see more options or book!`;
+            return bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+          } else {
+            return bot.sendMessage(chatId,
+              `😔 Sorry, no 2-bedroom apartments found in ${detectedLocation} right now.\n\n` +
+              `Try:\n` +
+              `• A different location\n` +
+              `• 1-Bedroom or 3-Bedroom apartments\n` +
+              `• Check back later\n\n` +
+              `Use /search to explore other options.`
+            );
+          }
+        } catch (error) {
+          logger.error('Database query error:', error);
+          return bot.sendMessage(chatId, 'Error searching for apartments. Please try again.');
+        }
+      } else {
+        return bot.sendMessage(chatId,
+          `🛏️🛏️ *2-Bedroom Apartments*\n\n` +
+          `I have 2-bedroom apartments in:\n` +
+          `• Asokoro\n` +
+          `• Maitama\n` +
+          `• Wuse Zone 1-7\n` +
+          `• Garki Area 1-11\n` +
+          `• Jabi\n` +
+          `• Gwarinpa\n` +
+          `• Kubwa\n\n` +
+          `Tell me which area you're interested in!\n` +
+          `Example: "2 bedroom in kubwa"`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+    }
+    
+    // Check for 3-BEDROOM apartments
+    if (apartmentTypeKeywords['3bed'].some(keyword => lowerText.includes(keyword))) {
+      if (detectedLocation) {
+        try {
+          const apartments = await Apartment.findAll({
+            where: {
+              location: detectedLocation,
+              bedrooms: 3,
+              is_available: 1
+            }
+          });
+          
+          if (apartments.length > 0) {
+            let response = `🏰 *3-Bedroom Apartments in ${detectedLocation}*\n\n`;
+            apartments.forEach((apt, index) => {
+              response += formatApartmentListing(apt, index + 1);
+            });
+            response += `\nUse /search to see more options or book!`;
+            return bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+          } else {
+            return bot.sendMessage(chatId,
+              `😔 Sorry, no 3-bedroom apartments found in ${detectedLocation} right now.\n\n` +
+              `Try:\n` +
+              `• A different location\n` +
+              `• 2-Bedroom apartments\n` +
+              `• Check back later\n\n` +
+              `Use /search to explore other options.`
+            );
+          }
+        } catch (error) {
+          logger.error('Database query error:', error);
+          return bot.sendMessage(chatId, 'Error searching for apartments. Please try again.');
+        }
+      } else {
+        return bot.sendMessage(chatId,
+          `🏰 *3-Bedroom Executive Apartments*\n\n` +
+          `I have 3-bedroom apartments in:\n` +
+          `• Asokoro\n` +
+          `• Maitama\n` +
+          `• Jabi\n` +
+          `• Gwarinpa\n\n` +
+          `Tell me which area you're interested in!\n` +
+          `Example: "3 bedroom in asokoro"`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+    }
+    
+    // ----- GENERAL APARTMENT SEARCH -----
+    if (apartmentTypeKeywords.general.some(keyword => lowerText.includes(keyword))) {
+      if (detectedLocation) {
+        try {
+          const apartments = await Apartment.findAll({
+            where: {
+              location: detectedLocation,
+              is_available: 1
+            },
+            limit: 10
+          });
+          
+          if (apartments.length > 0) {
+            let response = `🔍 *Apartments in ${detectedLocation}*\n\n`;
+            apartments.forEach((apt, index) => {
+              let type = '';
+              if (apt.bedrooms === 0) type = 'Studio';
+              else if (apt.bedrooms === 1) type = '1-Bed';
+              else if (apt.bedrooms === 2) type = '2-Bed';
+              else if (apt.bedrooms === 3) type = '3-Bed';
+              
+              response += `*${index + 1}. ${apt.title}* (${type})\n`;
+              response += `💰 ₦${apt.price_per_night}/night\n`;
+            });
+            response += `\nTell me which type you prefer: studio, 1-bed, 2-bed, or 3-bed!`;
+            return bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
+          } else {
+            return bot.sendMessage(chatId,
+              `😔 No apartments found in ${detectedLocation} right now.\n\n` +
+              `Try another location!`
+            );
+          }
+        } catch (error) {
+          logger.error('Database query error:', error);
+          return bot.sendMessage(chatId, 'Error searching for apartments.');
+        }
       } else {
         return bot.sendMessage(chatId,
           `🔍 *Looking for apartments?*\n\n` +
           `Tell me which area you're interested in:\n` +
-          `• Asokoro\n• Maitama\n• Wuse 2\n• Garki\n• Jabi\n• Gwarinpa\n\n` +
-          `Example: "Apartments in Maitama"`,
+          `• Asokoro\n• Maitama\n• Wuse\n• Garki\n• Jabi\n• Gwarinpa\n• Kubwa\n\n` +
+          `Example: "Apartments in Kubwa"`,
           { parse_mode: 'Markdown' }
         );
       }
     }
     
-    // ----- APARTMENT TYPE SEARCH (Enhanced with general terms) -----
-    if (apartmentTypeKeywords.studio.some(keyword => lowerText.includes(keyword))) {
-      return bot.sendMessage(chatId,
-        `🏠 *Studio Apartments*\n\n` +
-        `I have studio apartments in:\n` +
-        `• Asokoro (₦50k-₦80k/night)\n` +
-        `• Maitama (₦60k-₦90k/night)\n` +
-        `• Wuse 2 (₦45k-₦70k/night)\n` +
-        `• Garki (₦40k-₦65k/night)\n\n` +
-        `Which area interests you? Type /search [area]`,
-        { parse_mode: 'Markdown' }
-      );
-    }
-    
-    if (apartmentTypeKeywords['1bed'].some(keyword => lowerText.includes(keyword))) {
-      return bot.sendMessage(chatId,
-        `🛏️ *1-Bedroom Apartments*\n\n` +
-        `Available in all major areas:\n` +
-        `• Asokoro/Maitama (₦80k-₦150k/night)\n` +
-        `• Wuse 2/Jabi (₦70k-₦120k/night)\n` +
-        `• Garki/Utako (₦60k-₦100k/night)\n\n` +
-        `Use /search 1bedroom [area] to see options!`,
-        { parse_mode: 'Markdown' }
-      );
-    }
-    
-    if (apartmentTypeKeywords['2bed'].some(keyword => lowerText.includes(keyword))) {
-      return bot.sendMessage(chatId,
-        `🛏️🛏️ *2-Bedroom Apartments*\n\n` +
-        `Perfect for families and groups:\n` +
-        `• Luxury in Asokoro (₦150k-₦250k/night)\n` +
-        `• Comfort in Wuse 2 (₦120k-₦200k/night)\n` +
-        `• Value in Gwarinpa (₦80k-₦150k/night)\n\n` +
-        `Try: /search 2bedroom asokoro`,
-        { parse_mode: 'Markdown' }
-      );
-    }
-    
-    if (apartmentTypeKeywords['3bed'].some(keyword => lowerText.includes(keyword))) {
-      return bot.sendMessage(chatId,
-        `🏰 *3-Bedroom Executive Apartments*\n\n` +
-        `Spacious luxury apartments:\n` +
-        `• Maitama (₦200k-₦350k/night)\n` +
-        `• Asokoro (₦180k-₦300k/night)\n` +
-        `• Jabi (₦150k-₦250k/night)\n\n` +
-        `Use: /search 3bedroom [area]`,
-        { parse_mode: 'Markdown' }
-      );
-    }
-    
-    // ----- PRICE/BUDGET QUERIES (Enhanced) -----
+    // ----- PRICE/BUDGET QUERIES -----
     if (lowerText.includes('how much') || lowerText.includes('price') || lowerText.includes('cost')) {
       return bot.sendMessage(chatId,
         `💰 *Price Ranges*\n\n` +
-        `• *Studio/Self Contain:* ₦40k - ₦90k/night\n` +
-        `• *1-Bedroom:* ₦60k - ₦150k/night\n` +
-        `• *2-Bedroom:* ₦80k - ₦250k/night\n` +
-        `• *3-Bedroom:* ₦150k - ₦350k/night\n\n` +
+        `• *Studio/Self Contain:* ₦20k - ₦50k/night\n` +
+        `• *1-Bedroom:* ₦30k - ₦75k/night\n` +
+        `• *2-Bedroom:* ₦45k - ₦100k/night\n` +
+        `• *3-Bedroom:* ₦80k - ₦150k/night\n\n` +
         `Prices vary by location and season. Use /search with filters!`,
         { parse_mode: 'Markdown' }
       );
@@ -388,9 +546,9 @@ const handleMessage = async (bot, msg) => {
     if (priceKeywords.budget.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `💰 *Budget-Friendly Options*\n\n` +
-        `• Studios in Garki/Gwarinpa: ₦40k-₦60k\n` +
-        `• 1-bedroom in Utako: ₦60k-₦80k\n` +
-        `• 2-bedroom in Kubwa: ₦70k-₦90k\n\n` +
+        `• Studios in Garki/Gwarinpa: ₦20k-₦35k\n` +
+        `• 1-bedroom in Utako/Kubwa: ₦28k-₦40k\n` +
+        `• 2-bedroom in Kubwa: ₦45k-₦60k\n\n` +
         `Use /search with min_price and max_price to filter!`,
         { parse_mode: 'Markdown' }
       );
@@ -400,23 +558,22 @@ const handleMessage = async (bot, msg) => {
       return bot.sendMessage(chatId,
         `✨ *Luxury Apartments*\n\n` +
         `Premium options in:\n` +
-        `• Maitama: 3-bedroom exec (₦250k-₦350k)\n` +
-        `• Asokoro: 2-bedroom luxury (₦200k-₦300k)\n` +
-        `• Jabi: Waterfront (₦180k-₦280k)\n\n` +
+        `• Maitama: 3-bedroom (₦120k-₦150k)\n` +
+        `• Asokoro: 2-bedroom (₦80k-₦100k)\n` +
+        `• Jabi: Waterfront (₦70k-₦90k)\n\n` +
         `All with AC, generator, WiFi, and security!`,
         { parse_mode: 'Markdown' }
       );
     }
     
-    // ----- AMENITIES (Enhanced) -----
+    // ----- AMENITIES -----
     if (amenityKeywords.wifi.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `📶 *WiFi Availability*\n\n` +
         `✅ All our apartments have high-speed WiFi!\n` +
         `• Fiber optic connection\n` +
         `• Unlimited data in most units\n` +
-        `• Perfect for remote work\n\n` +
-        `Use /search and filter by amenities!`,
+        `• Perfect for remote work`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -438,8 +595,7 @@ const handleMessage = async (bot, msg) => {
         `All apartments have:\n` +
         `• Backup generators\n` +
         `• Inverters in some units\n` +
-        `• 24/7 electricity guaranteed\n\n` +
-        `No light issues with our apartments!`,
+        `• 24/7 electricity guaranteed`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -461,8 +617,7 @@ const handleMessage = async (bot, msg) => {
         `🅿️ *Parking*\n\n` +
         `• Dedicated parking spaces\n` +
         `• Secure car parks\n` +
-        `• Valet at select locations\n\n` +
-        `Perfect for guests with cars!`,
+        `• Valet at select locations`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -473,8 +628,7 @@ const handleMessage = async (bot, msg) => {
         `All our apartments feature:\n` +
         `• 24/7 security guards\n` +
         `• CCTV surveillance\n` +
-        `• Secure access control\n` +
-        `• Safe neighborhoods`,
+        `• Secure access control`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -484,8 +638,7 @@ const handleMessage = async (bot, msg) => {
         `🍳 *Kitchen Facilities*\n\n` +
         `• Fully equipped kitchens\n` +
         `• Modern appliances\n` +
-        `• Cooking utensils provided\n\n` +
-        `Perfect for self-catering!`,
+        `• Cooking utensils provided`,
         { parse_mode: 'Markdown' }
       );
     }
@@ -500,14 +653,14 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    // ----- RENTAL DURATION (Enhanced) -----
+    // ----- RENTAL DURATION -----
     if (durationKeywords.daily.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `📅 *Daily/Shortlet Rates*\n\n` +
         `We offer flexible daily rates:\n` +
-        `• Studio: ₦40k-₦70k/night\n` +
-        `• 1-bedroom: ₦60k-₦100k/night\n` +
-        `• 2-bedroom: ₦80k-₦150k/night\n\n` +
+        `• Studio: ₦20k-₦50k/night\n` +
+        `• 1-bedroom: ₦30k-₦75k/night\n` +
+        `• 2-bedroom: ₦45k-₦100k/night\n\n` +
         `Use /search to find specific apartments!`
       );
     }
@@ -515,9 +668,9 @@ const handleMessage = async (bot, msg) => {
     if (durationKeywords.weekly.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `📆 *Weekly Rates (7 nights)*\n\n` +
-        `• Studio: ₦250k-₦450k/week\n` +
-        `• 1-bedroom: ₦380k-₦600k/week\n` +
-        `• 2-bedroom: ₦500k-₦900k/week\n\n` +
+        `• Studio: ₦120k-₦300k/week\n` +
+        `• 1-bedroom: ₦180k-₦450k/week\n` +
+        `• 2-bedroom: ₦270k-₦600k/week\n\n` +
         `Ask about monthly rates for longer stays!`
       );
     }
@@ -526,9 +679,9 @@ const handleMessage = async (bot, msg) => {
       return bot.sendMessage(chatId,
         `📅 *Monthly Shortlet*\n\n` +
         `Special monthly rates available!\n` +
-        `• Studios from ₦1.2M/month\n` +
-        `• 1-bedroom from ₦1.8M/month\n` +
-        `• 2-bedroom from ₦2.5M/month\n\n` +
+        `• Studios from ₦500k/month\n` +
+        `• 1-bedroom from ₦800k/month\n` +
+        `• 2-bedroom from ₦1.2M/month\n\n` +
         `Contact support for long-stay discounts!`
       );
     }
