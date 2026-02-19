@@ -352,8 +352,8 @@ const handleLocationSelection = async (bot, chatId, messageId, data) => {
   const locationId = data.replace('search_loc_', '');
   
   let whereClause = {
-    isApproved: true,
-    isAvailable: true
+    isApproved: true
+    // isAvailable removed - now handled manually
   };
   
   if (locationId === 'all') {
@@ -390,8 +390,8 @@ const handleTypeSelection = async (bot, chatId, messageId, data) => {
   const typeId = data.replace('search_type_', '');
   
   let whereClause = {
-    isApproved: true,
-    isAvailable: true
+    isApproved: true
+    // isAvailable removed - now handled manually
   };
   
   if (typeId === 'any') {
@@ -427,8 +427,8 @@ const handlePriceSelection = async (bot, chatId, messageId, data) => {
   const priceId = data.replace('search_price_', '');
   
   let whereClause = {
-    isApproved: true,
-    isAvailable: true
+    isApproved: true
+    // isAvailable removed - now handled manually
   };
   
   if (priceId === 'any') {
@@ -500,8 +500,8 @@ const applyAmenityFilters = async (bot, chatId, messageId) => {
   const selectedAmenities = filters.amenities || [];
   
   let whereClause = {
-    isApproved: true,
-    isAvailable: true
+    isApproved: true
+    // isAvailable removed - now handled manually
   };
   
   if (selectedAmenities.length > 0) {
@@ -590,7 +590,7 @@ const performSearch = async (bot, chatId, messageId, whereClause) => {
 };
 
 // ============================================
-// EXISTING FUNCTIONS (Keep as is)
+// EXISTING FUNCTIONS (Updated - removed availability)
 // ============================================
 
 const processSearch = async (bot, msg) => {
@@ -610,10 +610,9 @@ const processSearch = async (bot, msg) => {
       guests = parts[2] ? parseInt(parts[2]) : null;
     }
     
-    // Build query
+    // Build query - removed isAvailable
     const whereClause = {
-      isApproved: true,
-      isAvailable: true
+      isApproved: true
     };
     
     if (location && location !== '') {
@@ -668,6 +667,10 @@ const processSearch = async (bot, msg) => {
     bot.sendMessage(chatId, 'Error processing search. Please try again.');
   }
 };
+
+// ============================================
+// UPDATED: sendApartmentDetails - removed availability
+// ============================================
 
 const sendApartmentDetails = async (bot, chatId, apartment) => {
   try {
