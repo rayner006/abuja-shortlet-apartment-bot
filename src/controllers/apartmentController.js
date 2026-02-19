@@ -78,8 +78,9 @@ How would you like to search for apartments?
  */
 const listAllApartments = async (bot, chatId) => {
   try {
+    // ✅ UPDATED: Removed isApproved filter
     const [apartments] = await pool.query(
-      'SELECT * FROM apartments WHERE isApproved = true ORDER BY createdAt DESC LIMIT 10'
+      'SELECT * FROM apartments ORDER BY createdAt DESC LIMIT 10'
     );
     
     if (apartments.length === 0) {
@@ -372,11 +373,12 @@ const handleLocationSelection = async (bot, chatId, messageId, data) => {
       parse_mode: 'Markdown'
     });
     
-    let query = 'SELECT * FROM apartments WHERE isApproved = true';
+    // ✅ UPDATED: Removed isApproved filter
+    let query = 'SELECT * FROM apartments';
     let params = [];
     
     if (location !== 'all') {
-      query += ' AND location = ?';
+      query += ' WHERE location = ?';
       params.push(locationName);
     }
     
@@ -437,7 +439,8 @@ const handleTypeSelection = async (bot, chatId, messageId, data) => {
       parse_mode: 'Markdown'
     });
     
-    const query = `SELECT * FROM apartments WHERE isApproved = true AND ${bedroomFilter} ORDER BY createdAt DESC LIMIT 20`;
+    // ✅ UPDATED: Removed isApproved filter
+    const query = `SELECT * FROM apartments WHERE ${bedroomFilter} ORDER BY createdAt DESC LIMIT 20`;
     
     const [apartments] = await pool.query(query);
     
@@ -473,16 +476,17 @@ const handlePriceSelection = async (bot, chatId, messageId, data) => {
     const [min, max] = priceRange.split('-');
     
     let priceText = '';
-    let query = 'SELECT * FROM apartments WHERE isApproved = true';
+    // ✅ UPDATED: Removed isApproved filter
+    let query = 'SELECT * FROM apartments';
     let params = [];
     
     if (max === '+') {
       priceText = `₦${min}+`;
-      query += ' AND pricePerNight >= ?';
+      query += ' WHERE pricePerNight >= ?';
       params.push(parseInt(min));
     } else {
       priceText = `₦${min} - ₦${max}`;
-      query += ' AND pricePerNight BETWEEN ? AND ?';
+      query += ' WHERE pricePerNight BETWEEN ? AND ?';
       params.push(parseInt(min), parseInt(max));
     }
     
@@ -579,8 +583,9 @@ const applyAmenityFilters = async (bot, chatId, messageId) => {
     // For now, just show all apartments
     // In a real implementation, you'd parse the selected amenities from the message
     
+    // ✅ UPDATED: Removed isApproved filter
     const [apartments] = await pool.query(
-      'SELECT * FROM apartments WHERE isApproved = true ORDER BY createdAt DESC LIMIT 20'
+      'SELECT * FROM apartments ORDER BY createdAt DESC LIMIT 20'
     );
     
     if (apartments.length === 0) {
