@@ -92,10 +92,37 @@ bot.on('message', async (msg) => {
       }
     }
     
-    // ✅ CHECK APARTMENT STATE FIRST
+    // ✅ HANDLE "DONE" TEXT DURING PHOTO UPLOAD
+    if (msg.text && msg.text.toLowerCase() === 'done' && 
+        global.apartmentStates && global.apartmentStates[msg.chat.id]) {
+      const state = global.apartmentStates[msg.chat.id];
+      
+      if (state.step === 'photos') {
+        if (!state.data.images || state.data.images.length === 0) {
+          await bot.sendMessage(msg.chat.id, '❌ Please send at least one photo first.');
+          return;
+        }
+        
+        // Move to next step
+        state.step = 'description';
+        await bot.sendMessage(msg.chat.id, 
+          '✅ Photos saved!\n\n' +
+          'Please send a *description* for this apartment:',
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+    }
+    
+    // ✅ CHECK APARTMENT STATE FIRST (for non-photo steps)
     if (global.apartmentStates && global.apartmentStates[msg.chat.id]) {
-      const handled = await adminController.apartments.handleAddApartmentMessage(msg.chat.id, msg.text);
-      if (handled) return;
+      const state = global.apartmentStates[msg.chat.id];
+      
+      // Skip if we're in photos step (already handled above)
+      if (state.step !== 'photos') {
+        const handled = await adminController.apartments.handleAddApartmentMessage(msg.chat.id, msg.text);
+        if (handled) return;
+      }
     }
     
     // Check if message is a command
