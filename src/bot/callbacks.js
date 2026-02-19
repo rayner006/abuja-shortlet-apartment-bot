@@ -47,6 +47,12 @@ const handleCallback = async (bot, callbackQuery) => {
     // MENU CALLBACKS - UPDATED
     // ============================================
     
+    else if (data === 'apartments') {
+      // 👈 NEW - handles main Apartments button
+      const { handleSearch } = require('../controllers/apartmentController');
+      await handleSearch(bot, { chat: { id: chatId }, from: callbackQuery.from });
+      await bot.answerCallbackQuery(callbackQuery.id);
+    }
     else if (data === 'menu_search') {
       // 👈 FIXED: Now calls handleSearch to show search menu
       await handleSearch(bot, { chat: { id: chatId }, from: callbackQuery.from });
