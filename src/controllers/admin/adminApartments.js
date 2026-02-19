@@ -45,6 +45,10 @@ class AdminApartments extends AdminBase {
         else if (data.startsWith('filter_') || data.startsWith('sort_')) {
             await this.handleApartmentFilters(callbackQuery);
         }
+        // ✅ ADDED: Handle Add Apartment button
+        else if (data === 'admin_add_apartment') {
+            await this.startAddApartment(callbackQuery);
+        }
     }
 
     // ============================================
@@ -1077,6 +1081,198 @@ All bookings for this apartment will also be deleted.
         );
         
         await this.answerCallback(callbackQuery);
+    }
+
+    // ============================================
+    // ADD APARTMENT FUNCTIONALITY
+    // ============================================
+
+    async startAddApartment(callbackQuery) {
+        const chatId = callbackQuery.message.chat.id;
+        const messageId = callbackQuery.message.message_id;
+        
+        try {
+            const text = `
+➕ *Add New Apartment*
+
+Let's add a new apartment to the system.
+You'll be the owner of this apartment.
+
+Please enter the apartment title:
+            `;
+            
+            // Set up state to collect apartment details
+            if (!global.apartmentStates) global.apartmentStates = {};
+            
+            global.apartmentStates[chatId] = {
+                step: 'title',
+                data: {
+                    ownerId: callbackQuery.from.id,
+                    isApproved: true // Auto-approve since admin is adding
+                }
+            };
+            
+            await this.bot.editMessageText(text, {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: '« Cancel', callback_data: 'menu_admin' }]
+                    ]
+                }
+            });
+            
+            await this.answerCallback(callbackQuery);
+            
+        } catch (error) {
+            console.error('Error starting add apartment:', error);
+            await this.handleError(chatId, error, 'startAddApartment');
+        }
+    }
+
+    // Handle messages for adding apartment (call this from main message handler)
+    async handleAddApartmentMessage(chatId, text) {
+        try {
+            const state = global.apartmentStates?.[chatId];
+            if (!state) return false;
+            
+            const data = state.data;
+            
+            switch(state.step) {
+                case 'title':
+                    data.title = text;
+                    state.step = 'location';
+                    await this.bot.sendMessage(chatId, 
+                        `📍 *Location*\n\nWhere is this apartment located? (e.g., Asokoro, Maitama, Wuse)`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    break;
+                    
+                case 'location':
+                    data.location = text;
+                    state.step = 'price';
+                    await this.bot.sendMessage(chatId,
+                        `💰 *Price*\n\nWhat is the price per night? (in Naira)`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    break;
+                    
+                case 'price':
+                    const price = parseInt(text.replace(/[^0-9]/g, ''));
+                    if (isNaN(price) || price < 1000) {
+                        await this.bot.sendMessage(chatId,
+                            `❌ *Invalid Price*\n\nPlease enter a valid price (minimum ₦1,000)`,
+                            { parse_mode: 'Markdown' }
+                        );
+                        return true;
+                    }
+                    data.pricePerNight = price;
+                    state.step = 'bedrooms';
+                    await this.bot.sendMessage(chatId,
+                        `🛏️ *Bedrooms*\n\nHow many bedrooms? (0 for studio)`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    break;
+                    
+                case 'bedrooms':
+                    const bedrooms = parseInt(text);
+                    if (isNaN(bedrooms) || bedrooms < 0 || bedrooms > 10) {
+                        await this.bot.sendMessage(chatId,
+                            `❌ *Invalid Number*\n\nPlease enter a valid number of bedrooms (0-10)`,
+                            { parse_mode: 'Markdown' }
+                        );
+                        return true;
+                    }
+                    data.bedrooms = bedrooms;
+                    state.step = 'bathrooms';
+                    await this.bot.sendMessage(chatId,
+                        `🚿 *Bathrooms*\n\nHow many bathrooms?`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    break;
+                    
+                case 'bathrooms':
+                    const bathrooms = parseInt(text);
+                    if (isNaN(bathrooms) || bathrooms < 1 || bathrooms > 10) {
+                        await this.bot.sendMessage(chatId,
+                            `❌ *Invalid Number*\n\nPlease enter a valid number of bathrooms (1-10)`,
+                            { parse_mode: 'Markdown' }
+                        );
+                        return true;
+                    }
+                    data.bathrooms = bathrooms;
+                    state.step = 'maxGuests';
+                    await this.bot.sendMessage(chatId,
+                        `👥 *Max Guests*\n\nMaximum number of guests?`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    break;
+                    
+                case 'maxGuests':
+                    const maxGuests = parseInt(text);
+                    if (isNaN(maxGuests) || maxGuests < 1 || maxGuests > 20) {
+                        await this.bot.sendMessage(chatId,
+                            `❌ *Invalid Number*\n\nPlease enter a valid number of guests (1-20)`,
+                            { parse_mode: 'Markdown' }
+                        );
+                        return true;
+                    }
+                    data.maxGuests = maxGuests;
+                    state.step = 'description';
+                    await this.bot.sendMessage(chatId,
+                        `📝 *Description*\n\nPlease enter a description of the apartment:`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    break;
+                    
+                case 'description':
+                    data.description = text;
+                    
+                    // Create the apartment
+                    const apartment = await Apartment.create({
+                        ownerId: data.ownerId,
+                        title: data.title,
+                        description: data.description,
+                        pricePerNight: data.pricePerNight,
+                        location: data.location,
+                        bedrooms: data.bedrooms,
+                        bathrooms: data.bathrooms,
+                        maxGuests: data.maxGuests,
+                        isApproved: true, // Auto-approved
+                        amenities: [],
+                        images: []
+                    });
+                    
+                    // Clear state
+                    delete global.apartmentStates[chatId];
+                    
+                    // Success message
+                    await this.bot.sendMessage(chatId,
+                        `✅ *Apartment Added Successfully!*\n\n` +
+                        `🏠 *${apartment.title}*\n` +
+                        `📍 *Location:* ${apartment.location}\n` +
+                        `💰 *Price:* ${this.formatCurrency(apartment.pricePerNight)}/night\n\n` +
+                        `The apartment is now live and visible to users!`,
+                        {
+                            parse_mode: 'Markdown',
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
+                                ]
+                            }
+                        }
+                    );
+                    break;
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Error in handleAddApartmentMessage:', error);
+            await this.bot.sendMessage(chatId, '❌ An error occurred. Please try again.');
+            delete global.apartmentStates?.[chatId];
+            return true;
+        }
     }
 }
 
