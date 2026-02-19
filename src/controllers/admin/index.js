@@ -78,7 +78,13 @@ class AdminController extends AdminBase {
             await this.stats.handleStats(callbackQuery);
         }
         else if (data === 'menu_admin' || data === 'admin_back') {
-            await this.core.showAdminPanel(chatId, callbackQuery.message);
+            // FIXED: Create proper message object with required properties
+            const msg = {
+                chat: { id: chatId },
+                from: { id: userId },
+                callback_query: callbackQuery
+            };
+            await this.core.showAdminPanel(chatId, msg);
         }
         else {
             await this.answerCallback(callbackQuery, 'Unknown command');
