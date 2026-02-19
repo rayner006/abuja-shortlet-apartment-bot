@@ -1001,4 +1001,83 @@ All bookings for this apartment will also be deleted.
         const messageId = callbackQuery.message.message_id;
         
         try {
-            if (data === '
+            if (data === 'admin_filter_location') {
+                // Get unique locations
+                const locations = await Apartment.findAll({
+                    attributes: [[sequelize.fn('DISTINCT', sequelize.col('location')), 'location']],
+                    where: { isApproved: true }
+                });
+                
+                const locationButtons = locations.map(l => ([{
+                    text: l.location,
+                    callback_data: `filter_loc_${l.location}`
+                }]));
+                
+                // Split into rows of 2
+                const keyboard = [];
+                for (let i = 0; i < locationButtons.length; i += 2) {
+                    keyboard.push(locationButtons.slice(i, i + 2).flat());
+                }
+                keyboard.push([{ text: '« Back', callback_data: 'admin_apartments_1' }]);
+                
+                await this.bot.editMessageText('📍 *Select Location to Filter*', {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: keyboard }
+                });
+            }
+            else if (data === 'admin_filter_price') {
+                const priceRanges = [
+                    ['₦0 - ₦50,000', 'filter_price_0_50000'],
+                    ['₦50,000 - ₦100,000', 'filter_price_50000_100000'],
+                    ['₦100,000 - ₦200,000', 'filter_price_100000_200000'],
+                    ['₦200,000+', 'filter_price_200000_plus']
+                ];
+                
+                const keyboard = priceRanges.map(range => ([{
+                    text: range[0],
+                    callback_data: range[1]
+                }]));
+                keyboard.push([{ text: '« Back', callback_data: 'admin_apartments_1' }]);
+                
+                await this.bot.editMessageText('💰 *Select Price Range*', {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: 'Markdown',
+                    reply_markup: { inline_keyboard: keyboard }
+                });
+            }
+            
+            await this.answerCallback(callbackQuery);
+            
+        } catch (error) {
+            await this.handleError(chatId, error, 'handleApartmentFilters');
+        }
+    }
+
+    // ============================================
+    // EDIT APARTMENT FORM (Placeholder)
+    // ============================================
+    
+    async showEditApartmentForm(callbackQuery, apartment) {
+        const chatId = callbackQuery.message.chat.id;
+        
+        await this.bot.sendMessage(chatId, 
+            `✏️ *Edit Apartment*\n\n` +
+            `Editing functionality for "${apartment.title}" will be available soon.\n\n` +
+            `You'll be able to:\n` +
+            `• Update title and description\n` +
+            `• Change price\n` +
+            `• Modify amenities\n` +
+            `• Update photos\n` +
+            `• Change location\n\n` +
+            `For now, use the owner dashboard for updates.`,
+            { parse_mode: 'Markdown' }
+        );
+        
+        await this.answerCallback(callbackQuery);
+    }
+}
+
+module.exports = AdminApartments;
