@@ -2,11 +2,11 @@
 const { Apartment } = require('../models');
 const logger = require('../config/logger');
 
-// Popular Abuja locations with emojis
+// Popular Abuja locations with emojis - UPDATED
 const popularLocations = [
   { id: 'asokoro', name: 'Asokoro', emoji: '🏛️' },
   { id: 'maitama', name: 'Maitama', emoji: '🏰' },
-  { id: 'wuse2', name: 'Wuse 2', emoji: '🏢' },
+  { id: 'wuse', name: 'Wuse', emoji: '🏢' }, // 👈 CHANGED: from 'wuse2' to 'wuse', from 'Wuse 2' to 'Wuse'
   { id: 'garki', name: 'Garki', emoji: '🏙️' },
   { id: 'jabi', name: 'Jabi', emoji: '🌳' },
   { id: 'gwarinpa', name: 'Gwarinpa', emoji: '🏘️' },
@@ -66,7 +66,7 @@ const handleLocationSelection = async (bot, msg) => {
   }
 };
 
-// Handle when user clicks on a location - NOW SHOWS APARTMENT TYPE FILTER
+// Handle when user clicks on a location
 const handleLocationCallback = async (bot, callbackQuery) => {
   const chatId = callbackQuery.message.chat.id;
   const messageId = callbackQuery.message.message_id;
@@ -96,7 +96,7 @@ const handleLocationCallback = async (bot, callbackQuery) => {
   }
 };
 
-// NEW: Show apartment type selection after location
+// Show apartment type selection after location
 const showApartmentTypeSelection = async (bot, chatId, messageId, location) => {
   try {
     // Create keyboard with apartment type buttons
@@ -136,7 +136,7 @@ const showApartmentTypeSelection = async (bot, chatId, messageId, location) => {
   }
 };
 
-// NEW: Handle apartment type selection
+// Handle apartment type selection
 const handleApartmentTypeCallback = async (bot, callbackQuery) => {
   const chatId = callbackQuery.message.chat.id;
   const messageId = callbackQuery.message.message_id;
@@ -172,13 +172,13 @@ const handleApartmentTypeCallback = async (bot, callbackQuery) => {
     // Build bedroom filter based on type
     let bedroomFilter = {};
     if (typeId === 'studio') {
-      bedroomFilter = { bedrooms: 0 }; // Studio apartments
+      bedroomFilter = { bedrooms: 0 };
     } else if (typeId === '1bed') {
       bedroomFilter = { bedrooms: 1 };
     } else if (typeId === '2bed') {
       bedroomFilter = { bedrooms: 2 };
     } else if (typeId === '3bed') {
-      bedroomFilter = { bedrooms: { [Op.gte]: 3 } }; // 3 or more bedrooms
+      bedroomFilter = { bedrooms: { [Op.gte]: 3 } };
     }
     
     // Fetch apartments matching location and type
@@ -220,7 +220,7 @@ const handleApartmentTypeCallback = async (bot, callbackQuery) => {
   }
 };
 
-// Updated sendApartmentResult to include type info
+// Send apartment result
 const sendApartmentResult = async (bot, chatId, apartment, index, total, location, type = null) => {
   try {
     // Format amenities if available
@@ -259,7 +259,7 @@ ${amenitiesText}
       navRow.push({ text: '« Previous', callback_data: `apt_prev_${index}_${location.id}_${type?.id || 'all'}` });
     }
     
-    navRow.push({ text: '📅 Book Now', callback_data: `book_${apartment.id}` });
+    navRow.push({ text: '📅 Request Booking', callback_data: `book_${apartment.id}` }); // UPDATED: Book Now → Request Booking
     
     if (index < total - 1) {
       navRow.push({ text: 'Next »', callback_data: `apt_next_${index}_${location.id}_${type?.id || 'all'}` });
