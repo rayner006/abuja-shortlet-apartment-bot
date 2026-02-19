@@ -29,9 +29,9 @@ initDatabase().catch(err => {
   process.exit(1);
 });
 
-// Setup bot commands
+// Setup bot commands - PASS the adminController
 setupCommands(bot);
-setupAdminCommands(bot);
+setupAdminCommands(bot, adminController);  // 👈 UPDATED: passing adminController
 
 // --- START BOT SAFELY ---
 (async () => {
@@ -164,10 +164,10 @@ bot.on('callback_query', async (callbackQuery) => {
         data.startsWith('edit_') ||
         data.startsWith('set_role_') || 
         data.startsWith('confirm_delete_') ||
-        data.startsWith('apt_') ||                // 👈 ADDED: apartment action buttons
-        data.startsWith('confirm_delete_apt_') || // 👈 ADDED: confirm delete apartment
-        data.startsWith('filter_') ||             // 👈 ADDED: filter buttons
-        data.startsWith('sort_') ||               // 👈 ADDED: sort buttons
+        data.startsWith('apt_') ||                
+        data.startsWith('confirm_delete_apt_') || 
+        data.startsWith('filter_') ||             
+        data.startsWith('sort_') ||               
         data === 'menu_admin' || 
         data === 'admin_back') {
       
