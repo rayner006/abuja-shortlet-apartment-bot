@@ -71,6 +71,12 @@ bot.on('error', (error) => {
 // Message handler
 bot.on('message', async (msg) => {
   try {
+    // ✅ FIX: Clear any stuck apartment states for THIS user
+    if (global.apartmentStates && global.apartmentStates[msg.chat.id]) {
+      // If this user is stuck, clear it
+      delete global.apartmentStates[msg.chat.id];
+    }
+    
     // ✅ HANDLE PHOTOS for apartment addition
     if (msg.photo && global.apartmentStates && global.apartmentStates[msg.chat.id]) {
       const state = global.apartmentStates[msg.chat.id];
