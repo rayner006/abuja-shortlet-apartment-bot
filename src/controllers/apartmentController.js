@@ -51,7 +51,7 @@ const AMENITIES = [
 ];
 
 // ============================================
-// PROFESSIONAL SEARCH INTERFACE - CLEAN VERSION
+// PROFESSIONAL SEARCH INTERFACE
 // ============================================
 
 const handleSearch = async (bot, msg) => {
@@ -65,14 +65,11 @@ const handleSearch = async (bot, msg) => {
   
   const keyboard = {
     inline_keyboard: [
-      // Main search options
       [{ text: '📍 Search by Location', callback_data: 'search_menu_location' }],
       [{ text: '🏠 Search by Apartment Type', callback_data: 'search_menu_type' }],
       [{ text: '💰 Search by Budget', callback_data: 'search_menu_price' }],
       [{ text: '✨ Search by Amenities', callback_data: 'search_menu_amenities' }],
       [{ text: '🔎 Advanced Search', callback_data: 'search_menu_advanced' }],
-      
-      // Navigation
       [{ text: '« Back to Main Menu', callback_data: 'back_to_main' }]
     ]
   };
@@ -126,9 +123,29 @@ const handleSearchCallback = async (bot, callbackQuery) => {
       await showAdvancedSearch(bot, chatId, messageId);
     }
     
-    // Handle quick picks (keeping functionality for backward compatibility)
-    else if (data.startsWith('search_quick_')) {
-      await handleQuickPick(bot, chatId, messageId, data);
+    // Handle location selections
+    else if (data.startsWith('search_loc_')) {
+      await handleLocationSelection(bot, chatId, messageId, data);
+    }
+    
+    // Handle type selections
+    else if (data.startsWith('search_type_')) {
+      await handleTypeSelection(bot, chatId, messageId, data);
+    }
+    
+    // Handle price selections
+    else if (data.startsWith('search_price_')) {
+      await handlePriceSelection(bot, chatId, messageId, data);
+    }
+    
+    // Handle amenity selections
+    else if (data.startsWith('search_amenity_')) {
+      await handleAmenitySelection(bot, chatId, messageId, data, callbackQuery);
+    }
+    
+    // Handle apply amenities
+    else if (data === 'search_apply_amenities') {
+      await applyAmenityFilters(bot, chatId, messageId);
     }
     
     // Handle back navigation
@@ -158,7 +175,6 @@ Select a location to find apartments:
   
   const keyboard = {
     inline_keyboard: [
-      // Location buttons in rows of 2
       [
         { text: '🏛️ Asokoro', callback_data: 'search_loc_asokoro' },
         { text: '🏰 Maitama', callback_data: 'search_loc_maitama' }
@@ -252,29 +268,37 @@ Select your price range (per night):
 };
 
 const showAmenitiesMenu = async (bot, chatId, messageId) => {
+  // Get current selected amenities from state
+  const currentFilters = searchState[chatId]?.filters || { amenities: [] };
+  const selectedAmenities = currentFilters.amenities || [];
+  
   const text = `
 ✨ *Search by Amenities*
 
 Select amenities you want (you can select multiple):
+${selectedAmenities.length > 0 ? `\n✅ *Selected:* ${selectedAmenities.map(a => {
+    const amenity = AMENITIES.find(am => am.id === a);
+    return amenity ? `${amenity.emoji} ${amenity.name}` : a;
+  }).join(', ')}\n` : ''}
   `;
   
   const keyboard = {
     inline_keyboard: [
       [
-        { text: '📶 WiFi', callback_data: 'search_amenity_wifi' },
-        { text: '❄️ AC', callback_data: 'search_amenity_ac' }
+        { text: `📶 WiFi ${selectedAmenities.includes('wifi') ? '✅' : ''}`, callback_data: 'search_amenity_wifi' },
+        { text: `❄️ AC ${selectedAmenities.includes('ac') ? '✅' : ''}`, callback_data: 'search_amenity_ac' }
       ],
       [
-        { text: '⚡ Generator', callback_data: 'search_amenity_generator' },
-        { text: '🏊 Pool', callback_data: 'search_amenity_pool' }
+        { text: `⚡ Generator ${selectedAmenities.includes('generator') ? '✅' : ''}`, callback_data: 'search_amenity_generator' },
+        { text: `🏊 Pool ${selectedAmenities.includes('pool') ? '✅' : ''}`, callback_data: 'search_amenity_pool' }
       ],
       [
-        { text: '🅿️ Parking', callback_data: 'search_amenity_parking' },
-        { text: '🛡️ Security', callback_data: 'search_amenity_security' }
+        { text: `🅿️ Parking ${selectedAmenities.includes('parking') ? '✅' : ''}`, callback_data: 'search_amenity_parking' },
+        { text: `🛡️ Security ${selectedAmenities.includes('security') ? '✅' : ''}`, callback_data: 'search_amenity_security' }
       ],
       [
-        { text: '🍳 Kitchen', callback_data: 'search_amenity_kitchen' },
-        { text: '📺 Smart TV', callback_data: 'search_amenity_tv' }
+        { text: `🍳 Kitchen ${selectedAmenities.includes('kitchen') ? '✅' : ''}`, callback_data: 'search_amenity_kitchen' },
+        { text: `📺 Smart TV ${selectedAmenities.includes('tv') ? '✅' : ''}`, callback_data: 'search_amenity_tv' }
       ],
       [{ text: '✅ Apply Amenity Filters', callback_data: 'search_apply_amenities' }],
       [{ text: '« Back to Search Menu', callback_data: 'search_back' }]
@@ -321,42 +345,169 @@ Or just type what you're looking for:
 };
 
 // ============================================
-// QUICK PICK HANDLER
+// HANDLE LOCATION SELECTION
 // ============================================
 
-const handleQuickPick = async (bot, chatId, messageId, data) => {
-  const quickType = data.replace('search_quick_', '');
+const handleLocationSelection = async (bot, chatId, messageId, data) => {
+  const locationId = data.replace('search_loc_', '');
   
   let whereClause = {
     isApproved: true,
     isAvailable: true
   };
   
-  // Handle location quick picks
-  if (['asokoro', 'maitama', 'wuse2', 'jabi'].includes(quickType)) {
-    const locationMap = {
-      asokoro: 'Asokoro',
-      maitama: 'Maitama',
-      wuse2: 'Wuse 2',
-      jabi: 'Jabi'
+  if (locationId === 'all') {
+    // Search all locations
+    await performSearch(bot, chatId, messageId, whereClause);
+    return;
+  }
+  
+  // Map location ID to actual location name
+  const locationMap = {
+    'asokoro': 'Asokoro',
+    'maitama': 'Maitama',
+    'wuse2': 'Wuse 2',
+    'garki': 'Garki',
+    'jabi': 'Jabi',
+    'gwarinpa': 'Gwarinpa',
+    'utako': 'Utako',
+    'kubwa': 'Kubwa'
+  };
+  
+  const locationName = locationMap[locationId];
+  if (locationName) {
+    whereClause.location = { [Op.like]: `%${locationName}%` };
+  }
+  
+  await performSearch(bot, chatId, messageId, whereClause);
+};
+
+// ============================================
+// HANDLE TYPE SELECTION
+// ============================================
+
+const handleTypeSelection = async (bot, chatId, messageId, data) => {
+  const typeId = data.replace('search_type_', '');
+  
+  let whereClause = {
+    isApproved: true,
+    isAvailable: true
+  };
+  
+  if (typeId === 'any') {
+    await performSearch(bot, chatId, messageId, whereClause);
+    return;
+  }
+  
+  // Map type ID to bedroom count
+  const typeMap = {
+    'studio': 0,
+    '1bed': 1,
+    '2bed': 2,
+    '3bed': 3
+  };
+  
+  const bedrooms = typeMap[typeId];
+  if (bedrooms !== undefined) {
+    if (typeId === '3bed') {
+      whereClause.bedrooms = { [Op.gte]: 3 };
+    } else {
+      whereClause.bedrooms = bedrooms;
+    }
+  }
+  
+  await performSearch(bot, chatId, messageId, whereClause);
+};
+
+// ============================================
+// HANDLE PRICE SELECTION
+// ============================================
+
+const handlePriceSelection = async (bot, chatId, messageId, data) => {
+  const priceId = data.replace('search_price_', '');
+  
+  let whereClause = {
+    isApproved: true,
+    isAvailable: true
+  };
+  
+  if (priceId === 'any') {
+    await performSearch(bot, chatId, messageId, whereClause);
+    return;
+  }
+  
+  // Map price ID to range
+  const priceMap = {
+    'under50': { min: 0, max: 50000 },
+    '50_100': { min: 50000, max: 100000 },
+    '100_150': { min: 100000, max: 150000 },
+    '150_200': { min: 150000, max: 200000 },
+    '200plus': { min: 200000, max: null }
+  };
+  
+  const range = priceMap[priceId];
+  if (range) {
+    if (range.max) {
+      whereClause.pricePerNight = { [Op.between]: [range.min, range.max] };
+    } else {
+      whereClause.pricePerNight = { [Op.gte]: range.min };
+    }
+  }
+  
+  await performSearch(bot, chatId, messageId, whereClause);
+};
+
+// ============================================
+// HANDLE AMENITY SELECTION
+// ============================================
+
+const handleAmenitySelection = async (bot, chatId, messageId, data, callbackQuery) => {
+  const amenityId = data.replace('search_amenity_', '');
+  
+  // Initialize filters if needed
+  if (!searchState[chatId]) {
+    searchState[chatId] = {
+      filters: {
+        location: null,
+        type: null,
+        priceMin: null,
+        priceMax: null,
+        amenities: []
+      }
     };
-    whereClause.location = { [Op.like]: `%${locationMap[quickType]}%` };
   }
   
-  // Handle type quick picks
-  else if (quickType === '1bed') {
-    whereClause.bedrooms = 1;
+  // Toggle amenity selection
+  const amenities = searchState[chatId].filters.amenities || [];
+  const index = amenities.indexOf(amenityId);
+  if (index === -1) {
+    amenities.push(amenityId);
+  } else {
+    amenities.splice(index, 1);
   }
-  else if (quickType === '2bed') {
-    whereClause.bedrooms = 2;
-  }
+  searchState[chatId].filters.amenities = amenities;
   
-  // Handle price quick picks
-  else if (quickType === 'under50') {
-    whereClause.pricePerNight = { [Op.lte]: 50000 };
-  }
-  else if (quickType === '50_100') {
-    whereClause.pricePerNight = { [Op.between]: [50000, 100000] };
+  // Refresh the amenities menu to show selection
+  await showAmenitiesMenu(bot, chatId, messageId);
+};
+
+// ============================================
+// APPLY AMENITY FILTERS
+// ============================================
+
+const applyAmenityFilters = async (bot, chatId, messageId) => {
+  const filters = searchState[chatId]?.filters || { amenities: [] };
+  const selectedAmenities = filters.amenities || [];
+  
+  let whereClause = {
+    isApproved: true,
+    isAvailable: true
+  };
+  
+  if (selectedAmenities.length > 0) {
+    // This is a simplified approach - in production you might need a more complex query
+    // for JSON array containment based on your database structure
+    whereClause.amenities = { [Op.contains]: selectedAmenities };
   }
   
   await performSearch(bot, chatId, messageId, whereClause);
@@ -368,6 +519,13 @@ const handleQuickPick = async (bot, chatId, messageId, data) => {
 
 const performSearch = async (bot, chatId, messageId, whereClause) => {
   try {
+    // Show loading message
+    await bot.editMessageText('🔍 *Searching for apartments...*', {
+      chat_id: chatId,
+      message_id: messageId,
+      parse_mode: 'Markdown'
+    });
+    
     const apartments = await Apartment.findAll({
       where: whereClause,
       include: [{
@@ -385,8 +543,17 @@ const performSearch = async (bot, chatId, messageId, whereClause) => {
         'Try:\n' +
         '• Using a different location\n' +
         '• Increasing your budget\n' +
-        '• Removing some filters',
-        { parse_mode: 'Markdown' }
+        '• Removing some filters\n' +
+        '• Checking back later for new listings',
+        { 
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔍 New Search', callback_data: 'search_back' }],
+              [{ text: '« Main Menu', callback_data: 'back_to_main' }]
+            ]
+          }
+        }
       );
     } else {
       await bot.sendMessage(chatId, 
@@ -397,6 +564,20 @@ const performSearch = async (bot, chatId, messageId, whereClause) => {
       for (const apt of apartments) {
         await sendApartmentDetails(bot, chatId, apt);
       }
+      
+      // Add a new search button at the end
+      await bot.sendMessage(chatId, 
+        '🔍 *Want to search again?*',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔍 New Search', callback_data: 'search_back' }],
+              [{ text: '« Main Menu', callback_data: 'back_to_main' }]
+            ]
+          }
+        }
+      );
     }
     
     // Clear search state
@@ -409,7 +590,7 @@ const performSearch = async (bot, chatId, messageId, whereClause) => {
 };
 
 // ============================================
-// EXISTING FUNCTIONS
+// EXISTING FUNCTIONS (Keep as is)
 // ============================================
 
 const processSearch = async (bot, msg) => {
