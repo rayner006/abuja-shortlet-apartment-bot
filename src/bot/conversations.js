@@ -26,6 +26,85 @@ const areaList = {
   'lugbe': 'Lugbe'
 };
 
+// ============================================
+// ENHANCED KEYWORD DETECTION
+// ============================================
+
+// Apartment type keywords
+const apartmentTypeKeywords = {
+  'studio': ['studio', 'self contain', 'self contained', 'studio apartment'],
+  '1bed': ['1 bedroom', 'one bedroom', '1 bed', 'one bed', '1bedroom', '1-bed'],
+  '2bed': ['2 bedroom', 'two bedroom', '2 bed', 'two bed', '2bedroom', '2-bed'],
+  '3bed': ['3 bedroom', 'three bedroom', '3 bed', 'three bed', '3bedroom', '3-bed'],
+  'general': [
+    'apartment', 'apartments', 
+    'shortlet', 'shortlets', 
+    'flat', 'flats',
+    'property', 'properties',
+    'accommodation', 'place to stay',
+    'rental', 'vacation rental',
+    'listing', 'listings'
+  ]
+};
+
+// Amenity keywords
+const amenityKeywords = {
+  'wifi': ['wifi', 'internet', 'wi-fi', 'broadband', 'wireless', 'online'],
+  'ac': ['ac', 'air conditioning', 'air condition', 'cooling', 'aircon', 'air conditioner'],
+  'generator': ['generator', 'power', 'light', 'electricity', 'backup', 'lighting'],
+  'pool': ['pool', 'swimming pool', 'swimming', 'poolside', 'swim'],
+  'parking': ['parking', 'car park', 'parking space', 'garage', 'car parking'],
+  'security': ['security', 'cctv', 'guard', 'safe', 'secure', '24/7 security'],
+  'kitchen': ['kitchen', 'kitchenette', 'cooking', 'fully equipped kitchen', 'cook'],
+  'tv': ['tv', 'television', 'cable tv', 'dstv', 'smart tv', 'satellite']
+};
+
+// Price/budget keywords
+const priceKeywords = {
+  'budget': ['budget', 'cheap', 'affordable', 'economy', 'low cost', 'inexpensive', 'discount'],
+  'luxury': ['luxury', 'luxurious', 'high end', 'premium', 'expensive', 'executive', 'deluxe'],
+  'midrange': ['moderate', 'mid-range', 'average', 'reasonable']
+};
+
+// Greeting keywords (expanded)
+const greetingKeywords = [
+  'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening',
+  'morning', 'evening', 'howdy', 'greetings', 'what\'s up', 'sup',
+  'how are you', 'howdy', 'good day'
+];
+
+// Help/Support keywords
+const helpKeywords = [
+  'help', 'assist', 'support', 'guide', 'tutorial',
+  'contact', 'reach', 'call', 'phone', 'email',
+  'problem', 'issue', 'error', 'not working', 'bug',
+  'how to', 'how do i', 'what is'
+];
+
+// Rental duration keywords
+const durationKeywords = {
+  'daily': ['daily', 'per night', 'one day', '1 night', 'nightly'],
+  'weekly': ['weekly', 'per week', '7 days', 'one week'],
+  'monthly': ['monthly', 'per month', '30 days', 'one month', 'long stay']
+};
+
+// ============================================
+// HELPER FUNCTION TO EXTRACT LOCATION
+// ============================================
+
+const extractLocation = (text) => {
+  for (const [key, area] of Object.entries(areaList)) {
+    if (text.includes(key)) {
+      return area;
+    }
+  }
+  return null;
+};
+
+// ============================================
+// MAIN MESSAGE HANDLER
+// ============================================
+
 const handleMessage = async (bot, msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -154,8 +233,8 @@ const handleMessage = async (bot, msg) => {
     
     const lowerText = text.toLowerCase().trim();
     
-    // ----- GREETINGS -----
-    if (lowerText.match(/^(hi|hello|hey|good morning|good afternoon|good evening)/)) {
+    // ----- GREETINGS (Enhanced) -----
+    if (greetingKeywords.some(greeting => lowerText.includes(greeting))) {
       return bot.sendMessage(chatId, 
         `👋 Hello ${firstName}! Welcome to Abuja Shortlet Apartment Bot.\n\n` +
         `I can help you find Studio, 1, 2, & 3 bedroom apartments in popular Abuja areas like:\n` +
@@ -164,21 +243,84 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    // ----- AREA/LOCATION SEARCH -----
-    for (const [key, area] of Object.entries(areaList)) {
-      if (lowerText.includes(key)) {
+    // ----- HELP/SUPPORT (Enhanced) -----
+    if (helpKeywords.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId, 
+        `🆘 *Need Help?*\n\n` +
+        `Here's how I can assist you:\n\n` +
+        `🔍 *Search for apartments* - Tell me location (e.g., "Asokoro")\n` +
+        `🏠 *Apartment types* - Studio, 1-Bed, 2-Bed, 3-Bed\n` +
+        `💰 *Budget* - "Under ₦100k", "Luxury apartments"\n` +
+        `✨ *Amenities* - "Apartments with pool", "WiFi"\n\n` +
+        `Type /help for all commands or /menu to see options.`
+      );
+    }
+    
+    // ----- AREA/LOCATION SEARCH (Enhanced) -----
+    const detectedLocation = extractLocation(lowerText);
+    if (detectedLocation) {
+      // Check if also asking about specific type
+      if (apartmentTypeKeywords['1bed'].some(keyword => lowerText.includes(keyword))) {
+        return bot.sendMessage(chatId,
+          `🛏️ *1-Bedroom Apartments in ${detectedLocation}*\n\n` +
+          `Use /search to find available 1-bedroom apartments in ${detectedLocation}.\n\n` +
+          `Or type /search 1bedroom ${detectedLocation} for direct results.`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+      else if (apartmentTypeKeywords['2bed'].some(keyword => lowerText.includes(keyword))) {
+        return bot.sendMessage(chatId,
+          `🛏️🛏️ *2-Bedroom Apartments in ${detectedLocation}*\n\n` +
+          `Use /search to find available 2-bedroom apartments in ${detectedLocation}.\n\n` +
+          `Or type /search 2bedroom ${detectedLocation} for direct results.`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+      else if (apartmentTypeKeywords['3bed'].some(keyword => lowerText.includes(keyword))) {
+        return bot.sendMessage(chatId,
+          `🏰 *3-Bedroom Apartments in ${detectedLocation}*\n\n` +
+          `Use /search to find available 3-bedroom apartments in ${detectedLocation}.\n\n` +
+          `Or type /search 3bedroom ${detectedLocation} for direct results.`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+      else {
         return bot.sendMessage(chatId, 
-          `📍 *Looking for apartments in ${area}?*\n\n` +
+          `📍 *Looking for apartments in ${detectedLocation}?*\n\n` +
           `I have Studio, 1, 2, & 3 bedroom apartments available there.\n\n` +
-          `Use: /search ${area}\n` +
-          `Or tell me: "2 bedroom in ${area}" for specific search.`,
+          `Use: /search ${detectedLocation}\n` +
+          `Or tell me: "2 bedroom in ${detectedLocation}" for specific search.`,
           { parse_mode: 'Markdown' }
         );
       }
     }
     
-    // ----- APARTMENT TYPE SEARCH -----
-    if (lowerText.includes('studio') || lowerText.includes('self contain')) {
+    // ----- GENERAL APARTMENT SEARCH (NEW) -----
+    if (apartmentTypeKeywords.general.some(keyword => lowerText.includes(keyword))) {
+      const location = extractLocation(lowerText);
+      if (location) {
+        return bot.sendMessage(chatId,
+          `🔍 *Finding ${location} apartments for you...*\n\n` +
+          `Use /search to see all available options in ${location}.\n\n` +
+          `You can also specify:\n` +
+          `• Apartment type (studio, 1-bed, 2-bed, 3-bed)\n` +
+          `• Budget (e.g., "under ₦100k")\n` +
+          `• Amenities (e.g., "with pool")`,
+          { parse_mode: 'Markdown' }
+        );
+      } else {
+        return bot.sendMessage(chatId,
+          `🔍 *Looking for apartments?*\n\n` +
+          `Tell me which area you're interested in:\n` +
+          `• Asokoro\n• Maitama\n• Wuse 2\n• Garki\n• Jabi\n• Gwarinpa\n\n` +
+          `Example: "Apartments in Maitama"`,
+          { parse_mode: 'Markdown' }
+        );
+      }
+    }
+    
+    // ----- APARTMENT TYPE SEARCH (Enhanced with general terms) -----
+    if (apartmentTypeKeywords.studio.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `🏠 *Studio Apartments*\n\n` +
         `I have studio apartments in:\n` +
@@ -191,7 +333,7 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    if (lowerText.includes('1 bedroom') || lowerText.includes('one bedroom')) {
+    if (apartmentTypeKeywords['1bed'].some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `🛏️ *1-Bedroom Apartments*\n\n` +
         `Available in all major areas:\n` +
@@ -203,7 +345,7 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    if (lowerText.includes('2 bedroom') || lowerText.includes('two bedroom')) {
+    if (apartmentTypeKeywords['2bed'].some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `🛏️🛏️ *2-Bedroom Apartments*\n\n` +
         `Perfect for families and groups:\n` +
@@ -215,7 +357,7 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    if (lowerText.includes('3 bedroom') || lowerText.includes('three bedroom')) {
+    if (apartmentTypeKeywords['3bed'].some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `🏰 *3-Bedroom Executive Apartments*\n\n` +
         `Spacious luxury apartments:\n` +
@@ -227,7 +369,7 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    // ----- PRICE/BUDGET QUERIES -----
+    // ----- PRICE/BUDGET QUERIES (Enhanced) -----
     if (lowerText.includes('how much') || lowerText.includes('price') || lowerText.includes('cost')) {
       return bot.sendMessage(chatId,
         `💰 *Price Ranges*\n\n` +
@@ -240,7 +382,7 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    if (lowerText.includes('budget') || lowerText.includes('cheap') || lowerText.includes('affordable')) {
+    if (priceKeywords.budget.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `💰 *Budget-Friendly Options*\n\n` +
         `• Studios in Garki/Gwarinpa: ₦40k-₦60k\n` +
@@ -251,7 +393,7 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    if (lowerText.includes('luxury') || lowerText.includes('executive')) {
+    if (priceKeywords.luxury.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `✨ *Luxury Apartments*\n\n` +
         `Premium options in:\n` +
@@ -263,8 +405,100 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    // ----- RENTAL DURATION -----
-    if (lowerText.includes('daily') || lowerText.includes('per night') || lowerText.includes('one day')) {
+    // ----- AMENITIES (Enhanced) -----
+    if (amenityKeywords.wifi.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId,
+        `📶 *WiFi Availability*\n\n` +
+        `✅ All our apartments have high-speed WiFi!\n` +
+        `• Fiber optic connection\n` +
+        `• Unlimited data in most units\n` +
+        `• Perfect for remote work\n\n` +
+        `Use /search and filter by amenities!`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    
+    if (amenityKeywords.ac.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId,
+        `❄️ *Air Conditioning*\n\n` +
+        `✅ All our apartments have AC!\n` +
+        `• Central AC in luxury units\n` +
+        `• Split units in standard apartments\n` +
+        `• 24/7 cooling guaranteed`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    
+    if (amenityKeywords.generator.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId,
+        `⚡ *Power Supply*\n\n` +
+        `All apartments have:\n` +
+        `• Backup generators\n` +
+        `• Inverters in some units\n` +
+        `• 24/7 electricity guaranteed\n\n` +
+        `No light issues with our apartments!`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    
+    if (amenityKeywords.pool.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId,
+        `🏊 *Swimming Pool*\n\n` +
+        `Luxury apartments with pools available in:\n` +
+        `• Maitama\n` +
+        `• Asokoro\n` +
+        `• Jabi\n\n` +
+        `Use /search and filter by "pool" to find them!`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    
+    if (amenityKeywords.parking.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId,
+        `🅿️ *Parking*\n\n` +
+        `• Dedicated parking spaces\n` +
+        `• Secure car parks\n` +
+        `• Valet at select locations\n\n` +
+        `Perfect for guests with cars!`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    
+    if (amenityKeywords.security.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId,
+        `🛡️ *Security*\n\n` +
+        `All our apartments feature:\n` +
+        `• 24/7 security guards\n` +
+        `• CCTV surveillance\n` +
+        `• Secure access control\n` +
+        `• Safe neighborhoods`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    
+    if (amenityKeywords.kitchen.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId,
+        `🍳 *Kitchen Facilities*\n\n` +
+        `• Fully equipped kitchens\n` +
+        `• Modern appliances\n` +
+        `• Cooking utensils provided\n\n` +
+        `Perfect for self-catering!`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    
+    if (amenityKeywords.tv.some(keyword => lowerText.includes(keyword))) {
+      return bot.sendMessage(chatId,
+        `📺 *Entertainment*\n\n` +
+        `• Smart TVs in all apartments\n` +
+        `• Cable TV (DSTV/GOtv)\n` +
+        `• Netflix available in some units`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+    
+    // ----- RENTAL DURATION (Enhanced) -----
+    if (durationKeywords.daily.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `📅 *Daily/Shortlet Rates*\n\n` +
         `We offer flexible daily rates:\n` +
@@ -275,7 +509,7 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    if (lowerText.includes('weekly') || lowerText.includes('week')) {
+    if (durationKeywords.weekly.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `📆 *Weekly Rates (7 nights)*\n\n` +
         `• Studio: ₦250k-₦450k/week\n` +
@@ -285,7 +519,7 @@ const handleMessage = async (bot, msg) => {
       );
     }
     
-    if (lowerText.includes('monthly')) {
+    if (durationKeywords.monthly.some(keyword => lowerText.includes(keyword))) {
       return bot.sendMessage(chatId,
         `📅 *Monthly Shortlet*\n\n` +
         `Special monthly rates available!\n` +
@@ -293,61 +527,6 @@ const handleMessage = async (bot, msg) => {
         `• 1-bedroom from ₦1.8M/month\n` +
         `• 2-bedroom from ₦2.5M/month\n\n` +
         `Contact support for long-stay discounts!`
-      );
-    }
-    
-    // ----- AMENITIES -----
-    if (lowerText.includes('ac') || lowerText.includes('air condition')) {
-      return bot.sendMessage(chatId,
-        `❄️ *All our apartments have AC!*\n\n` +
-        `• Central AC in luxury units\n` +
-        `• Split units in standard apartments\n` +
-        `• 24/7 cooling guaranteed\n\n` +
-        `Use /search and filter by amenities!`
-      );
-    }
-    
-    if (lowerText.includes('light') || lowerText.includes('generator') || lowerText.includes('power')) {
-      return bot.sendMessage(chatId,
-        `⚡ *Power Supply*\n\n` +
-        `All apartments have:\n` +
-        `• Backup generators\n` +
-        `• Inverters in some units\n` +
-        `• 24/7 electricity guaranteed\n\n` +
-        `No light issues with our apartments!`
-      );
-    }
-    
-    if (lowerText.includes('wifi') || lowerText.includes('internet')) {
-      return bot.sendMessage(chatId,
-        `🌐 *Internet/WiFi*\n\n` +
-        `• High-speed fiber optic\n` +
-        `• Unlimited data in most units\n` +
-        `• 24/7 customer support\n\n` +
-        `Perfect for remote work!`
-      );
-    }
-    
-    if (lowerText.includes('security')) {
-      return bot.sendMessage(chatId,
-        `🛡️ *Security*\n\n` +
-        `All our apartments feature:\n` +
-        `• 24/7 security guards\n` +
-        `• CCTV surveillance\n` +
-        `• Secure access control\n` +
-        `• Safe neighborhoods\n\n` +
-        `Your safety is our priority!`
-      );
-    }
-    
-    if (lowerText.includes('parking')) {
-      return bot.sendMessage(chatId,
-        `🚗 *Parking*\n\n` +
-        `• Dedicated parking spaces\n` +
-        `• Secure car parks\n` +
-        `• Valet at select locations\n` +
-        `• Easy access\n\n` +
-        `Perfect for guests with cars!`
       );
     }
     
@@ -363,13 +542,6 @@ const handleMessage = async (bot, msg) => {
         `• Best rates in Abuja\n\n` +
         `Type /register_owner to get started!`,
         { parse_mode: 'Markdown' }
-      );
-    }
-    
-    // ----- HELP/SUPPORT -----
-    if (lowerText.includes('help') || lowerText.includes('support') || lowerText.includes('contact')) {
-      return bot.sendMessage(chatId, 
-        `Need help? Type /help to see all available commands, or contact support @support_username`
       );
     }
     
