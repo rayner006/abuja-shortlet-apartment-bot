@@ -71,9 +71,31 @@ bot.on('error', (error) => {
 // Message handler
 bot.on('message', async (msg) => {
   try {
+    // ✅ HANDLE PHOTOS for apartment addition
+    if (msg.photo && global.apartmentStates && global.apartmentStates[msg.chat.id]) {
+      const state = global.apartmentStates[msg.chat.id];
+      if (state.step === 'photos') {
+        // Get the largest photo (best quality)
+        const photo = msg.photo[msg.photo.length - 1];
+        const fileId = photo.file_id;
+        
+        // Add to images array
+        if (!state.data.images) state.data.images = [];
+        state.data.images.push(fileId);
+        
+        await bot.sendMessage(msg.chat.id, 
+          `✅ Photo received! (${state.data.images.length} so far)\n\n` +
+          `Send more photos or type *done* to finish.`,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+    }
+    
+    // Check if message is a command
     if (msg.text && msg.text.startsWith('/')) return;
     
-    // Check for apartment addition state
+    // Check for apartment addition state (text messages)
     if (global.apartmentStates && global.apartmentStates[msg.chat.id]) {
       const handled = await adminController.apartments.handleAddApartmentMessage(msg.chat.id, msg.text);
       if (handled) return;
