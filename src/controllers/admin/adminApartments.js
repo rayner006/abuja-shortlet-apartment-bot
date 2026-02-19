@@ -1269,11 +1269,12 @@ Please enter the apartment title:
                     
                 case 'photos':
                     if (text.toLowerCase() === 'done') {
-                        // Create the apartment with all fields including address
+                        // Create the apartment with ALL database fields
                         const apartment = await Apartment.create({
+                            // Core fields from your flow
                             ownerId: data.ownerId,
                             title: data.title,
-                            address: data.address,  // Address is now included!
+                            address: data.address,
                             description: data.description,
                             pricePerNight: data.pricePerNight,
                             location: data.location,
@@ -1282,7 +1283,12 @@ Please enter the apartment title:
                             maxGuests: data.maxGuests,
                             amenities: data.amenities || [],
                             images: data.images || [],
-                            isApproved: true
+                            
+                            // ✅ ADDED: Missing database fields
+                            isApproved: true,
+                            isAvailable: true,
+                            views: 0,
+                            createdAt: new Date()
                         });
                         
                         // Clear state
