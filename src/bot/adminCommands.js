@@ -1,13 +1,9 @@
-// src/bot/adminCommands.js
 const logger = require('../config/logger');
 
-// Import the NEW admin controller
-const AdminController = require('../controllers/admin');
+// Import AdminController is NOT needed here anymore
+// const AdminController = require('../controllers/admin');
 
-const setupAdminCommands = (bot) => {
-  
-  // Create admin controller instance with the bot
-  const adminController = new AdminController(bot);
+const setupAdminCommands = (bot, adminController) => {  // 👈 UPDATED: receives adminController
   
   // Admin panel command
   bot.onText(/\/admin/, async (msg) => {
