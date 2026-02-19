@@ -45,7 +45,7 @@ class AdminApartments extends AdminBase {
         else if (data.startsWith('filter_') || data.startsWith('sort_')) {
             await this.handleApartmentFilters(callbackQuery);
         }
-        // ✅ ADDED: Handle Add Apartment button
+        // Handle Add Apartment button
         else if (data === 'admin_add_apartment') {
             await this.startAddApartment(callbackQuery);
         }
@@ -267,7 +267,7 @@ Need help? Contact support@abujashortlet.com
                 ]
             };
             
-            // FIXED: Handle both photo and text messages correctly
+            // Handle both photo and text messages correctly
             if (callbackQuery.message.photo) {
                 // For messages with photos, edit the caption
                 await this.bot.editMessageCaption(text, {
@@ -1228,41 +1228,80 @@ Please enter the apartment title:
                     
                 case 'description':
                     data.description = text;
-                    
-                    // Create the apartment
-                    const apartment = await Apartment.create({
-                        ownerId: data.ownerId,
-                        title: data.title,
-                        description: data.description,
-                        pricePerNight: data.pricePerNight,
-                        location: data.location,
-                        bedrooms: data.bedrooms,
-                        bathrooms: data.bathrooms,
-                        maxGuests: data.maxGuests,
-                        isApproved: true, // Auto-approved
-                        amenities: [],
-                        images: []
-                    });
-                    
-                    // Clear state
-                    delete global.apartmentStates[chatId];
-                    
-                    // Success message
+                    state.step = 'amenities';
                     await this.bot.sendMessage(chatId,
-                        `✅ *Apartment Added Successfully!*\n\n` +
-                        `🏠 *${apartment.title}*\n` +
-                        `📍 *Location:* ${apartment.location}\n` +
-                        `💰 *Price:* ${this.formatCurrency(apartment.pricePerNight)}/night\n\n` +
-                        `The apartment is now live and visible to users!`,
-                        {
-                            parse_mode: 'Markdown',
-                            reply_markup: {
-                                inline_keyboard: [
-                                    [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
-                                ]
-                            }
-                        }
+                        `✨ *Amenities*\n\n` +
+                        `List the amenities (comma separated):\n` +
+                        `Example: WiFi, Air Conditioning, TV, Kitchen, Parking, Security`,
+                        { parse_mode: 'Markdown' }
                     );
+                    break;
+                    
+                case 'amenities':
+                    // Convert comma-separated string to array
+                    data.amenities = text.split(',').map(item => item.trim()).filter(item => item.length > 0);
+                    state.step = 'photos';
+                    data.images = []; // Initialize empty images array
+                    await this.bot.sendMessage(chatId,
+                        `📸 *Photos*\n\n` +
+                        `Please send photos of the apartment.\n\n` +
+                        `• Click the 📎 attachment icon\n` +
+                        `• Select 📷 Camera or 🖼️ Gallery\n` +
+                        `• Send your photos (one by one)\n\n` +
+                        `When you're done, type *done*`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    break;
+                    
+                case 'photos':
+                    if (text.toLowerCase() === 'done') {
+                        // Create the apartment with all fields
+                        const apartment = await Apartment.create({
+                            ownerId: data.ownerId,
+                            title: data.title,
+                            description: data.description,
+                            pricePerNight: data.pricePerNight,
+                            location: data.location,
+                            bedrooms: data.bedrooms,
+                            bathrooms: data.bathrooms,
+                            maxGuests: data.maxGuests,
+                            amenities: data.amenities || [],
+                            images: data.images || [],  // Array of photo file_ids
+                            isApproved: true
+                        });
+                        
+                        // Clear state
+                        delete global.apartmentStates[chatId];
+                        
+                        // Success message
+                        const amenitiesPreview = data.amenities?.length > 0 
+                            ? data.amenities.slice(0, 3).join(', ') + (data.amenities.length > 3 ? '...' : '')
+                            : 'None listed';
+                        
+                        await this.bot.sendMessage(chatId,
+                            `✅ *Apartment Added Successfully!*\n\n` +
+                            `🏠 *${apartment.title}*\n` +
+                            `📍 *Location:* ${apartment.location}\n` +
+                            `💰 *Price:* ${this.formatCurrency(apartment.pricePerNight)}/night\n` +
+                            `✨ *Amenities:* ${amenitiesPreview}\n` +
+                            `📸 *Photos:* ${data.images?.length || 0} uploaded\n\n` +
+                            `The apartment is now live and visible to users!`,
+                            {
+                                parse_mode: 'Markdown',
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
+                                    ]
+                                }
+                            }
+                        );
+                    } else {
+                        await this.bot.sendMessage(chatId,
+                            `❌ Please type *done* when you've finished sending photos.\n\n` +
+                            `To add photos, use the 📎 attachment button.`,
+                            { parse_mode: 'Markdown' }
+                        );
+                    }
                     break;
             }
             
