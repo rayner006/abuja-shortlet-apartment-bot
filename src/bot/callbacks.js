@@ -247,6 +247,31 @@ const handleCallback = async (bot, callbackQuery) => {
     }
     
     // ============================================
+    // APARTMENT EDITING CALLBACKS (UPDATED)
+    // ============================================
+    
+    else if (data.startsWith('edit_apt_')) {
+      const apartmentId = data.split('_')[2];
+      await showEditOptions(bot, callbackQuery, apartmentId);
+    }
+    else if (data.startsWith('edit_field_')) {
+      const parts = data.split('_');
+      const apartmentId = parts[2];
+      const field = parts[3];
+      await requestFieldUpdate(bot, callbackQuery, apartmentId, field);
+    }
+    else if (data.startsWith('save_edit_')) {
+      const apartmentId = data.split('_')[2];
+      await saveEditedField(bot, callbackQuery, apartmentId);
+    }
+    else if (data.startsWith('cancel_edit_')) {
+      const apartmentId = data.split('_')[2];
+      delete global.editApartmentState?.[callbackQuery.message.chat.id];
+      await bot.sendMessage(callbackQuery.message.chat.id, '❌ Edit cancelled.');
+      await bot.answerCallbackQuery(callbackQuery.id);
+    }
+    
+    // ============================================
     // OWNER APARTMENT MANAGEMENT
     // ============================================
     
@@ -326,7 +351,208 @@ const handleCallback = async (bot, callbackQuery) => {
 };
 
 // ============================================
-// HELPER FUNCTIONS
+// APARTMENT EDITING HELPER FUNCTIONS
+// ============================================
+
+const showEditOptions = async (bot, callbackQuery, apartmentId) => {
+  const chatId = callbackQuery.message.chat.id;
+  const messageId = callbackQuery.message.message_id;
+  
+  try {
+    const { Apartment } = require('../models');
+    const apartment = await Apartment.findByPk(apartmentId);
+    
+    if (!apartment) {
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Apartment not found' });
+      return;
+    }
+    
+    const keyboard = {
+      inline_keyboard: [
+        [
+          { text: '🏷️ Title', callback_data: `edit_field_${apartmentId}_title` },
+          { text: '💰 Price', callback_data: `edit_field_${apartmentId}_price` }
+        ],
+        [
+          { text: '📍 Location', callback_data: `edit_field_${apartmentId}_location` },
+          { text: '📝 Description', callback_data: `edit_field_${apartmentId}_description` }
+        ],
+        [
+          { text: '✨ Amenities', callback_data: `edit_field_${apartmentId}_amenities` },
+          { text: '🛏️ Bedrooms', callback_data: `edit_field_${apartmentId}_bedrooms` }
+        ],
+        [
+          { text: '🚽 Bathrooms', callback_data: `edit_field_${apartmentId}_bathrooms` },
+          { text: '👥 Max Guests', callback_data: `edit_field_${apartmentId}_maxGuests` }
+        ],
+        [
+          { text: '📸 Photos', callback_data: `edit_field_${apartmentId}_images` },
+          { text: '📊 Status', callback_data: `edit_field_${apartmentId}_isAvailable` }
+        ],
+        [
+          { text: '« Back to Apartment', callback_data: `apt_${apartmentId}` }
+        ]
+      ]
+    };
+    
+    // Try to edit the message if it exists
+    try {
+      await bot.editMessageText(
+        `✏️ *Edit Apartment*\n\n` +
+        `*${apartment.title}*\n\n` +
+        `Select which field you want to edit:`,
+        {
+          chat_id: chatId,
+          message_id: messageId,
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }
+      );
+    } catch (e) {
+      // If can't edit, send new message
+      await bot.sendMessage(chatId,
+        `✏️ *Edit Apartment*\n\n` +
+        `*${apartment.title}*\n\n` +
+        `Select which field you want to edit:`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: keyboard
+        }
+      );
+    }
+    
+    await bot.answerCallbackQuery(callbackQuery.id);
+    
+  } catch (error) {
+    logger.error('Show edit options error:', error);
+    await bot.sendMessage(chatId, '❌ Error loading edit options');
+    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Error loading edit options' });
+  }
+};
+
+const requestFieldUpdate = async (bot, callbackQuery, apartmentId, field) => {
+  const chatId = callbackQuery.message.chat.id;
+  
+  try {
+    const { Apartment } = require('../models');
+    const apartment = await Apartment.findByPk(apartmentId);
+    
+    if (!apartment) {
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Apartment not found' });
+      return;
+    }
+    
+    // Store edit state
+    if (!global.editApartmentState) global.editApartmentState = {};
+    global.editApartmentState[chatId] = {
+      apartmentId,
+      field,
+      currentValue: apartment[field]
+    };
+    
+    const fieldLabels = {
+      title: 'Title',
+      price: 'Price',
+      location: 'Location',
+      description: 'Description',
+      amenities: 'Amenities (comma separated)',
+      bedrooms: 'Number of Bedrooms',
+      bathrooms: 'Number of Bathrooms',
+      maxGuests: 'Maximum Guests',
+      images: 'Photos',
+      isAvailable: 'Availability Status'
+    };
+    
+    const examples = {
+      title: 'e.g., "Luxury 2-Bedroom in Jabi"',
+      price: 'e.g., "₦60,000/night" or "₦1,200,000/year"',
+      location: 'e.g., "Jabi, Abuja"',
+      description: 'Describe the apartment, features, nearby amenities...',
+      amenities: 'e.g., "WiFi, AC, Pool, Kitchen, Parking"',
+      bedrooms: 'Enter a number (e.g., 2)',
+      bathrooms: 'Enter a number (e.g., 2)',
+      maxGuests: 'Enter a number (e.g., 4)',
+      images: 'Send new photos one by one, then type "done"',
+      isAvailable: 'Type "true" for available or "false" for unavailable'
+    };
+    
+    let currentValueText = '';
+    if (apartment[field]) {
+      if (field === 'amenities' && Array.isArray(apartment[field])) {
+        currentValueText = `\n\n*Current:* ${apartment[field].join(', ')}`;
+      } else if (field === 'images' && Array.isArray(apartment[field])) {
+        currentValueText = `\n\n*Current:* ${apartment[field].length} photos`;
+      } else {
+        currentValueText = `\n\n*Current:* ${apartment[field]}`;
+      }
+    }
+    
+    await bot.sendMessage(chatId,
+      `✏️ *Edit ${fieldLabels[field] || field}*\n` +
+      `${currentValueText}\n\n` +
+      `📝 ${examples[field] || 'Please enter the new value:'}\n\n` +
+      `Type your new value below, or /cancel to abort.`,
+      { parse_mode: 'Markdown' }
+    );
+    
+    await bot.answerCallbackQuery(callbackQuery.id);
+    
+  } catch (error) {
+    logger.error('Request field update error:', error);
+    await bot.sendMessage(chatId, '❌ Error preparing edit form');
+    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Error preparing edit form' });
+  }
+};
+
+const saveEditedField = async (bot, callbackQuery, apartmentId) => {
+  const chatId = callbackQuery.message.chat.id;
+  
+  try {
+    const { Apartment } = require('../models');
+    const state = global.editApartmentState?.[chatId];
+    
+    if (!state || state.apartmentId != apartmentId) {
+      await bot.answerCallbackQuery(callbackQuery.id, { 
+        text: 'No pending edit found. Please start over.' 
+      });
+      return;
+    }
+    
+    const apartment = await Apartment.findByPk(apartmentId);
+    
+    if (!apartment) {
+      delete global.editApartmentState[chatId];
+      await bot.answerCallbackQuery(callbackQuery.id, { text: 'Apartment not found' });
+      return;
+    }
+    
+    // Show success message
+    await bot.sendMessage(chatId,
+      `✅ *${state.field} updated successfully!*`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '✏️ Edit Another Field', callback_data: `edit_apt_${apartmentId}` }],
+            [{ text: '👁️ View Apartment', callback_data: `apt_${apartmentId}` }]
+          ]
+        }
+      }
+    );
+    
+    // Clear state
+    delete global.editApartmentState[chatId];
+    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Updated successfully!' });
+    
+  } catch (error) {
+    logger.error('Save edited field error:', error);
+    await bot.sendMessage(chatId, '❌ Error saving changes');
+    await bot.answerCallbackQuery(callbackQuery.id, { text: 'Error saving changes' });
+  }
+};
+
+// ============================================
+// HELPER FUNCTIONS (existing)
 // ============================================
 
 const handleApartmentPhotos = async (bot, callbackQuery, apartmentId) => {
@@ -682,27 +908,3 @@ const handleContactGuest = async (bot, callbackQuery, userId) => {
     const user = await User.findByPk(userId);
     
     if (!user) {
-      await bot.answerCallbackQuery(callbackQuery.id, { text: 'User not found' });
-      return;
-    }
-    
-    const contactInfo = `
-📞 *Guest Contact Information*
-
-👤 *Name:* ${user.firstName || ''} ${user.lastName || ''}
-📱 *Username:* @${user.username || 'N/A'}
-📞 *Phone:* ${user.phone || 'Not provided'}
-
-You can contact the guest directly through Telegram.
-    `;
-    
-    await bot.sendMessage(chatId, contactInfo, { parse_mode: 'Markdown' });
-    await bot.answerCallbackQuery(callbackQuery.id);
-    
-  } catch (error) {
-    logger.error('Contact guest error:', error);
-    bot.answerCallbackQuery(callbackQuery.id, { text: 'Error loading contact info' });
-  }
-};
-
-module.exports = { handleCallback };
