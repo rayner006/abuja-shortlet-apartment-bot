@@ -34,7 +34,7 @@ class AdminCore extends AdminBase {
                 where: { paymentStatus: 'paid' }
             }) || 0;
 
-            // Clean admin panel text - removed descriptions
+            // Clean admin panel text
             const adminText = `
 ⚙️ *ADMIN PANEL*
 
@@ -51,13 +51,13 @@ ${pendingApprovals > 0 ? `🚨 *${pendingApprovals} pending approval*` : ''}
             // Create clean keyboard with just buttons
             const keyboard = this.createAdminKeyboard(pendingApprovals);
 
-            // Delete previous message if it's an admin panel
+            // FIXED: Safely handle message deletion
             try {
-                if (msg.callback_query && msg.callback_query.message) {
+                if (msg && msg.callback_query && msg.callback_query.message) {
                     await this.bot.deleteMessage(chatId, msg.callback_query.message.message_id).catch(() => {});
                 }
             } catch (e) {
-                // Ignore delete errors
+                // Silently ignore delete errors - they don't affect functionality
             }
 
             await this.bot.sendMessage(chatId, adminText, {
