@@ -44,19 +44,43 @@ const handleCallback = async (bot, callbackQuery) => {
     }
     
     // ============================================
-    // MENU CALLBACKS - UPDATED
+    // MENU CALLBACKS - UPDATED WITH DEBUG
     // ============================================
     
     else if (data === 'apartments') {
-      // 👈 NEW - handles main Apartments button
-      const { handleSearch } = require('../controllers/apartmentController');
-      await handleSearch(bot, { chat: { id: chatId }, from: callbackQuery.from });
-      await bot.answerCallbackQuery(callbackQuery.id);
+      // 👈 DEBUG: Added try-catch with console logs
+      try {
+        console.log('📱 [DEBUG] apartments callback received for chat:', chatId);
+        console.log('📤 [DEBUG] Calling handleSearch function from apartments button...');
+        
+        const { handleSearch } = require('../controllers/apartmentController');
+        await handleSearch(bot, { chat: { id: chatId }, from: callbackQuery.from });
+        
+        console.log('✅ [DEBUG] handleSearch completed successfully from apartments button');
+        await bot.answerCallbackQuery(callbackQuery.id);
+      } catch (error) {
+        console.error('❌ [DEBUG] Error in apartments handler:', error);
+        await bot.answerCallbackQuery(callbackQuery.id, {
+          text: 'Error loading search menu'
+        });
+      }
     }
     else if (data === 'menu_search') {
-      // 👈 FIXED: Now calls handleSearch to show search menu
-      await handleSearch(bot, { chat: { id: chatId }, from: callbackQuery.from });
-      await bot.answerCallbackQuery(callbackQuery.id);
+      // 👈 DEBUG: Added try-catch with console logs
+      try {
+        console.log('📱 [DEBUG] menu_search callback received for chat:', chatId);
+        console.log('📤 [DEBUG] Calling handleSearch function...');
+        
+        await handleSearch(bot, { chat: { id: chatId }, from: callbackQuery.from });
+        
+        console.log('✅ [DEBUG] handleSearch completed successfully');
+        await bot.answerCallbackQuery(callbackQuery.id);
+      } catch (error) {
+        console.error('❌ [DEBUG] Error in menu_search handler:', error);
+        await bot.answerCallbackQuery(callbackQuery.id, {
+          text: 'Error loading search menu'
+        });
+      }
     }
     else if (data === 'menu_bookings') {
       await handleMyBookings(bot, { 
