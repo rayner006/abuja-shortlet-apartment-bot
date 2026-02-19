@@ -2,34 +2,21 @@
 const { Apartment } = require('../models');
 const logger = require('../config/logger');
 
-// Popular Abuja locations with emojis - COMPLETE LIST
+// Popular Abuja locations with emojis - REDUCED LIST
 const popularLocations = [
-  // Premium & Central 🏙
   { id: 'asokoro', name: 'Asokoro', emoji: '🏛️' },
   { id: 'maitama', name: 'Maitama', emoji: '🏰' },
   { id: 'central', name: 'Central Area', emoji: '🏛️' },
-  { id: 'cbd', name: 'CBD', emoji: '🏢' },
   { id: 'wuse', name: 'Wuse', emoji: '🏢' },
   { id: 'garki', name: 'Garki', emoji: '🏙️' },
-  
-  // Mid-Central Areas 🏢
   { id: 'jabi', name: 'Jabi', emoji: '🌳' },
   { id: 'utako', name: 'Utako', emoji: '🏬' },
   { id: 'wuye', name: 'Wuye', emoji: '🏗️' },
-  { id: 'mabushi', name: 'Mabushi', emoji: '🏢' },
-  { id: 'katampe', name: 'Katampe', emoji: '🏞️' },
-  { id: 'jahi', name: 'Jahi', emoji: '🏡' },
   { id: 'life-camp', name: 'Life Camp', emoji: '🏡' },
   { id: 'guzape', name: 'Guzape', emoji: '🏠' },
-  { id: 'lokogoma', name: 'Lokogoma', emoji: '🏘️' },
-  
-  // Outer & Budget Areas 🏘️
   { id: 'gwarinpa', name: 'Gwarinpa', emoji: '🏘️' },
   { id: 'kubwa', name: 'Kubwa', emoji: '🏘️' },
-  { id: 'lugbe', name: 'Lugbe', emoji: '🏡' },
-  { id: 'apo', name: 'Apo', emoji: '🏠' },
-  { id: 'nyanya', name: 'Nyanya', emoji: '🏘️' },
-  { id: 'karu', name: 'Karu', emoji: '🏘️' }
+  { id: 'apo', name: 'Apo', emoji: '🏠' }
 ];
 
 // Apartment types for filtering
@@ -189,7 +176,6 @@ const handleApartmentTypeCallback = async (bot, callbackQuery) => {
     const apartments = await Apartment.findAll({
       where: {
         location: location.name,
-        isAvailable: true,
         isApproved: true,
         ...bedroomFilter
       },
