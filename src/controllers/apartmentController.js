@@ -51,7 +51,7 @@ const AMENITIES = [
 ];
 
 // ============================================
-// PROFESSIONAL SEARCH INTERFACE
+// PROFESSIONAL SEARCH INTERFACE - CLEAN VERSION
 // ============================================
 
 const handleSearch = async (bot, msg) => {
@@ -71,31 +71,6 @@ const handleSearch = async (bot, msg) => {
       [{ text: '💰 Search by Budget', callback_data: 'search_menu_price' }],
       [{ text: '✨ Search by Amenities', callback_data: 'search_menu_amenities' }],
       [{ text: '🔎 Advanced Search', callback_data: 'search_menu_advanced' }],
-      
-      // Divider
-      [{ text: '───────── 𝗤𝗨𝗜𝗖𝗞 𝗣𝗜𝗖𝗞𝗦 ─────────', callback_data: 'noop' }],
-      
-      // Popular locations
-      [
-        { text: '🏛️ Asokoro', callback_data: 'search_quick_asokoro' },
-        { text: '🏰 Maitama', callback_data: 'search_quick_maitama' }
-      ],
-      [
-        { text: '🏢 Wuse 2', callback_data: 'search_quick_wuse2' },
-        { text: '🌳 Jabi', callback_data: 'search_quick_jabi' }
-      ],
-      
-      // Apartment types
-      [
-        { text: '🛏️ 1-Bed', callback_data: 'search_quick_1bed' },
-        { text: '🛏️🛏️ 2-Bed', callback_data: 'search_quick_2bed' }
-      ],
-      
-      // Price ranges
-      [
-        { text: '💰 Under ₦50k', callback_data: 'search_quick_under50' },
-        { text: '💰 ₦50k-100k', callback_data: 'search_quick_50_100' }
-      ],
       
       // Navigation
       [{ text: '« Back to Main Menu', callback_data: 'back_to_main' }]
@@ -151,7 +126,7 @@ const handleSearchCallback = async (bot, callbackQuery) => {
       await showAdvancedSearch(bot, chatId, messageId);
     }
     
-    // Handle quick picks
+    // Handle quick picks (keeping functionality for backward compatibility)
     else if (data.startsWith('search_quick_')) {
       await handleQuickPick(bot, chatId, messageId, data);
     }
@@ -434,7 +409,7 @@ const performSearch = async (bot, chatId, messageId, whereClause) => {
 };
 
 // ============================================
-// EXISTING FUNCTIONS (Keep as is)
+// EXISTING FUNCTIONS
 // ============================================
 
 const processSearch = async (bot, msg) => {
@@ -679,7 +654,7 @@ const handleAddApartment = async (bot, msg) => {
 
 module.exports = {
   handleSearch,
-  handleSearchCallback,  // 👈 NEW: Export the callback handler
+  handleSearchCallback,
   processSearch,
   handleApartmentDetails,
   handleAmenities,
