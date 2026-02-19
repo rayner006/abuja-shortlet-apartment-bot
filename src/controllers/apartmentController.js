@@ -13,6 +13,14 @@ const handleSearch = async (bot, msg) => {
   const chatId = msg.chat.id;
   
   try {
+    // 👇 DEBUG: Added console logs
+    console.log('🔍 [DEBUG] handleSearch function STARTED for chat:', chatId);
+    console.log('📦 [DEBUG] msg object received:', { 
+      chatId: msg.chat.id, 
+      from: msg.from ? msg.from.id : 'unknown',
+      hasText: !!msg.text
+    });
+    
     const text = `
 🔍 *Search Apartments*
 
@@ -38,14 +46,30 @@ How would you like to search for apartments?
       ]
     };
     
+    console.log('📤 [DEBUG] Attempting to send message to chat:', chatId);
+    
     await bot.sendMessage(chatId, text, {
       parse_mode: 'Markdown',
       reply_markup: keyboard
     });
     
+    console.log('✅ [DEBUG] Message sent successfully to chat:', chatId);
+    
   } catch (error) {
+    // 👇 DEBUG: Enhanced error logging
+    console.error('❌ [DEBUG] ERROR in handleSearch:', {
+      message: error.message,
+      stack: error.stack,
+      chatId: chatId
+    });
+    
     logger.error('Handle search error:', error);
-    bot.sendMessage(chatId, 'Error loading search menu. Please try again.');
+    
+    try {
+      await bot.sendMessage(chatId, 'Error loading search menu. Please try again.');
+    } catch (sendError) {
+      console.error('❌ [DEBUG] Failed to send error message:', sendError.message);
+    }
   }
 };
 
