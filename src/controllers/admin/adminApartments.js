@@ -133,6 +133,7 @@ There are no listings waiting for approval at the moment.
 • Email: ${apt.User?.email || 'Not provided'}
 
 📍 *Location:* ${apt.location}
+📮 *Address:* ${apt.address || 'Not provided'}
 💰 *Price:* ${this.formatCurrency(apt.pricePerNight)}/night
 🛏 *Bedrooms:* ${apt.bedrooms} | 🚿 *Bathrooms:* ${apt.bathrooms}
 👥 *Max Guests:* ${apt.maxGuests}
@@ -240,6 +241,7 @@ ${amenitiesList}
 
 🏠 *${apartment.title}*
 📍 *Location:* ${apartment.location}
+📮 *Address:* ${apartment.address || 'Not provided'}
 💰 *Price:* ${this.formatCurrency(apartment.pricePerNight)}/night
 
 Your listing is now LIVE and visible to all users searching in Abuja!
@@ -620,7 +622,7 @@ To cancel, type /cancel
     }
 
     // ============================================
-    // SEND INDIVIDUAL APARTMENT CARD - UPDATED (removed availability)
+    // SEND INDIVIDUAL APARTMENT CARD - UPDATED WITH ADDRESS
     // ============================================
     
     async sendApartmentCard(chatId, apt) {
@@ -637,12 +639,11 @@ To cancel, type /cancel
             }) || 0;
             
             const statusEmoji = apt.isApproved ? '✅' : '⏳';
-            // Removed availability emoji and text
             
             // Calculate days old for warning
             const daysOld = Math.floor((new Date() - new Date(apt.createdAt)) / (1000 * 60 * 60 * 24));
             
-            // Format the apartment card with a box - REMOVED availability
+            // Format the apartment card with address
             const cardText = `
 ┌────────────────────────────────────┐
 │ ${statusEmoji} *${apt.title}*
@@ -650,7 +651,8 @@ To cancel, type /cancel
 │ 👤 *Owner:* ${apt.User?.firstName || 'Unknown'} (@${apt.User?.username || 'N/A'})
 │ 📞 *Phone:* ${apt.User?.phone || 'Not provided'}
 │
-│ 📍 *Location:* ${apt.location}
+│ 📍 *Area:* ${apt.location}
+│ 📮 *Address:* ${apt.address || 'Not provided'}
 │ 💰 *Price:* ${this.formatCurrency(apt.pricePerNight)}/night
 │ 🛏️ *Bedrooms:* ${apt.bedrooms} | 🚿 *Bathrooms:* ${apt.bathrooms} | 👥 *Max:* ${apt.maxGuests}
 │
@@ -661,7 +663,7 @@ To cancel, type /cancel
 ${apt.views === 0 && bookingCount === 0 && daysOld > 7 ? '│ ⚠️ *Warning:* No activity in ' + daysOld + ' days\n' : ''}└────────────────────────────────────┘
             `;
             
-            // Create working buttons for this apartment - REMOVED Disable/Enable button
+            // Create working buttons for this apartment
             const keyboard = {
                 inline_keyboard: [
                     [
@@ -835,6 +837,7 @@ ${apt.views === 0 && bookingCount === 0 && daysOld > 7 ? '│ ⚠️ *Warning:* 
 
 🏠 *${apartment.title}*
 📍 ${apartment.location}
+📮 ${apartment.address || 'Address not provided'}
 
 📈 *Performance*
 • Total Views: ${apartment.views || 0}
@@ -942,6 +945,7 @@ Are you sure you want to delete this apartment?
 
 🏠 *${apartment.title}*
 📍 *Location:* ${apartment.location}
+📮 *Address:* ${apartment.address || 'Not provided'}
 👤 *Owner:* ${apartment.User?.firstName || 'Unknown'}
 
 This action CANNOT be undone!
@@ -1075,7 +1079,8 @@ All bookings for this apartment will also be deleted.
             `• Change price\n` +
             `• Modify amenities\n` +
             `• Update photos\n` +
-            `• Change location\n\n` +
+            `• Change location\n` +
+            `• Update address\n\n` +
             `For now, use the owner dashboard for updates.`,
             { parse_mode: 'Markdown' }
         );
@@ -1084,7 +1089,7 @@ All bookings for this apartment will also be deleted.
     }
 
     // ============================================
-    // ADD APARTMENT FUNCTIONALITY
+    // ADD APARTMENT FUNCTIONALITY - FIXED with Location then Address
     // ============================================
 
     async startAddApartment(callbackQuery) {
@@ -1131,7 +1136,7 @@ Please enter the apartment title:
         }
     }
 
-    // Handle messages for adding apartment (call this from main message handler)
+    // Handle messages for adding apartment - FIXED with Location then Address
     async handleAddApartmentMessage(chatId, text) {
         try {
             const state = global.apartmentStates?.[chatId];
@@ -1144,13 +1149,22 @@ Please enter the apartment title:
                     data.title = text;
                     state.step = 'location';
                     await this.bot.sendMessage(chatId, 
-                        `📍 *Location*\n\nWhere is this apartment located? (e.g., Asokoro, Maitama, Wuse)`,
+                        `📍 *Location*\n\nWhich area/neighborhood? (e.g., Kubwa, Asokoro, Maitama)\n\nThis is what users will click in the filter menu.`,
                         { parse_mode: 'Markdown' }
                     );
                     break;
                     
                 case 'location':
                     data.location = text;
+                    state.step = 'address';
+                    await this.bot.sendMessage(chatId,
+                        `📍 *Address*\n\nWhat is the full street address?\n(e.g., 12 Bobo Street, Off Udi Hill, Asokoro)`,
+                        { parse_mode: 'Markdown' }
+                    );
+                    break;
+                    
+                case 'address':
+                    data.address = text;
                     state.step = 'price';
                     await this.bot.sendMessage(chatId,
                         `💰 *Price*\n\nWhat is the price per night? (in Naira)`,
@@ -1255,10 +1269,11 @@ Please enter the apartment title:
                     
                 case 'photos':
                     if (text.toLowerCase() === 'done') {
-                        // Create the apartment with all fields
+                        // Create the apartment with all fields including address
                         const apartment = await Apartment.create({
                             ownerId: data.ownerId,
                             title: data.title,
+                            address: data.address,  // Address is now included!
                             description: data.description,
                             pricePerNight: data.pricePerNight,
                             location: data.location,
@@ -1266,14 +1281,14 @@ Please enter the apartment title:
                             bathrooms: data.bathrooms,
                             maxGuests: data.maxGuests,
                             amenities: data.amenities || [],
-                            images: data.images || [],  // Array of photo file_ids
+                            images: data.images || [],
                             isApproved: true
                         });
                         
                         // Clear state
                         delete global.apartmentStates[chatId];
                         
-                        // Success message
+                        // Success message with address
                         const amenitiesPreview = data.amenities?.length > 0 
                             ? data.amenities.slice(0, 3).join(', ') + (data.amenities.length > 3 ? '...' : '')
                             : 'None listed';
@@ -1281,7 +1296,8 @@ Please enter the apartment title:
                         await this.bot.sendMessage(chatId,
                             `✅ *Apartment Added Successfully!*\n\n` +
                             `🏠 *${apartment.title}*\n` +
-                            `📍 *Location:* ${apartment.location}\n` +
+                            `📍 *Area:* ${apartment.location}\n` +
+                            `📮 *Address:* ${apartment.address}\n` +
                             `💰 *Price:* ${this.formatCurrency(apartment.pricePerNight)}/night\n` +
                             `✨ *Amenities:* ${amenitiesPreview}\n` +
                             `📸 *Photos:* ${data.images?.length || 0} uploaded\n\n` +
