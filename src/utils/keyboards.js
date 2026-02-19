@@ -26,11 +26,14 @@ const createMainMenuKeyboard = (userRole) => {
   };
 };
 
+// ============================================
+// UPDATED: Changed "Book Now" to "Request Booking"
+// ============================================
 const createApartmentKeyboard = (apartmentId) => {
   return {
     inline_keyboard: [
       [
-        { text: '📅 Book Now', callback_data: `book_${apartmentId}` },
+        { text: '📅 Request Booking', callback_data: `book_${apartmentId}` },
         { text: '📸 View Photos', callback_data: `photos_${apartmentId}` }
       ],
       [
@@ -42,6 +45,9 @@ const createApartmentKeyboard = (apartmentId) => {
   };
 };
 
+// ============================================
+// UPDATED: Removed Toggle Availability button
+// ============================================
 const createOwnerApartmentKeyboard = (apartmentId) => {
   return {
     inline_keyboard: [
@@ -52,9 +58,6 @@ const createOwnerApartmentKeyboard = (apartmentId) => {
       [
         { text: '📊 Bookings', callback_data: `apartment_bookings_${apartmentId}` },
         { text: '📈 Stats', callback_data: `apartment_stats_${apartmentId}` }
-      ],
-      [
-        { text: '🔁 Toggle Availability', callback_data: `toggle_${apartmentId}` }
       ],
       [{ text: '🔙 Back', callback_data: 'back_to_my_apartments' }]
     ]
