@@ -21,6 +21,11 @@ const createMainMenuKeyboard = (userRole) => {
   
   keyboard.push([{ text: '❓ Help', callback_data: 'menu_help' }]);
   
+  // ============================================
+  // ADDED: Contact Admin button
+  // ============================================
+  keyboard.push([{ text: '📞 Contact Admin', callback_data: 'menu_contact_admin' }]);
+  
   return {
     inline_keyboard: keyboard
   };
