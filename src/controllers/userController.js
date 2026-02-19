@@ -52,7 +52,7 @@ const handleStart = async (bot, msg) => {
       user.lastActive = new Date();
       await user.save();
       
-      // ✅ FIXED: Welcome back message with proper text AND keyboard
+      // ✅ Welcome back message with proper text AND keyboard
       const welcomeBackText = `
 👋 *Welcome back, ${user.firstName || 'there'}!*
 
@@ -78,6 +78,7 @@ const handleStart = async (bot, msg) => {
   }
 };
 
+// ✅ UPDATED: handleMenu now shows the SAME permanent keyboard as /start
 const handleMenu = async (bot, msg) => {
   const chatId = msg.chat.id;
   
@@ -87,14 +88,20 @@ const handleMenu = async (bot, msg) => {
     const menuText = `
 📋 *Main Menu*
 
-Please select an option below:
+👇🏻 *Click Any Button Below* 👇🏻
     `;
     
-    const keyboard = createMainMenuKeyboard(user ? user.role : 'user');
-    
+    // Send the same permanent keyboard as /start
     await bot.sendMessage(chatId, menuText, {
       parse_mode: 'Markdown',
-      reply_markup: keyboard
+      reply_markup: {
+        keyboard: [
+          ['🔍 Apartments', '📅 My Bookings'],
+          ['📋 List Property', '❓ Help']
+        ],
+        resize_keyboard: true,
+        persistent: true
+      }
     });
     
   } catch (error) {
@@ -164,7 +171,7 @@ Use /edit\\_profile to update your information.
   }
 };
 
-// 👇 Add this new message handler for text messages
+// Text message handler for button clicks
 const handleTextMessage = async (bot, msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
@@ -241,5 +248,5 @@ module.exports = {
   handleMenu,
   handleContact,
   handleProfile,
-  handleTextMessage  // 👈 Export the new handler
+  handleTextMessage
 };
