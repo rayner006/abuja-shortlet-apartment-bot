@@ -7,7 +7,7 @@ class AdminCore extends AdminBase {
         super(bot);
     }
 
-    // Show main admin panel with real stats
+    // Show main admin panel
     async showAdminPanel(chatId, msg) {
         // Track active panels to prevent duplicates
         if (!global.activeAdminPanels) global.activeAdminPanels = new Set();
@@ -34,7 +34,7 @@ class AdminCore extends AdminBase {
                 where: { paymentStatus: 'paid' }
             }) || 0;
 
-            // Dynamic admin panel text with stats
+            // Clean admin panel text - removed descriptions
             const adminText = `
 ⚙️ *ADMIN PANEL*
 
@@ -45,21 +45,10 @@ class AdminCore extends AdminBase {
 • 💰 Revenue: ${this.formatCurrency(revenue)}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-${pendingApprovals > 0 ? `🚨 *PRIORITY ACTION*
-• ⏳ ${pendingApprovals} listing${pendingApprovals > 1 ? 's' : ''} pending approval
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-` : ''}
-
-📋 *MANAGEMENT*
-Select a section to manage:
-
-👥 Users - Manage registered users and owners
-🏢 Listings - View and manage all apartments
-📊 Analytics - Platform statistics and reports
-⚙️ Settings - Configure system settings
+${pendingApprovals > 0 ? `🚨 *${pendingApprovals} pending approval*` : ''}
             `;
 
-            // Create the keyboard based on whether there are pending approvals
+            // Create clean keyboard with just buttons
             const keyboard = this.createAdminKeyboard(pendingApprovals);
 
             // Delete previous message if it's an admin panel
@@ -82,7 +71,7 @@ Select a section to manage:
         }
     }
 
-    // Create main admin keyboard - dynamically shows pending badge
+    // Create clean admin keyboard - just buttons, no descriptions
     createAdminKeyboard(pendingCount = 0) {
         const keyboard = {
             inline_keyboard: [
@@ -94,7 +83,7 @@ Select a section to manage:
                     }
                 ]] : []),
                 
-                // Main management rows
+                // Main management buttons
                 [
                     { text: '👥 Users', callback_data: 'admin_users_1' },
                     { text: '🏢 Listings', callback_data: 'admin_apartments_1' }
@@ -103,7 +92,7 @@ Select a section to manage:
                     { text: '📊 Statistics', callback_data: 'admin_stats' },
                     { text: '⚙️ Settings', callback_data: 'admin_settings' }
                 ],
-                // Quick action row
+                // Quick action buttons
                 [
                     { text: '➕ Add Apartment', callback_data: 'admin_add_apartment' }
                 ],
@@ -113,68 +102,6 @@ Select a section to manage:
         };
 
         return keyboard;
-    }
-
-    // Optional: Quick stats command for admins
-    async showQuickStats(chatId) {
-        try {
-            const totalUsers = await User.count();
-            const totalOwners = await User.count({ where: { role: 'owner' } });
-            const totalListings = await Apartment.count();
-            const pendingApprovals = await Apartment.count({ where: { isApproved: false } });
-            const approvedListings = await Apartment.count({ where: { isApproved: true } });
-            const totalBookings = await Booking.count();
-            
-            const recentBookings = await Booking.count({
-                where: {
-                    createdAt: {
-                        [Op.gte]: new Date(new Date() - 7 * 24 * 60 * 60 * 1000) // Last 7 days
-                    }
-                }
-            });
-            
-            const revenue = await Booking.sum('totalPrice', {
-                where: { paymentStatus: 'paid' }
-            }) || 0;
-
-            const statsText = `
-📊 *QUICK STATISTICS*
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-👥 *Users*
-• Total: ${totalUsers}
-• Property Owners: ${totalOwners}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏢 *Apartments*
-• Total: ${totalListings}
-• ✅ Approved: ${approvedListings}
-• ⏳ Pending: ${pendingApprovals}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📅 *Bookings*
-• Total: ${totalBookings}
-• 📊 Last 7 days: ${recentBookings}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-💰 *Revenue*
-• Total: ${this.formatCurrency(revenue)}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-[🔄 Refresh] [🔙 Back to Admin]
-            `;
-
-            await this.bot.sendMessage(chatId, statsText, {
-                parse_mode: 'Markdown',
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: '🔄 Refresh', callback_data: 'admin_stats' }],
-                        [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
-                    ]
-                }
-            });
-
-        } catch (error) {
-            console.error('Error showing quick stats:', error);
-            await this.bot.sendMessage(chatId, '❌ Error loading statistics.');
-        }
     }
 }
 
