@@ -9,11 +9,11 @@ const redis = require('../config/redis');
 // Search states (for conversation)
 const searchState = {};
 
-// Popular Abuja locations
+// Popular Abuja locations - UPDATED
 const POPULAR_LOCATIONS = [
   { id: 'asokoro', name: 'Asokoro', emoji: '🏛️' },
   { id: 'maitama', name: 'Maitama', emoji: '🏰' },
-  { id: 'wuse2', name: 'Wuse 2', emoji: '🏢' },
+  { id: 'wuse', name: 'Wuse', emoji: '🏢' }, // 👈 CHANGED: from 'wuse2' to 'wuse', from 'Wuse 2' to 'Wuse'
   { id: 'garki', name: 'Garki', emoji: '🏙️' },
   { id: 'jabi', name: 'Jabi', emoji: '🌳' },
   { id: 'gwarinpa', name: 'Gwarinpa', emoji: '🏘️' },
@@ -180,7 +180,7 @@ Select a location to find apartments:
         { text: '🏰 Maitama', callback_data: 'search_loc_maitama' }
       ],
       [
-        { text: '🏢 Wuse 2', callback_data: 'search_loc_wuse2' },
+        { text: '🏢 Wuse', callback_data: 'search_loc_wuse' }, // 👈 UPDATED: from 'wuse2' to 'wuse'
         { text: '🏙️ Garki', callback_data: 'search_loc_garki' }
       ],
       [
@@ -324,7 +324,7 @@ Example: *Maitama, 100000, 4*
 
 Or just type what you're looking for:
 • "2-bedroom in Asokoro"
-• "Wuse 2 under 50k"
+• "Wuse under 50k"
 • "Apartment with pool"
   `;
   
@@ -353,7 +353,6 @@ const handleLocationSelection = async (bot, chatId, messageId, data) => {
   
   let whereClause = {
     isApproved: true
-    // isAvailable removed - now handled manually
   };
   
   if (locationId === 'all') {
@@ -362,11 +361,11 @@ const handleLocationSelection = async (bot, chatId, messageId, data) => {
     return;
   }
   
-  // Map location ID to actual location name
+  // Map location ID to actual location name - UPDATED
   const locationMap = {
     'asokoro': 'Asokoro',
     'maitama': 'Maitama',
-    'wuse2': 'Wuse 2',
+    'wuse': 'Wuse', // 👈 CHANGED: from 'wuse2' to 'wuse'
     'garki': 'Garki',
     'jabi': 'Jabi',
     'gwarinpa': 'Gwarinpa',
@@ -391,7 +390,6 @@ const handleTypeSelection = async (bot, chatId, messageId, data) => {
   
   let whereClause = {
     isApproved: true
-    // isAvailable removed - now handled manually
   };
   
   if (typeId === 'any') {
@@ -428,7 +426,6 @@ const handlePriceSelection = async (bot, chatId, messageId, data) => {
   
   let whereClause = {
     isApproved: true
-    // isAvailable removed - now handled manually
   };
   
   if (priceId === 'any') {
@@ -501,12 +498,9 @@ const applyAmenityFilters = async (bot, chatId, messageId) => {
   
   let whereClause = {
     isApproved: true
-    // isAvailable removed - now handled manually
   };
   
   if (selectedAmenities.length > 0) {
-    // This is a simplified approach - in production you might need a more complex query
-    // for JSON array containment based on your database structure
     whereClause.amenities = { [Op.contains]: selectedAmenities };
   }
   
@@ -590,7 +584,7 @@ const performSearch = async (bot, chatId, messageId, whereClause) => {
 };
 
 // ============================================
-// EXISTING FUNCTIONS (Updated - removed availability)
+// EXISTING FUNCTIONS
 // ============================================
 
 const processSearch = async (bot, msg) => {
@@ -610,7 +604,7 @@ const processSearch = async (bot, msg) => {
       guests = parts[2] ? parseInt(parts[2]) : null;
     }
     
-    // Build query - removed isAvailable
+    // Build query
     const whereClause = {
       isApproved: true
     };
@@ -669,7 +663,7 @@ const processSearch = async (bot, msg) => {
 };
 
 // ============================================
-// UPDATED: sendApartmentDetails - removed availability
+// sendApartmentDetails function
 // ============================================
 
 const sendApartmentDetails = async (bot, chatId, apartment) => {
