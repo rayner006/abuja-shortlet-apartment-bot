@@ -71,7 +71,8 @@ class AdminController extends AdminBase {
                  data.startsWith('filter_') ||                 // filter actions
                  data.startsWith('admin_filter_') ||           // admin filter actions
                  data.startsWith('sort_') ||                   // sort actions
-                 data.startsWith('admin_sort_')) {             // admin sort actions
+                 data.startsWith('admin_sort_') ||             // admin sort actions
+                 data === 'admin_add_apartment') {             // ✅ ADD THIS LINE
             await this.apartments.handleCallback(callbackQuery);
         }
         else if (data === 'admin_stats') {
