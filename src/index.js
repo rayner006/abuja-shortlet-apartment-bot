@@ -68,7 +68,7 @@ bot.on('error', (error) => {
   logger.error('Bot error:', error.message);
 });
 
-// Admin panel command - UPDATED WITH FIX
+// Admin panel command - WITH STATE CLEARING FIX
 bot.onText(/\/admin/, async (msg) => {
   try {
     const chatId = msg.chat.id;
@@ -224,7 +224,7 @@ bot.on('message', async (msg) => {
       console.log(`🏠 [DEBUG] User in apartment flow. Current step: "${state.step}"`);
       
       // ============================================
-      // HANDLE "DONE" COMMAND DURING PHOTO UPLOAD (HIGHEST PRIORITY)
+      // HANDLE "DONE" COMMAND DURING PHOTO UPLOAD (FIXED)
       // ============================================
       if (msg.text && msg.text.toLowerCase() === 'done' && state.step === 'photos') {
         console.log('✅ [DEBUG] "done" received during photo upload');
@@ -234,17 +234,72 @@ bot.on('message', async (msg) => {
           return;
         }
         
-        // Move to description step
-        state.step = 'description';
-        global.apartmentStates[chatId] = state;
+        // ✅ FIX: Create the apartment directly here instead of looping back
+        console.log('✅ [DEBUG] Creating apartment with photos:', state.data.images.length);
         
-        console.log('✅ [DEBUG] State updated to step: "description"');
+        // Create the apartment with ALL database fields
+        const { Apartment } = require('./models');
+        const data = state.data;
         
-        await bot.sendMessage(chatId, 
-          '✅ Photos saved!\n\n' +
-          'Please send a *description* for this apartment:',
-          { parse_mode: 'Markdown' }
-        );
+        try {
+          const apartment = await Apartment.create({
+            ownerId: data.ownerId,
+            title: data.title,
+            address: data.address,
+            description: data.description,
+            pricePerNight: data.pricePerNight,
+            location: data.location,
+            bedrooms: data.bedrooms,
+            bathrooms: data.bathrooms,
+            maxGuests: data.maxGuests,
+            amenities: data.amenities || [],
+            images: data.images || [],
+            isApproved: true,
+            isAvailable: true,
+            views: 0,
+            createdAt: new Date()
+          });
+          
+          // Clear state
+          delete global.apartmentStates[chatId];
+          
+          // Format currency for success message
+          const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('en-NG', {
+              style: 'currency',
+              currency: 'NGN',
+              minimumFractionDigits: 0
+            }).format(amount).replace('NGN', '₦');
+          };
+          
+          // Success message with address
+          const amenitiesPreview = data.amenities?.length > 0 
+              ? data.amenities.slice(0, 3).join(', ') + (data.amenities.length > 3 ? '...' : '')
+              : 'None listed';
+          
+          await bot.sendMessage(chatId,
+              `✅ *Apartment Added Successfully!*\n\n` +
+              `🏠 *${apartment.title}*\n` +
+              `📍 *Area:* ${apartment.location}\n` +
+              `📮 *Address:* ${apartment.address}\n` +
+              `💰 *Price:* ${formatCurrency(apartment.pricePerNight)}/night\n` +
+              `✨ *Amenities:* ${amenitiesPreview}\n` +
+              `📸 *Photos:* ${data.images?.length || 0} uploaded\n\n` +
+              `The apartment is now live and visible to users!`,
+              {
+                  parse_mode: 'Markdown',
+                  reply_markup: {
+                      inline_keyboard: [
+                          [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
+                      ]
+                  }
+              }
+          );
+        } catch (createError) {
+          console.error('❌ Error creating apartment:', createError);
+          await bot.sendMessage(chatId, '❌ Error creating apartment. Please try again.');
+          // Don't clear state on error so they can retry
+        }
         return;
       }
       
@@ -252,14 +307,7 @@ bot.on('message', async (msg) => {
       // HANDLE PHOTOS - FORCED to handle ANY photo during apartment flow
       // ============================================
       if (msg.photo) {
-        console.log('📸 [DEBUG] Photo received, forcing to photos step');
-        
-        // Force the step to 'photos' if we're in apartment flow
-        // This fixes the issue where state gets stuck on description/amenities
-        if (state.step !== 'photos') {
-          console.log(`⚠️ [DEBUG] State was "${state.step}" but forcing to "photos"`);
-          state.step = 'photos';
-        }
+        console.log('📸 [DEBUG] Photo received');
         
         // Get the largest photo (best quality)
         const photo = msg.photo[msg.photo.length - 1];
