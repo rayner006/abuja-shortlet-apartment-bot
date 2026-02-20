@@ -451,7 +451,9 @@ bot.on('message', async (msg) => {
   }
 });
 
-// Callback query handler
+// ============================================
+// UPDATED CALLBACK QUERY HANDLER WITH DEBUG LOGS
+// ============================================
 bot.on('callback_query', async (callbackQuery) => {
   try {
     const data = callbackQuery.data;
@@ -472,13 +474,22 @@ bot.on('callback_query', async (callbackQuery) => {
         data.startsWith('confirm_delete_apt_') || 
         data.startsWith('filter_') ||             
         data.startsWith('sort_') ||               
-        data.startsWith('wizard_') ||              // 👈 ADD WIZARD CALLBACKS
+        data.startsWith('wizard_') ||              // 👈 WIZARD CALLBACKS
         data === 'menu_admin' || 
         data === 'admin_back' ||
         data === 'admin_add_apartment') {
       
       console.log('👑 [DEBUG] Routing to admin controller');
-      await adminController.handleCallback(callbackQuery);
+      console.log('🔍 [DEBUG] About to call adminController.handleCallback');
+      
+      try {
+        await adminController.handleCallback(callbackQuery);
+        console.log('🔍 [DEBUG] adminController.handleCallback completed');
+      } catch (error) {
+        console.log('🔍 [DEBUG] ERROR in adminController.handleCallback:', error);
+        console.log('🔍 [DEBUG] Error stack:', error.stack);
+        await bot.sendMessage(chatId, '❌ Error processing request. Please try again.');
+      }
     }
     // Route non-admin callbacks to original handler
     else {
@@ -489,6 +500,7 @@ bot.on('callback_query', async (callbackQuery) => {
   } catch (error) {
     logger.error('Callback handler error:', error);
     console.error('❌ [DEBUG] Callback handler error:', error);
+    console.error('❌ [DEBUG] Error stack:', error.stack);
     bot.answerCallbackQuery(callbackQuery.id, {
       text: 'An error occurred. Please try again.'
     }).catch(() => {});
