@@ -4,7 +4,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
 const mysql = require('mysql2/promise');
 const winston = require('winston');
-const cron = require('node-cron');
+// REMOVED: const cron = require('node-cron');
 
 // Load environment variables
 dotenv.config();
@@ -590,63 +590,7 @@ bot.on('message', async (msg) => {
   }
 });
 
-// ==================== WEEK 2: CRON JOB FOR STALE BOOKINGS ====================
-// Run daily at 2 AM
-cron.schedule('0 2 * * *', async () => {
-  logger.info('Running daily check for stale bookings');
-  
-  try {
-    // Find pending bookings older than 48 hours
-    const [staleBookings] = await pool.execute(
-      `SELECT * FROM bookings 
-       WHERE status = 'pending' 
-       AND created_at < NOW() - INTERVAL 48 HOUR`
-    );
-    
-    for (const booking of staleBookings) {
-      // Auto-cancel
-      await pool.execute(
-        'UPDATE bookings SET status = ? WHERE id = ?',
-        ['cancelled', booking.id]
-      );
-      
-      // Notify guest
-      await bot.sendMessage(
-        booking.user_id,
-        `⏰ *Booking Expired*\n\n` +
-        `Your booking for *${booking.apartment_name}* has been automatically cancelled because the owner didn't respond within 48 hours.\n\n` +
-        `Please search for other apartments using /search.`,
-        { parse_mode: 'Markdown' }
-      );
-      
-      // Notify owner that booking was auto-cancelled
-      await bot.sendMessage(
-        booking.owner_id,
-        `⚠️ *Booking Auto-Cancelled*\n\n` +
-        `Booking \`${booking.id}\` for *${booking.apartment_name}* has been automatically cancelled because you didn't respond within 48 hours.\n\n` +
-        `Please respond to future booking requests promptly to avoid cancellations.`,
-        { parse_mode: 'Markdown' }
-      );
-      
-      // Notify admin
-      await bot.sendMessage(
-        ADMIN_ID,
-        `⚠️ *Auto-Cancelled Booking*\n\n` +
-        `*Booking:* \`${booking.id}\`\n` +
-        `*Owner:* ${booking.owner_name} didn't respond within 48 hours\n` +
-        `*Guest:* ${booking.user_name}\n` +
-        `*Apartment:* ${booking.apartment_name}`,
-        { parse_mode: 'Markdown' }
-      );
-      
-      logger.info(`Auto-cancelled booking ${booking.id}`);
-    }
-    
-    logger.info(`Daily check complete: ${staleBookings.length} bookings auto-cancelled`);
-  } catch (error) {
-    logger.error('Daily check error:', error);
-  }
-});
+// REMOVED: Entire cron job section for stale bookings
 
 // ==================== ERROR HANDLER ====================
 bot.on('polling_error', (error) => {
