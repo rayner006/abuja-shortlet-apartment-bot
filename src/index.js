@@ -71,10 +71,23 @@ bot.on('error', (error) => {
 // Message handler
 bot.on('message', async (msg) => {
   try {
-    // ✅ HANDLE PHOTOS for apartment addition
-    if (msg.photo && global.apartmentStates && global.apartmentStates[msg.chat.id]) {
-      const state = global.apartmentStates[msg.chat.id];
-      if (state.step === 'photos') {
+    const chatId = msg.chat.id;
+    console.log(`\n📨 [DEBUG] Message received from chat ${chatId}:`, msg.text ? `"${msg.text}"` : '📸 Photo');
+    
+    // ============================================
+    // STEP 1: Check if user is in apartment addition flow
+    // ============================================
+    if (global.apartmentStates && global.apartmentStates[chatId]) {
+      const state = global.apartmentStates[chatId];
+      console.log(`🏠 [DEBUG] User in apartment flow. Current step: "${state.step}"`);
+      console.log(`📊 [DEBUG] State data:`, JSON.stringify(state.data, null, 2));
+      
+      // ============================================
+      // HANDLE PHOTOS
+      // ============================================
+      if (msg.photo && state.step === 'photos') {
+        console.log('📸 [DEBUG] Processing photo for apartment addition');
+        
         // Get the largest photo (best quality)
         const photo = msg.photo[msg.photo.length - 1];
         const fileId = photo.file_id;
@@ -83,54 +96,83 @@ bot.on('message', async (msg) => {
         if (!state.data.images) state.data.images = [];
         state.data.images.push(fileId);
         
-        await bot.sendMessage(msg.chat.id, 
+        // Save state back to global
+        global.apartmentStates[chatId] = state;
+        
+        await bot.sendMessage(chatId, 
           `✅ Photo received! (${state.data.images.length} so far)\n\n` +
           `Send more photos or type *done* to finish.`,
           { parse_mode: 'Markdown' }
         );
         return;
       }
-    }
-    
-    // ✅ HANDLE "DONE" TEXT DURING PHOTO UPLOAD
-    if (msg.text && msg.text.toLowerCase() === 'done' && 
-        global.apartmentStates && global.apartmentStates[msg.chat.id]) {
-      const state = global.apartmentStates[msg.chat.id];
       
-      if (state.step === 'photos') {
+      // ============================================
+      // HANDLE "DONE" COMMAND DURING PHOTO UPLOAD
+      // ============================================
+      if (msg.text && msg.text.toLowerCase() === 'done' && state.step === 'photos') {
+        console.log('✅ [DEBUG] "done" received during photo upload');
+        
         if (!state.data.images || state.data.images.length === 0) {
-          await bot.sendMessage(msg.chat.id, '❌ Please send at least one photo first.');
+          await bot.sendMessage(chatId, '❌ Please send at least one photo first.');
           return;
         }
         
-        // Move to next step
+        // Move to description step
         state.step = 'description';
-        await bot.sendMessage(msg.chat.id, 
+        global.apartmentStates[chatId] = state;
+        
+        console.log('✅ [DEBUG] State updated to step: "description"');
+        
+        await bot.sendMessage(chatId, 
           '✅ Photos saved!\n\n' +
           'Please send a *description* for this apartment:',
           { parse_mode: 'Markdown' }
         );
         return;
       }
-    }
-    
-    // ✅ CHECK APARTMENT STATE FIRST (for non-photo steps)
-    if (global.apartmentStates && global.apartmentStates[msg.chat.id]) {
-      const state = global.apartmentStates[msg.chat.id];
       
-      // Skip if we're in photos step (already handled above)
+      // ============================================
+      // HANDLE NON-PHOTO STEPS (description, amenities, etc.)
+      // ============================================
       if (state.step !== 'photos') {
-        const handled = await adminController.apartments.handleAddApartmentMessage(msg.chat.id, msg.text);
-        if (handled) return;
+        console.log(`📝 [DEBUG] Passing to adminController for step: "${state.step}"`);
+        
+        // Pass to admin controller and wait for response
+        const handled = await adminController.apartments.handleAddApartmentMessage(chatId, msg.text);
+        
+        if (handled) {
+          console.log('✅ [DEBUG] adminController handled the message');
+          
+          // Get updated state after handling
+          const updatedState = global.apartmentStates[chatId];
+          if (updatedState) {
+            console.log(`🔄 [DEBUG] New step after handling: "${updatedState.step}"`);
+          } else {
+            console.log('✅ [DEBUG] Apartment addition flow completed (state cleared)');
+          }
+          return;
+        } else {
+          console.log('⚠️ [DEBUG] adminController did NOT handle the message');
+        }
       }
     }
     
-    // Check if message is a command
-    if (msg.text && msg.text.startsWith('/')) return;
+    // ============================================
+    // STEP 2: Check if message is a command
+    // ============================================
+    if (msg.text && msg.text.startsWith('/')) {
+      console.log('📟 [DEBUG] Command detected, skipping regular handlers');
+      return;
+    }
     
-    // Check for edit states first
-    if (global.editStates && global.editStates[msg.chat.id]) {
-      const state = global.editStates[msg.chat.id];
+    // ============================================
+    // STEP 3: Check for edit states
+    // ============================================
+    if (global.editStates && global.editStates[chatId]) {
+      const state = global.editStates[chatId];
+      console.log(`✏️ [DEBUG] User in edit flow. Action: "${state.action}"`);
+      
       if (state.action === 'editing_user') {
         // Handle user field editing
         const { User } = require('./models');
@@ -141,9 +183,9 @@ bot.on('message', async (msg) => {
           user[state.field] = msg.text;
           await user.save();
           
-          delete global.editStates[msg.chat.id];
+          delete global.editStates[chatId];
           
-          await bot.sendMessage(msg.chat.id, 
+          await bot.sendMessage(chatId, 
             `✅ ${state.field} updated successfully!`,
             {
               reply_markup: {
@@ -162,9 +204,9 @@ bot.on('message', async (msg) => {
           { parse_mode: 'Markdown' }
         );
         
-        delete global.messageStates[msg.chat.id];
+        delete global.editStates[chatId];
         
-        await bot.sendMessage(msg.chat.id, 
+        await bot.sendMessage(chatId, 
           '✅ Message sent successfully!',
           {
             reply_markup: {
@@ -182,9 +224,9 @@ bot.on('message', async (msg) => {
           { parse_mode: 'Markdown' }
         );
         
-        delete global.messageStates[msg.chat.id];
+        delete global.editStates[chatId];
         
-        await bot.sendMessage(msg.chat.id,
+        await bot.sendMessage(chatId,
           '✅ Message sent to owner successfully!',
           {
             reply_markup: {
@@ -198,10 +240,15 @@ bot.on('message', async (msg) => {
       }
     }
     
-    // Regular message handling
+    // ============================================
+    // STEP 4: Regular message handling (conversations)
+    // ============================================
+    console.log('💬 [DEBUG] Passing to regular conversation handler');
     await handleMessage(bot, msg);
+    
   } catch (error) {
     logger.error('Message handler error:', error);
+    console.error('❌ [DEBUG] Error in message handler:', error);
   }
 });
 
@@ -209,6 +256,9 @@ bot.on('message', async (msg) => {
 bot.on('callback_query', async (callbackQuery) => {
   try {
     const data = callbackQuery.data;
+    const chatId = callbackQuery.message.chat.id;
+    
+    console.log(`\n🔄 [DEBUG] Callback received: "${data}" from chat ${chatId}`);
     
     // Route ALL admin callbacks to the new admin controller
     if (data.startsWith('admin_') || 
@@ -227,15 +277,18 @@ bot.on('callback_query', async (callbackQuery) => {
         data === 'admin_back' ||
         data === 'admin_add_apartment') {
       
+      console.log('👑 [DEBUG] Routing to admin controller');
       await adminController.handleCallback(callbackQuery);
     }
     // Route non-admin callbacks to original handler
     else {
+      console.log('👤 [DEBUG] Routing to user callback handler');
       await handleCallback(bot, callbackQuery);
     }
     
   } catch (error) {
     logger.error('Callback handler error:', error);
+    console.error('❌ [DEBUG] Callback handler error:', error);
     bot.answerCallbackQuery(callbackQuery.id, {
       text: 'An error occurred. Please try again.'
     }).catch(() => {});
@@ -277,10 +330,12 @@ process.on('SIGINT', shutdown);
 // Global error handlers
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error);
+  console.error('❌ [DEBUG] Uncaught Exception:', error);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  console.error('❌ [DEBUG] Unhandled Rejection:', reason);
 });
 
 module.exports = { bot, app, server };
