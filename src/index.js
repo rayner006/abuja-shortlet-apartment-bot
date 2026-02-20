@@ -242,7 +242,9 @@ bot.on('message', async (msg) => {
         const data = state.data;
         
         try {
+          // ✅ FIX: Add id: undefined to let database auto-increment
           const apartment = await Apartment.create({
+            id: undefined,  // 👈 THIS FIXES THE SQL ERROR
             ownerId: data.ownerId,
             title: data.title,
             address: data.address,
