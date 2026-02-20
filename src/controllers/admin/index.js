@@ -5,15 +5,18 @@ const AdminApartments = require('./adminApartments');
 const AdminStats = require('./adminStats');
 
 class AdminController extends AdminBase {
-    constructor(bot, redisClient) {  // 👈 ADD redisClient parameter
+    constructor(bot, redisClient) {
         super(bot);
-        this.redisClient = redisClient;  // 👈 Store it
+        console.log('🔍 [DEBUG] AdminController constructor called');
+        this.redisClient = redisClient;
         
         // Initialize all admin modules - pass redis to apartments
         this.core = new AdminCore(bot);
         this.users = new AdminUsers(bot);
-        this.apartments = new AdminApartments(bot, redisClient);  // 👈 Pass redis to apartments
+        this.apartments = new AdminApartments(bot, redisClient);
         this.stats = new AdminStats(bot);
+        
+        console.log('🔍 [DEBUG] AdminController initialized, apartments wizard exists:', !!this.apartments.wizard);
         
         // Bind methods to preserve 'this'
         this.handleCallback = this.handleCallback.bind(this);
@@ -52,6 +55,8 @@ class AdminController extends AdminBase {
         const chatId = callbackQuery.message.chat.id;
         const userId = callbackQuery.from.id;
 
+        console.log(`🔍 [DEBUG] AdminController.handleCallback received: "${data}"`);
+
         // Verify admin access for all admin callbacks
         if (!(await this.isAdmin(userId))) {
             await this.answerCallback(callbackQuery, '⛔ Admin access required');
@@ -62,6 +67,7 @@ class AdminController extends AdminBase {
         if (data.startsWith('admin_users') || data.startsWith('user_') || 
             data.startsWith('manage_') || data.startsWith('edit_') ||
             data.startsWith('set_role_') || data.startsWith('confirm_delete_')) {
+            console.log('🔍 [DEBUG] Routing to users.handleCallback');
             await this.users.handleCallback(callbackQuery);
         }
         // Apartment-related callbacks (including pending, approvals, and all apartment actions)
@@ -69,22 +75,26 @@ class AdminController extends AdminBase {
                  data.startsWith('approve_') || 
                  data.startsWith('reject_') || 
                  data.startsWith('admin_apartments') ||
-                 data.startsWith('apt_') ||                    // apartment actions (edit, disable, stats, message, bookings, delete)
-                 data.startsWith('confirm_delete_apt_') ||    // confirm delete apartment
-                 data.startsWith('filter_') ||                 // filter actions
-                 data.startsWith('admin_filter_') ||           // admin filter actions
-                 data.startsWith('sort_') ||                   // sort actions
-                 data.startsWith('admin_sort_') ||             // admin sort actions
-                 data === 'admin_add_apartment' ||             // ✅ ADD APARTMENT BUTTON
-                 // 👇 ADD THESE NEW WIZARD CALLBACKS
-                 data.startsWith('wizard_')) {                  // All wizard-related callbacks
+                 data.startsWith('apt_') ||
+                 data.startsWith('confirm_delete_apt_') ||
+                 data.startsWith('filter_') ||
+                 data.startsWith('admin_filter_') ||
+                 data.startsWith('sort_') ||
+                 data.startsWith('admin_sort_') ||
+                 data === 'admin_add_apartment' ||
+                 data.startsWith('wizard_')) {
+            
+            console.log(`🔍 [DEBUG] Routing to apartments.handleCallback for: "${data}"`);
+            console.log('🔍 [DEBUG] apartments.wizard exists:', !!this.apartments.wizard);
+            
             await this.apartments.handleCallback(callbackQuery);
         }
         else if (data === 'admin_stats') {
+            console.log('🔍 [DEBUG] Routing to stats.handleStats');
             await this.stats.handleStats(callbackQuery);
         }
         else if (data === 'menu_admin' || data === 'admin_back') {
-            // FIXED: Create proper message object with required properties
+            console.log('🔍 [DEBUG] Routing back to admin panel');
             const msg = {
                 chat: { id: chatId },
                 from: { id: userId },
@@ -93,6 +103,7 @@ class AdminController extends AdminBase {
             await this.core.showAdminPanel(chatId, msg);
         }
         else {
+            console.log(`🔍 [DEBUG] Unknown callback: "${data}"`);
             await this.answerCallback(callbackQuery, 'Unknown command');
         }
     }
