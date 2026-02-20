@@ -454,7 +454,7 @@ bot.on('callback_query', async (callbackQuery) => {
           userSessions[chatId].awaitingPhone = true;
           return bot.sendMessage(chatId,
             `📱 *Your Phone Number*\n\n` +
-            `Please enter your phone number so the owner can contact you:`,
+            `Please enter your phone number so the owner can contact you👇:`,
             {
               parse_mode: 'Markdown',
               reply_markup: { 
