@@ -320,9 +320,9 @@ bot.on('callback_query', async (callbackQuery) => {
       // Convert button text to search format - FIXED to match database
       let searchType = aptType;
       if (aptType === 'Studio') searchType = 'Studio';
-      if (aptType === '1-Bedroom') searchType = '1-Bedroom';  // CHANGED from '1BR'
-      if (aptType === '2-Bedroom') searchType = '2-Bedroom';  // CHANGED from '2BR'
-      if (aptType === '3-Bedroom') searchType = '3-Bedroom';  // CHANGED from '3BR'
+      if (aptType === '1-Bedroom') searchType = '1-Bedroom';
+      if (aptType === '2-Bedroom') searchType = '2-Bedroom';
+      if (aptType === '3-Bedroom') searchType = '3-Bedroom';
       
       const [apartments] = await pool.execute(
         `SELECT * FROM apartments 
@@ -350,25 +350,40 @@ bot.on('callback_query', async (callbackQuery) => {
         return;
       }
       
+      // Build message with individual buttons for each apartment
       let message = `🔍 *${aptType} Results in ${location}*\n\n`;
       
+      // Create an array to hold all keyboard rows
+      const keyboardRows = [];
+      
       for (const apt of apartments) {
+        // Add apartment details to message
         message += `🏠 *${apt.title}*\n`;
         message += `📍 ${apt.location}\n`;
         message += `💰 ₦${apt.price}/night\n`;
-        message += `👥 Max ${apt.max_guests} guests\n`;
-        message += `[Book Now](/book_${apt.id})\n\n`;
+        message += `👥 Max ${apt.max_guests} guests\n\n`;
+        
+        // Add a Book Now button for THIS apartment
+        keyboardRows.push([
+          { text: `📅 Book This Apartment`, callback_data: `book_${apt.id}` }
+        ]);
       }
+      
+      // Add navigation buttons at the bottom
+      keyboardRows.push([
+        { text: '🔄 Different Type', callback_data: `guests_${guests}_${location}` }
+      ]);
+      keyboardRows.push([
+        { text: '🔍 New Search', callback_data: 'search' }
+      ]);
+      keyboardRows.push([
+        { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
+      ]);
       
       bot.sendMessage(chatId, message, {
         parse_mode: 'Markdown',
         reply_markup: {
-          inline_keyboard: [
-            [{ text: '📅 Book Now', callback_data: `book_${apartments[0].id}` }],
-            [{ text: '🔄 Different Type', callback_data: `guests_${guests}_${location}` }],
-            [{ text: '🔍 New Search', callback_data: 'search' }],
-            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
-          ]
+          inline_keyboard: keyboardRows
         }
       });
       
@@ -961,4 +976,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running with Apartment Types feature! Flow: Location → Guests → Type → Results → Book → Name/Phone → Dates → Create Booking');
+logger.info('🚀 Abuja Shortlet Bot is running with individual Book Now buttons for each apartment! Flow: Location → Guests → Type → Results (with individual buttons) → Book → Name/Phone → Dates → Create Booking');
