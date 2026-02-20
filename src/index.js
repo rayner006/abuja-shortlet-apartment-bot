@@ -302,7 +302,7 @@ bot.on('callback_query', async (callbackQuery) => {
     );
   }
   
-  // ========== APARTMENT TYPE HANDLER - CLEAN CARD LAYOUT ==========
+  // ========== APARTMENT TYPE HANDLER - FIXED WITH SEPARATE MESSAGES ==========
   else if (data.startsWith('type_')) {
     const parts = data.split('_');
     const aptType = parts[1];
@@ -350,50 +350,47 @@ bot.on('callback_query', async (callbackQuery) => {
         return;
       }
       
-      // Build message with clean card layout
-      let message = `🔍 *${aptType} Results in ${location}*\n\n`;
+      // Send header first
+      await bot.sendMessage(
+        chatId,
+        `🔍 *${aptType} Results in ${location}*`,
+        { parse_mode: 'Markdown' }
+      );
       
-      // Create keyboard rows array
-      const keyboardRows = [];
-      
-      // Loop through each apartment
+      // Send each apartment as its own card with individual BOOK NOW button
       for (let i = 0; i < apartments.length; i++) {
         const apt = apartments[i];
-        
-        // Format price with commas
         const formattedPrice = new Intl.NumberFormat('en-NG').format(apt.price);
         
-        // Add apartment details - each apartment as its own card
-        message += `🏠 *${apt.title}*\n`;
-        message += `📍 ${apt.location}\n`;
-        message += `💰 ₦${formattedPrice}/night\n`;
-        message += `👥 Max ${apt.max_guests} guests\n\n`;
-        
-        // Add Book Now button for THIS apartment - right under its details
-        keyboardRows.push([
-          { text: `📅 BOOK NOW`, callback_data: `book_${apt.id}` }
-        ]);
-        
-        // Add a blank line separator between apartments (not after the last one)
-        if (i < apartments.length - 1) {
-          message += `\n`;
-        }
+        await bot.sendMessage(
+          chatId,
+          `🏠 *${apt.title}*\n` +
+          `📍 ${apt.location}\n` +
+          `💰 ₦${formattedPrice}/night\n` +
+          `👥 Max ${apt.max_guests} guests`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '📅 BOOK NOW', callback_data: `book_${apt.id}` }]
+              ]
+            }
+          }
+        );
       }
       
-      // Add navigation buttons at the bottom
-      keyboardRows.push([
-        { text: '🔄 Different Type', callback_data: `guests_${guests}_${location}` },
-        { text: '🔍 New Search', callback_data: 'search' }
-      ]);
-      keyboardRows.push([
-        { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
-      ]);
-      
-      // Send the message
-      bot.sendMessage(chatId, message, {
-        parse_mode: 'Markdown',
+      // Navigation buttons at the end
+      await bot.sendMessage(chatId, 'What would you like to do next?', {
         reply_markup: {
-          inline_keyboard: keyboardRows
+          inline_keyboard: [
+            [
+              { text: '🔄 Different Type', callback_data: `guests_${guests}_${location}` },
+              { text: '🔍 New Search', callback_data: 'search' }
+            ],
+            [
+              { text: '🔙 Back to Menu', callback_data: 'back_to_menu' }
+            ]
+          ]
         }
       });
       
@@ -950,4 +947,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running - Each apartment has its own card with button directly under it!');
+logger.info('🚀 Abuja Shortlet Bot is running - Each apartment has its own message with BOOK NOW button!');
