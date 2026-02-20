@@ -59,6 +59,8 @@ logger.info('Bot started');
 
 // Temporary storage
 const userSessions = {};
+// Track date attempts
+const dateAttempts = {};
 
 // Abuja locations list
 const ABUJA_LOCATIONS = [
@@ -676,6 +678,9 @@ bot.on('callback_query', async (callbackQuery) => {
 
 // ==================== HELPER FUNCTION TO ASK FOR DATES ====================
 function askForDates(chatId, apt) {
+  // Reset date attempts when asking for dates
+  dateAttempts[chatId] = 0;
+  
   bot.sendMessage(chatId,
     `📅 *When do you want to check in?*\n\n` +
     `*Apartment:* ${apt.title}\n` +
@@ -796,30 +801,71 @@ bot.on('message', async (msg) => {
     return;
   }
   
-  // Awaiting dates
+  // ========== UPDATED: Awaiting dates with 2 attempts ==========
   if (userSessions[chatId] && userSessions[chatId].pendingBooking) {
     const apt = userSessions[chatId].pendingBooking;
+    
+    // Initialize attempt counter if not exists
+    if (dateAttempts[chatId] === undefined) {
+      dateAttempts[chatId] = 0;
+    }
+    
+    // Check if user wants to cancel
+    if (text.toLowerCase() === '/cancel' || text.toLowerCase() === 'cancel') {
+      delete userSessions[chatId];
+      delete dateAttempts[chatId];
+      const [user] = await pool.execute('SELECT * FROM users WHERE telegram_id = ?', [chatId.toString()]);
+      return showMainMenu(chatId, user[0].name);
+    }
+    
     const dates = text.split(' to ');
     
     if (dates.length === 2) {
       const checkIn = dates[0].trim();
       const checkOut = dates[1].trim();
       
+      // Basic validation (just check length)
       if (checkIn.length === 10 && checkOut.length === 10) {
+        // Success - clear attempts and process booking
+        delete dateAttempts[chatId];
         const [user] = await pool.execute(
           'SELECT * FROM users WHERE telegram_id = ?',
           [chatId.toString()]
         );
-        
         await processBooking(chatId, user[0], apt, checkIn, checkOut);
         return;
       }
     }
     
+    // If we get here, date format was invalid
+    dateAttempts[chatId]++;
+    
+    if (dateAttempts[chatId] >= 2) {  // After 2 failed attempts
+      // Too many failures - kick back to menu
+      delete userSessions[chatId];
+      delete dateAttempts[chatId];
+      const [user] = await pool.execute('SELECT * FROM users WHERE telegram_id = ?', [chatId.toString()]);
+      await bot.sendMessage(chatId, 
+        `❌ Too many invalid attempts. Please start over.`,
+        { 
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔍 Search Apartments', callback_data: 'search' }],
+              [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+            ]
+          }
+        }
+      );
+      return;
+    }
+    
+    // Show error with remaining attempts
+    const attemptsLeft = 2 - dateAttempts[chatId];
     bot.sendMessage(chatId,
-      `❌ Invalid date format.\n\n` +
+      `❌ Invalid date format. ${attemptsLeft} attempt(s) left.\n\n` +
       `Please use: YYYY-MM-DD to YYYY-MM-DD\n` +
-      `Example: 2024-12-01 to 2024-12-05`,
+      `Example: 2024-12-01 to 2024-12-05\n\n` +
+      `Type "cancel" to go back to menu.`,
       { 
         reply_markup: { 
           force_reply: true,
@@ -859,6 +905,9 @@ bot.on('message', async (msg) => {
 // ==================== PROCESS BOOKING ====================
 async function processBooking(chatId, user, apt, checkIn, checkOut) {
   try {
+    // Clear date attempts on successful booking
+    delete dateAttempts[chatId];
+    
     const bookingId = 'BK' + Date.now();
     const commission = apt.price * 0.1;
     
@@ -947,4 +996,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running - Each apartment has its own message with Book Now button!');
+logger.info('🚀 Abuja Shortlet Bot is running - Each apartment has its own message with Book Now button! - 2 attempts only for dates');
