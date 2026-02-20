@@ -68,6 +68,133 @@ bot.on('error', (error) => {
   logger.error('Bot error:', error.message);
 });
 
+// Admin panel command - UPDATED WITH FIX
+bot.onText(/\/admin/, async (msg) => {
+  try {
+    const chatId = msg.chat.id;
+    
+    // 🧹 FIX: Clear any existing apartment state before showing admin panel
+    if (global.apartmentStates && global.apartmentStates[chatId]) {
+      console.log('🧹 Clearing old apartment state before showing admin panel');
+      delete global.apartmentStates[chatId];
+    }
+    
+    // Check if user is admin
+    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+    if (!adminIds.includes(msg.from.id)) {
+      await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+      return;
+    }
+    
+    // Show admin panel
+    await adminController.showAdminPanel(msg.chat.id, msg);
+    
+  } catch (error) {
+    logger.error('Admin command error:', error);
+    bot.sendMessage(msg.chat.id, 'Error accessing admin panel.');
+  }
+});
+
+// Quick stats command
+bot.onText(/\/stats/, async (msg) => {
+  try {
+    // Check if user is admin
+    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+    if (!adminIds.includes(msg.from.id)) {
+      await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+      return;
+    }
+    
+    // Create a mock callback query for the stats
+    const mockCallback = {
+      id: 'stats',
+      message: msg,
+      from: msg.from,
+      data: 'admin_stats'
+    };
+    
+    await adminController.handleCallback(mockCallback);
+  } catch (error) {
+    logger.error('Stats command error:', error);
+    bot.sendMessage(msg.chat.id, 'Error loading stats.');
+  }
+});
+
+// Quick pending approvals
+bot.onText(/\/pending/, async (msg) => {
+  try {
+    // Check if user is admin
+    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+    if (!adminIds.includes(msg.from.id)) {
+      await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+      return;
+    }
+    
+    // Create a mock callback query for pending approvals
+    const mockCallback = {
+      id: 'pending',
+      message: msg,
+      from: msg.from,
+      data: 'admin_pending_1'
+    };
+    
+    await adminController.handleCallback(mockCallback);
+  } catch (error) {
+    logger.error('Pending command error:', error);
+    bot.sendMessage(msg.chat.id, 'Error loading pending approvals.');
+  }
+});
+
+// Quick users list
+bot.onText(/\/users/, async (msg) => {
+  try {
+    // Check if user is admin
+    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+    if (!adminIds.includes(msg.from.id)) {
+      await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+      return;
+    }
+    
+    // Create a mock callback query for users list
+    const mockCallback = {
+      id: 'users',
+      message: msg,
+      from: msg.from,
+      data: 'admin_users_1'
+    };
+    
+    await adminController.handleCallback(mockCallback);
+  } catch (error) {
+    logger.error('Users command error:', error);
+    bot.sendMessage(msg.chat.id, 'Error loading users.');
+  }
+});
+
+// Quick apartments list
+bot.onText(/\/allapartments/, async (msg) => {
+  try {
+    // Check if user is admin
+    const adminIds = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(',').map(id => parseInt(id)) : [];
+    if (!adminIds.includes(msg.from.id)) {
+      await bot.sendMessage(msg.chat.id, '⛔ This command is for admins only.');
+      return;
+    }
+    
+    // Create a mock callback query for apartments list
+    const mockCallback = {
+      id: 'allapartments',
+      message: msg,
+      from: msg.from,
+      data: 'admin_apartments_1'
+    };
+    
+    await adminController.handleCallback(mockCallback);
+  } catch (error) {
+    logger.error('Apartments command error:', error);
+    bot.sendMessage(msg.chat.id, 'Error loading apartments.');
+  }
+});
+
 // Message handler
 bot.on('message', async (msg) => {
   try {
