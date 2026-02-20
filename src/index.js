@@ -3,7 +3,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const express = require('express');
 const { initDatabase } = require('./models');
 const logger = require('./config/logger');
-const redis = require('./config/redis');
+const redis = require('./config/redis');  // This already imports Redis!
 const { setupCommands } = require('./bot/commands');
 const { setupAdminCommands } = require('./bot/adminCommands');
 const { handleCallback } = require('./bot/callbacks');
@@ -14,9 +14,9 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, {
   polling: false
 });
 
-// ✅ 2. THEN import and create AdminController with the bot
+// ✅ 2. THEN import and create AdminController with the bot AND redis
 const AdminController = require('./controllers/admin');
-const adminController = new AdminController(bot);
+const adminController = new AdminController(bot, redis);  // 👈 PASS REDIS HERE!
 
 const app = express();
 app.use(express.json());
@@ -74,6 +74,12 @@ bot.onText(/\/admin/, async (msg) => {
     const chatId = msg.chat.id;
     
     // 🧹 FIX: Clear any existing apartment state before showing admin panel
+    // For the new wizard, we'll use Redis instead of global
+    try {
+      await redis.del(`apt_wizard:${chatId}`);
+      console.log('🧹 Cleared Redis wizard state');
+    } catch (e) {}
+    
     if (global.apartmentStates && global.apartmentStates[chatId]) {
       console.log('🧹 Clearing old apartment state before showing admin panel');
       delete global.apartmentStates[chatId];
@@ -201,30 +207,45 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     console.log(`\n📨 [DEBUG] Message received from chat ${chatId}:`, msg.text ? `"${msg.text}"` : '📸 Photo');
     
-    // TEMPORARY: Log ALL messages and state
-    console.log(`\n🚨 [INDEX DEBUG] Full message:`, {
-        chatId: msg.chat.id,
-        text: msg.text,
-        hasPhoto: !!msg.photo,
-        apartmentState: global.apartmentStates?.[msg.chat.id] ? {
-            step: global.apartmentStates[msg.chat.id].step,
-            data: {
-                ...global.apartmentStates[msg.chat.id].data,
-                images: global.apartmentStates[msg.chat.id].data.images ? 
-                    `${global.apartmentStates[msg.chat.id].data.images.length} photos` : 'none'
-            }
-        } : 'No state'
-    });
+    // ============================================
+    // STEP 1: ALWAYS check if user is in apartment wizard (NEW - Redis-based)
+    // ============================================
+    try {
+      // Check Redis for wizard state
+      const wizardStateRaw = await redis.get(`apt_wizard:${chatId}`);
+      
+      if (wizardStateRaw) {
+        console.log('🏠 [DEBUG] User in new wizard flow (Redis)');
+        
+        // Handle photo messages in wizard
+        if (msg.photo) {
+          console.log('📸 [DEBUG] Photo in wizard flow');
+          
+          // Pass to adminController's wizard photo handler
+          const handled = await adminController.apartments.wizard.handleWizardPhoto(chatId, msg.photo);
+          if (handled) return;
+        }
+        
+        // Handle text messages in wizard
+        if (msg.text) {
+          const handled = await adminController.apartments.wizard.handleWizardMessage(chatId, msg.text);
+          if (handled) return;
+        }
+      }
+    } catch (e) {
+      console.log('Redis check error:', e);
+      // Fall through to old flow
+    }
     
     // ============================================
-    // STEP 1: ALWAYS check if user is in apartment addition flow FIRST
+    // STEP 2: Check if user is in OLD apartment addition flow (global state)
     // ============================================
     if (global.apartmentStates && global.apartmentStates[chatId]) {
       const state = global.apartmentStates[chatId];
-      console.log(`🏠 [DEBUG] User in apartment flow. Current step: "${state.step}"`);
+      console.log(`🏠 [DEBUG] User in old apartment flow. Current step: "${state.step}"`);
       
       // ============================================
-      // HANDLE "DONE" COMMAND DURING PHOTO UPLOAD (FIXED)
+      // HANDLE "DONE" COMMAND DURING PHOTO UPLOAD
       // ============================================
       if (msg.text && msg.text.toLowerCase() === 'done' && state.step === 'photos') {
         console.log('✅ [DEBUG] "done" received during photo upload');
@@ -234,16 +255,14 @@ bot.on('message', async (msg) => {
           return;
         }
         
-        // ✅ FIX: Create the apartment directly here instead of looping back
+        // Create the apartment with photos
         console.log('✅ [DEBUG] Creating apartment with photos:', state.data.images.length);
         
-        // Create the apartment with ALL database fields in CORRECT ORDER
         const { Apartment } = require('./models');
         const data = state.data;
         
         try {
-          // Log the data being sent to database for debugging
-          console.log('📦 [DEBUG] Creating apartment with data:', {
+          const apartment = await Apartment.create({
             ownerId: data.ownerId,
             title: data.title,
             description: data.description,
@@ -257,27 +276,8 @@ bot.on('message', async (msg) => {
             images: data.images || [],
             isAvailable: true,
             isApproved: true,
-            views: 0
-          });
-
-          // ✅ FIXED: Proper order matching the model fields
-          const apartment = await Apartment.create({
-            id: undefined,                    // Auto-increment
-            ownerId: data.ownerId,             // 1
-            title: data.title,                  // 2
-            description: data.description,      // 3
-            pricePerNight: data.pricePerNight,  // 4
-            location: data.location,            // 5
-            address: data.address,              // 6
-            bedrooms: data.bedrooms,            // 7
-            bathrooms: data.bathrooms,          // 8
-            maxGuests: data.maxGuests,          // 9
-            amenities: data.amenities || [],    // 10 - MUST BE HERE
-            images: data.images || [],           // 11 - MUST BE HERE
-            isAvailable: true,                   // 12
-            isApproved: true,                    // 13
-            views: 0,                            // 14
-            createdAt: new Date()                 // 15
+            views: 0,
+            createdAt: new Date()
           });
           
           // Clear state
@@ -292,7 +292,7 @@ bot.on('message', async (msg) => {
             }).format(amount).replace('NGN', '₦');
           };
           
-          // Success message with address
+          // Success message
           const amenitiesPreview = data.amenities?.length > 0 
               ? data.amenities.slice(0, 3).join(', ') + (data.amenities.length > 3 ? '...' : '')
               : 'None listed';
@@ -317,18 +317,16 @@ bot.on('message', async (msg) => {
           );
         } catch (createError) {
           console.error('❌ Error creating apartment:', createError);
-          console.error('❌ Data that caused error:', JSON.stringify(data, null, 2));
           await bot.sendMessage(chatId, '❌ Error creating apartment. Please try again.');
-          // Don't clear state on error so they can retry
         }
         return;
       }
       
       // ============================================
-      // HANDLE PHOTOS - FIXED (removed step forcing)
+      // HANDLE PHOTOS IN OLD FLOW
       // ============================================
       if (msg.photo) {
-        console.log('📸 [DEBUG] Photo received');
+        console.log('📸 [DEBUG] Photo received in old flow');
         
         // Get the largest photo (best quality)
         const photo = msg.photo[msg.photo.length - 1];
@@ -350,44 +348,18 @@ bot.on('message', async (msg) => {
       }
       
       // ============================================
-      // HANDLE ALL OTHER STEPS (description, amenities, price, location)
+      // HANDLE ALL OTHER STEPS IN OLD FLOW
       // ============================================
-      // This catches ANY text message when step is not 'photos'
       if (state.step !== 'photos' && msg.text) {
         console.log(`📝 [DEBUG] Passing to adminController for step: "${state.step}" with text: "${msg.text}"`);
         
-        // Store the current step before handling
-        const beforeStep = state.step;
-        
-        // Pass to admin controller
         const handled = await adminController.apartments.handleAddApartmentMessage(chatId, msg.text);
-        
-        if (handled) {
-          console.log('✅ [DEBUG] adminController handled the message');
-          
-          // Get updated state after handling
-          const updatedState = global.apartmentStates[chatId];
-          
-          if (updatedState) {
-            console.log(`🔄 [DEBUG] Step changed from "${beforeStep}" to "${updatedState.step}"`);
-            
-            // If step hasn't changed, something's wrong
-            if (updatedState.step === beforeStep) {
-              console.log('⚠️ [DEBUG] WARNING: Step did not advance! Check adminController');
-            }
-          } else {
-            console.log('✅ [DEBUG] Apartment addition flow completed (state cleared)');
-          }
-          return;
-        } else {
-          console.log('⚠️ [DEBUG] adminController did NOT handle the message');
-          // If not handled, let it fall through to other handlers
-        }
+        if (handled) return;
       }
     }
     
     // ============================================
-    // STEP 2: Check if message is a command
+    // STEP 3: Check if message is a command
     // ============================================
     if (msg.text && msg.text.startsWith('/')) {
       console.log('📟 [DEBUG] Command detected, skipping regular handlers');
@@ -395,7 +367,7 @@ bot.on('message', async (msg) => {
     }
     
     // ============================================
-    // STEP 3: Check for edit states
+    // STEP 4: Check for edit states
     // ============================================
     if (global.editStates && global.editStates[chatId]) {
       const state = global.editStates[chatId];
@@ -407,7 +379,6 @@ bot.on('message', async (msg) => {
         const user = await User.findByPk(state.userId);
         
         if (user) {
-          // Update the field
           user[state.field] = msg.text;
           await user.save();
           
@@ -469,7 +440,7 @@ bot.on('message', async (msg) => {
     }
     
     // ============================================
-    // STEP 4: Regular message handling (conversations)
+    // STEP 5: Regular message handling (conversations)
     // ============================================
     console.log('💬 [DEBUG] Passing to regular conversation handler');
     await handleMessage(bot, msg);
@@ -501,6 +472,7 @@ bot.on('callback_query', async (callbackQuery) => {
         data.startsWith('confirm_delete_apt_') || 
         data.startsWith('filter_') ||             
         data.startsWith('sort_') ||               
+        data.startsWith('wizard_') ||              // 👈 ADD WIZARD CALLBACKS
         data === 'menu_admin' || 
         data === 'admin_back' ||
         data === 'admin_add_apartment') {
