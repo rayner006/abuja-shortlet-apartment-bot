@@ -276,21 +276,71 @@ bot.on('callback_query', async (callbackQuery) => {
       guests: guests 
     };
     
-    // Search apartments
+    // ========== NEW: APARTMENT TYPE BUTTONS ==========
+    bot.sendMessage(chatId,
+      `🏠 *Apartment Type*\n\n` +
+      `What type of apartment are you looking for?\n\n` +
+      `*Location:* ${location}\n` +
+      `*Guests:* ${guests}`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '🛋️ Studio', callback_data: `type_Studio_${location}_${guests}` },
+              { text: '🛏️ 1-Bedroom', callback_data: `type_1-Bedroom_${location}_${guests}` }
+            ],
+            [
+              { text: '🛏️🛏️ 2-Bedroom', callback_data: `type_2-Bedroom_${location}_${guests}` },
+              { text: '🛏️🛏️🛏️ 3-Bedroom', callback_data: `type_3-Bedroom_${location}_${guests}` }
+            ],
+            [{ text: '🔙 Back to Guests', callback_data: `loc_${location}` }],
+            [{ text: '🔙 Change Location', callback_data: 'search' }]
+          ]
+        }
+      }
+    );
+  }
+  
+  // ========== NEW: APARTMENT TYPE HANDLER ==========
+  else if (data.startsWith('type_')) {
+    const parts = data.split('_');
+    const aptType = parts[1];
+    const location = parts[2];
+    const guests = parts[3];
+    
+    // Store apartment type in session
+    userSessions[chatId] = {
+      ...userSessions[chatId],
+      apartmentType: aptType
+    };
+    
+    // Search apartments with location AND type
     try {
+      // Convert button text to search format
+      let searchType = aptType;
+      if (aptType === 'Studio') searchType = 'Studio';
+      if (aptType === '1-Bedroom') searchType = '1BR';
+      if (aptType === '2-Bedroom') searchType = '2BR';
+      if (aptType === '3-Bedroom') searchType = '3BR';
+      
       const [apartments] = await pool.execute(
         `SELECT * FROM apartments 
-         WHERE location LIKE ? AND max_guests >= ? AND is_active = 1 
+         WHERE location LIKE ? 
+         AND title LIKE ? 
+         AND max_guests >= ? 
+         AND is_active = 1 
          LIMIT 5`,
-        [`%${location}%`, guests]
+        [`%${location}%`, `%${searchType}%`, guests]
       );
       
       if (apartments.length === 0) {
         bot.sendMessage(chatId,
-          `No apartments found in ${location} for ${guests} guests.`,
+          `No ${aptType} apartments found in ${location} for ${guests} guests.`,
           {
             reply_markup: {
               inline_keyboard: [
+                [{ text: '🔄 Try Different Type', callback_data: `guests_${guests}_${location}` }],
                 [{ text: '🔍 New Search', callback_data: 'search' }],
                 [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
               ]
@@ -300,7 +350,7 @@ bot.on('callback_query', async (callbackQuery) => {
         return;
       }
       
-      let message = `🔍 *Search Results in ${location}*\n\n`;
+      let message = `🔍 *${aptType} Results in ${location}*\n\n`;
       
       for (const apt of apartments) {
         message += `🏠 *${apt.title}*\n`;
@@ -315,6 +365,7 @@ bot.on('callback_query', async (callbackQuery) => {
         reply_markup: {
           inline_keyboard: [
             [{ text: '📅 Book Now', callback_data: `book_${apartments[0].id}` }],
+            [{ text: '🔄 Different Type', callback_data: `guests_${guests}_${location}` }],
             [{ text: '🔍 New Search', callback_data: 'search' }],
             [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
           ]
@@ -322,7 +373,7 @@ bot.on('callback_query', async (callbackQuery) => {
       });
       
     } catch (error) {
-      logger.error('Search error:', error);
+      logger.error('Apartment type search error:', error);
       bot.sendMessage(chatId, 'Search failed. Try again.');
     }
   }
@@ -357,8 +408,7 @@ bot.on('callback_query', async (callbackQuery) => {
         }
         
         // Check if user needs to provide name (optional - they already have Telegram name)
-        // We'll ask if they want to provide a different name
-        if (user[0].name === 'User' || user[0].name === 'pending' || confirmNamePrompt) {
+        if (user[0].name === 'User' || user[0].name === 'pending') {
           userSessions[chatId].awaitingName = true;
           return bot.sendMessage(chatId,
             `📝 *Your Name*\n\n` +
@@ -911,4 +961,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running with corrected flow: Location → Guests → Results → Book → Name/Phone → Dates → Create Booking');
+logger.info('🚀 Abuja Shortlet Bot is running with Apartment Types feature! Flow: Location → Guests → Type → Results → Book → Name/Phone → Dates → Create Booking');
