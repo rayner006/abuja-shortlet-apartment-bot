@@ -2,14 +2,26 @@ const AdminBase = require('./adminBase');
 const { Apartment, User, Booking } = require('../../models');
 const { Op } = require('sequelize');
 const sequelize = require('../../config/database');
+// 👇 ADD THIS - Import the wizard
+const ApartmentWizard = require('./apartmentWizard');
 
 class AdminApartments extends AdminBase {
-    constructor(bot) {
+    // 👇 UPDATE CONSTRUCTOR - Add redisClient parameter
+    constructor(bot, redisClient) {
         super(bot);
+        this.redisClient = redisClient;
+        // 👇 Initialize the wizard
+        this.wizard = new ApartmentWizard(bot, redisClient);
     }
 
     async handleCallback(callbackQuery) {
         const data = callbackQuery.data;
+        
+        // 👇 ADD THIS - Check for wizard callbacks first
+        if (data.startsWith('wizard_')) {
+            await this.wizard.handleWizardCallback(callbackQuery);
+            return;
+        }
         
         if (data.startsWith('admin_pending')) {
             const page = data.split('_')[2] ? parseInt(data.split('_')[2]) : 1;
@@ -45,9 +57,9 @@ class AdminApartments extends AdminBase {
         else if (data.startsWith('filter_') || data.startsWith('sort_')) {
             await this.handleApartmentFilters(callbackQuery);
         }
-        // ✅ FIXED: Handle Add Apartment button
+        // 👇 UPDATE THIS - Use wizard for adding apartment
         else if (data === 'admin_add_apartment') {
-            await this.startAddApartment(callbackQuery);
+            await this.wizard.startWizard(callbackQuery);  // Use wizard instead of old method
         }
     }
 
@@ -1083,287 +1095,23 @@ All bookings for this apartment will also be deleted.
     }
 
     // ============================================
-    // ADD APARTMENT FUNCTIONALITY - FIXED with Location then Address
+    // OLD ADD APARTMENT METHODS - KEPT FOR BACKWARD COMPATIBILITY
+    // But they're not used anymore since we're using the wizard
     // ============================================
 
     async startAddApartment(callbackQuery) {
-        const chatId = callbackQuery.message.chat.id;
-        const messageId = callbackQuery.message.message_id;
-        
-        try {
-            const text = `
-➕ *Add New Apartment*
-
-Let's add a new apartment to the system.
-You'll be the owner of this apartment.
-
-Please enter the apartment title:
-            `;
-            
-            // Set up state to collect apartment details
-            if (!global.apartmentStates) global.apartmentStates = {};
-            
-            global.apartmentStates[chatId] = {
-                step: 'title',
-                data: {
-                    ownerId: callbackQuery.from.id,
-                    isApproved: true // Auto-approve since admin is adding
-                }
-            };
-            
-            await this.bot.editMessageText(text, {
-                chat_id: chatId,
-                message_id: messageId,
-                parse_mode: 'Markdown',
-                reply_markup: {
-                    inline_keyboard: [
-                        [{ text: '« Cancel', callback_data: 'menu_admin' }]
-                    ]
-                }
-            });
-            
-            await this.answerCallback(callbackQuery);
-            
-        } catch (error) {
-            console.error('Error starting add apartment:', error);
-            await this.handleError(chatId, error, 'startAddApartment');
-        }
+        // 👇 Redirect to wizard instead of using old method
+        await this.wizard.startWizard(callbackQuery);
     }
 
-    // Handle messages for adding apartment - FIXED PHOTO HANDLING
+    // Keep this for backward compatibility with any existing code
     async handleAddApartmentMessage(chatId, text) {
-        try {
-            const state = global.apartmentStates?.[chatId];
-            if (!state) return false;
-            
-            const data = state.data;
-            
-            // IMPORTANT: If step is 'photos' and this is called with a photo message (text is undefined/null),
-            // the photo is already handled in index.js, so we just return true
-            if (state.step === 'photos' && !text) {
-                console.log('📸 [DEBUG] Photo message received, already handled in index.js');
-                return true;
-            }
-            
-            switch(state.step) {
-                case 'title':
-                    data.title = text;
-                    state.step = 'location';
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId, 
-                        `📍 *Location*\n\nWhich area/neighborhood? (e.g., Kubwa, Asokoro, Maitama)\n\nThis is what users will click in the filter menu.`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'location':
-                    data.location = text;
-                    state.step = 'address';
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId,
-                        `📍 *Address*\n\nWhat is the full street address?\n(e.g., 12 Bobo Street, Off Udi Hill, Asokoro)`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'address':
-                    data.address = text;
-                    state.step = 'price';
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId,
-                        `💰 *Price*\n\nWhat is the price per night? (in Naira)`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'price':
-                    const price = parseInt(text.replace(/[^0-9]/g, ''));
-                    if (isNaN(price) || price < 1000) {
-                        await this.bot.sendMessage(chatId,
-                            `❌ *Invalid Price*\n\nPlease enter a valid price (minimum ₦1,000)`,
-                            { parse_mode: 'Markdown' }
-                        );
-                        return true;
-                    }
-                    data.pricePerNight = price;
-                    state.step = 'bedrooms';
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId,
-                        `🛏️ *Bedrooms*\n\nHow many bedrooms? (0 for studio)`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'bedrooms':
-                    const bedrooms = parseInt(text);
-                    if (isNaN(bedrooms) || bedrooms < 0 || bedrooms > 10) {
-                        await this.bot.sendMessage(chatId,
-                            `❌ *Invalid Number*\n\nPlease enter a valid number of bedrooms (0-10)`,
-                            { parse_mode: 'Markdown' }
-                        );
-                        return true;
-                    }
-                    data.bedrooms = bedrooms;
-                    state.step = 'bathrooms';
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId,
-                        `🚿 *Bathrooms*\n\nHow many bathrooms?`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'bathrooms':
-                    const bathrooms = parseInt(text);
-                    if (isNaN(bathrooms) || bathrooms < 1 || bathrooms > 10) {
-                        await this.bot.sendMessage(chatId,
-                            `❌ *Invalid Number*\n\nPlease enter a valid number of bathrooms (1-10)`,
-                            { parse_mode: 'Markdown' }
-                        );
-                        return true;
-                    }
-                    data.bathrooms = bathrooms;
-                    state.step = 'maxGuests';
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId,
-                        `👥 *Max Guests*\n\nMaximum number of guests?`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'maxGuests':
-                    const maxGuests = parseInt(text);
-                    if (isNaN(maxGuests) || maxGuests < 1 || maxGuests > 20) {
-                        await this.bot.sendMessage(chatId,
-                            `❌ *Invalid Number*\n\nPlease enter a valid number of guests (1-20)`,
-                            { parse_mode: 'Markdown' }
-                        );
-                        return true;
-                    }
-                    data.maxGuests = maxGuests;
-                    state.step = 'description';
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId,
-                        `📝 *Description*\n\nPlease enter a description of the apartment:`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'description':
-                    data.description = text;
-                    state.step = 'amenities';
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId,
-                        `✨ *Amenities*\n\n` +
-                        `List the amenities (comma separated):\n` +
-                        `Example: WiFi, Air Conditioning, TV, Kitchen, Parking, Security`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'amenities':
-                    // Convert comma-separated string to array
-                    data.amenities = text.split(',').map(item => item.trim()).filter(item => item.length > 0);
-                    state.step = 'photos';
-                    data.images = data.images || []; // Ensure images array exists
-                    global.apartmentStates[chatId] = state;
-                    await this.bot.sendMessage(chatId,
-                        `📸 *Photos*\n\n` +
-                        `Please send photos of the apartment.\n\n` +
-                        `• Click the 📎 attachment icon\n` +
-                        `• Select 📷 Camera or 🖼️ Gallery\n` +
-                        `• Send your photos (one by one)\n\n` +
-                        `When you're done, type *done*`,
-                        { parse_mode: 'Markdown' }
-                    );
-                    break;
-                    
-                case 'photos':
-                    // When user types "done", create the apartment
-                    if (text && text.toLowerCase() === 'done') {
-                        // Check if any photos were uploaded
-                        if (!data.images || data.images.length === 0) {
-                            await this.bot.sendMessage(chatId,
-                                `❌ *No Photos Uploaded*\n\n` +
-                                `Please send at least one photo before typing "done".\n\n` +
-                                `Use the 📎 attachment button to send photos.`,
-                                { parse_mode: 'Markdown' }
-                            );
-                            return true;
-                        }
-                        
-                        console.log('✅ [DEBUG] Creating apartment with photos:', data.images.length);
-                        
-                        // Create the apartment with ALL database fields
-                        const apartment = await Apartment.create({
-                            // Core fields from your flow
-                            ownerId: data.ownerId,
-                            title: data.title,
-                            address: data.address,
-                            description: data.description,
-                            pricePerNight: data.pricePerNight,
-                            location: data.location,
-                            bedrooms: data.bedrooms,
-                            bathrooms: data.bathrooms,
-                            maxGuests: data.maxGuests,
-                            amenities: data.amenities || [],
-                            images: data.images || [], // Photos from index.js
-                            
-                            // Database fields
-                            isApproved: true,
-                            isAvailable: true,
-                            views: 0,
-                            createdAt: new Date()
-                        });
-                        
-                        // Clear state
-                        delete global.apartmentStates[chatId];
-                        
-                        // Success message with address
-                        const amenitiesPreview = data.amenities?.length > 0 
-                            ? data.amenities.slice(0, 3).join(', ') + (data.amenities.length > 3 ? '...' : '')
-                            : 'None listed';
-                        
-                        await this.bot.sendMessage(chatId,
-                            `✅ *Apartment Added Successfully!*\n\n` +
-                            `🏠 *${apartment.title}*\n` +
-                            `📍 *Area:* ${apartment.location}\n` +
-                            `📮 *Address:* ${apartment.address}\n` +
-                            `💰 *Price:* ${this.formatCurrency(apartment.pricePerNight)}/night\n` +
-                            `✨ *Amenities:* ${amenitiesPreview}\n` +
-                            `📸 *Photos:* ${data.images?.length || 0} uploaded\n\n` +
-                            `The apartment is now live and visible to users!`,
-                            {
-                                parse_mode: 'Markdown',
-                                reply_markup: {
-                                    inline_keyboard: [
-                                        [{ text: '🔙 Back to Admin', callback_data: 'menu_admin' }]
-                                    ]
-                                }
-                            }
-                        );
-                    } else if (text) {
-                        // If user sends any text other than "done" during photos step
-                        await this.bot.sendMessage(chatId,
-                            `📸 *Photo Upload*\n\n` +
-                            `Please send photos using the 📎 attachment button.\n` +
-                            `Type *done* when you've finished uploading.`,
-                            { parse_mode: 'Markdown' }
-                        );
-                    }
-                    break;
-            }
-            
-            return true;
-        } catch (error) {
-            console.error('Error in handleAddApartmentMessage:', error);
-            await this.bot.sendMessage(chatId, '❌ An error occurred. Please try again.');
-            delete global.apartmentStates?.[chatId];
-            return true;
-        }
+        // 👇 Redirect to wizard
+        return await this.wizard.handleWizardMessage(chatId, text);
     }
 
     // ============================================
-    // MISSING HELPER METHODS - ADD THESE!
+    // MISSING HELPER METHODS
     // ============================================
 
     formatCurrency(amount) {
