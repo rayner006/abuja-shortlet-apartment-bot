@@ -60,6 +60,26 @@ logger.info('Bot started');
 // Temporary storage
 const userSessions = {};
 
+// Abuja locations list
+const ABUJA_LOCATIONS = [
+  'Asokoro',
+  'Maitama',
+  'Wuse',
+  'Central Area (CBD)',
+  'Guzape',
+  'Garki',
+  'Utako',
+  'Jabi',
+  'Gwarinpa',
+  'Wuye',
+  'Kubwa',
+  'Lokogoma',
+  'Apo',
+  'Lugbe',
+  'Nyanya',
+  'Dutse'
+];
+
 // ==================== SIMPLIFIED USER REGISTRATION ====================
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
@@ -128,21 +148,50 @@ bot.on('callback_query', async (callbackQuery) => {
   
   // ========== MAIN MENU OPTIONS ==========
   if (data === 'search') {
+    // Create location buttons in rows of 2
+    const locationButtons = [];
+    for (let i = 0; i < ABUJA_LOCATIONS.length; i += 2) {
+      const row = [];
+      row.push({ text: `📍 ${ABUJA_LOCATIONS[i]}`, callback_data: `loc_${ABUJA_LOCATIONS[i]}` });
+      if (i + 1 < ABUJA_LOCATIONS.length) {
+        row.push({ text: `📍 ${ABUJA_LOCATIONS[i + 1]}`, callback_data: `loc_${ABUJA_LOCATIONS[i + 1]}` });
+      }
+      locationButtons.push(row);
+    }
+    
+    // Add Other and Back buttons
+    locationButtons.push([{ text: '📍 Other (type manually)', callback_data: 'loc_other' }]);
+    locationButtons.push([{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]);
+    
     bot.sendMessage(chatId,
       `🔍 *Search Apartments*\n\n` +
-      `Enter location (e.g., Wuse, Maitama, Asokoro):`,
+      `Please select a location from the list below:`,
       {
         parse_mode: 'Markdown',
-        reply_markup: { force_reply: true }
+        reply_markup: {
+          inline_keyboard: locationButtons
+        }
       }
     );
   }
   
   else if (data === 'locations') {
+    // Format locations nicely for display
+    const locationsList = ABUJA_LOCATIONS.map(loc => `📍 ${loc}`).join('\n');
+    
     bot.sendMessage(chatId,
-      `📍 *Popular Locations*\n\n` +
-      `Wuse\nMaitama\nAsokoro\nJabi\nGarki\nUtako\nGwarinpa`,
-      { parse_mode: 'Markdown' }
+      `📍 *Popular Locations in Abuja*\n\n` +
+      `${locationsList}\n\n` +
+      `Use 🔍 Search to find apartments in any of these areas.`,
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔍 Search Now', callback_data: 'search' }],
+            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+          ]
+        }
+      }
     );
   }
   
@@ -150,10 +199,69 @@ bot.on('callback_query', async (callbackQuery) => {
     bot.sendMessage(chatId,
       `❓ *Help*\n\n` +
       `/start - Main menu\n` +
-      `Search apartments by location\n` +
-      `Contact owner after booking\n` +
+      `🔍 Search Apartments - Find by location\n` +
+      `📍 Browse Locations - See all areas\n` +
+      `📅 My Bookings - View your bookings\n\n` +
       `Need more help? Contact support.`,
-      { parse_mode: 'Markdown' }
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+          ]
+        }
+      }
+    );
+  }
+  
+  else if (data === 'back_to_menu') {
+    // Get user name and show main menu
+    const [users] = await pool.execute(
+      'SELECT * FROM users WHERE telegram_id = ?',
+      [chatId.toString()]
+    );
+    showMainMenu(chatId, users[0]?.name || 'User');
+  }
+  
+  // ========== LOCATION SELECTION HANDLER ==========
+  else if (data.startsWith('loc_')) {
+    const location = data.replace('loc_', '');
+    
+    if (location === 'other') {
+      // Ask user to type location manually
+      return bot.sendMessage(chatId,
+        `📍 *Enter Location*\n\n` +
+        `Please type the location you want to search in:`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { 
+            force_reply: true,
+            inline_keyboard: [
+              [{ text: '🔙 Back to Locations', callback_data: 'search' }]
+            ]
+          }
+        }
+      );
+    }
+    
+    // Store location in session
+    userSessions[chatId] = { location: location };
+    
+    // Ask for dates
+    bot.sendMessage(chatId,
+      `📅 *When do you want to check in?*\n\n` +
+      `Format: YYYY-MM-DD to YYYY-MM-DD\n` +
+      `Example: 2024-12-01 to 2024-12-05\n\n` +
+      `*Selected Location:* ${location}`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { 
+          force_reply: true,
+          inline_keyboard: [
+            [{ text: '🔙 Change Location', callback_data: 'search' }]
+          ]
+        }
+      }
     );
   }
   
@@ -174,7 +282,8 @@ bot.on('callback_query', async (callbackQuery) => {
           {
             reply_markup: {
               inline_keyboard: [
-                [{ text: '🔍 Search Apartments', callback_data: 'search' }]
+                [{ text: '🔍 Search Apartments', callback_data: 'search' }],
+                [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
               ]
             }
           }
@@ -197,7 +306,15 @@ bot.on('callback_query', async (callbackQuery) => {
         message += `Date: ${new Date(b.created_at).toLocaleDateString()}\n\n`;
       });
       
-      bot.sendMessage(chatId, message, { parse_mode: 'Markdown' });
+      bot.sendMessage(chatId, message, { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔍 New Search', callback_data: 'search' }],
+            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+          ]
+        }
+      });
       
     } catch (error) {
       logger.error('My bookings error:', error);
@@ -226,7 +343,8 @@ bot.on('callback_query', async (callbackQuery) => {
             {
               reply_markup: {
                 inline_keyboard: [
-                  [{ text: '🔍 New Search', callback_data: 'search' }]
+                  [{ text: '🔍 New Search', callback_data: 'search' }],
+                  [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
                 ]
               }
             }
@@ -234,7 +352,7 @@ bot.on('callback_query', async (callbackQuery) => {
           return;
         }
         
-        let message = `🔍 *Search Results*\n\n`;
+        let message = `🔍 *Search Results in ${session.location}*\n\n`;
         
         for (const apt of apartments) {
           message += `🏠 *${apt.title}*\n`;
@@ -248,7 +366,8 @@ bot.on('callback_query', async (callbackQuery) => {
           parse_mode: 'Markdown',
           reply_markup: {
             inline_keyboard: [
-              [{ text: '🔍 New Search', callback_data: 'search' }]
+              [{ text: '🔍 New Search', callback_data: 'search' }],
+              [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
             ]
           }
         });
@@ -296,7 +415,12 @@ bot.on('callback_query', async (callbackQuery) => {
             `Please enter your phone number so the owner can contact you:`,
             {
               parse_mode: 'Markdown',
-              reply_markup: { force_reply: true }
+              reply_markup: { 
+                force_reply: true,
+                inline_keyboard: [
+                  [{ text: '🔙 Cancel', callback_data: 'search' }]
+                ]
+              }
             }
           );
         }
@@ -481,7 +605,14 @@ bot.on('message', async (msg) => {
     if (phone.length < 10) {
       return bot.sendMessage(chatId,
         `❌ Please enter a valid phone number (at least 10 digits):`,
-        { reply_markup: { force_reply: true } }
+        { 
+          reply_markup: { 
+            force_reply: true,
+            inline_keyboard: [
+              [{ text: '🔙 Cancel', callback_data: 'search' }]
+            ]
+          } 
+        }
       );
     }
     
@@ -512,18 +643,24 @@ bot.on('message', async (msg) => {
     return;
   }
   
-  // If this is a reply to location question
+  // If this is a reply to "Other" location question
   if (msg.reply_to_message && msg.reply_to_message.text && 
-      msg.reply_to_message.text.includes('Enter location')) {
+      msg.reply_to_message.text.includes('Enter Location')) {
     userSessions[chatId] = { location: text };
     
     bot.sendMessage(chatId,
       `📅 *When do you want to check in?*\n\n` +
       `Format: YYYY-MM-DD to YYYY-MM-DD\n` +
-      `Example: 2024-12-01 to 2024-12-05`,
+      `Example: 2024-12-01 to 2024-12-05\n\n` +
+      `*Selected Location:* ${text}`,
       {
         parse_mode: 'Markdown',
-        reply_markup: { force_reply: true }
+        reply_markup: { 
+          force_reply: true,
+          inline_keyboard: [
+            [{ text: '🔙 Change Location', callback_data: 'search' }]
+          ]
+        }
       }
     );
   }
@@ -546,13 +683,23 @@ bot.on('message', async (msg) => {
               [{ text: '1 Guest', callback_data: 'guests_1' }],
               [{ text: '2 Guests', callback_data: 'guests_2' }],
               [{ text: '3 Guests', callback_data: 'guests_3' }],
-              [{ text: '4+ Guests', callback_data: 'guests_4' }]
+              [{ text: '4+ Guests', callback_data: 'guests_4' }],
+              [{ text: '🔙 Change Location', callback_data: 'search' }]
             ]
           }
         }
       );
     } else {
-      bot.sendMessage(chatId, 'Please use the correct format: YYYY-MM-DD to YYYY-MM-DD');
+      bot.sendMessage(chatId, 
+        'Please use the correct format: YYYY-MM-DD to YYYY-MM-DD',
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔙 Try Again', callback_data: 'search' }]
+            ]
+          }
+        }
+      );
     }
   }
 });
@@ -621,7 +768,14 @@ async function processBooking(chatId, user, apt) {
       `*Booking ID:* \`${bookingId}\`\n` +
       `*Price:* ₦${apt.price}\n\n` +
       `The owner will review your request. You'll be notified once they respond.`,
-      { parse_mode: 'Markdown' }
+      { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+          ]
+        }
+      }
     );
     
   } catch (error) {
@@ -636,4 +790,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running with simplified registration');
+logger.info('🚀 Abuja Shortlet Bot is running with complete Abuja locations (16 areas)');
