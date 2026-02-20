@@ -5,20 +5,26 @@ const sequelize = require('../../config/database');
 // 👇 ADD THIS - Import the wizard
 const ApartmentWizard = require('./apartmentWizard');
 
+console.log('🔍 [DEBUG] ApartmentWizard loaded:', !!ApartmentWizard);
+
 class AdminApartments extends AdminBase {
     // 👇 UPDATE CONSTRUCTOR - Add redisClient parameter
     constructor(bot, redisClient) {
         super(bot);
+        console.log('🔍 [DEBUG] AdminApartments constructor called');
         this.redisClient = redisClient;
         // 👇 Initialize the wizard
         this.wizard = new ApartmentWizard(bot, redisClient);
+        console.log('🔍 [DEBUG] AdminApartments wizard initialized:', !!this.wizard);
     }
 
     async handleCallback(callbackQuery) {
         const data = callbackQuery.data;
+        console.log(`🔍 [DEBUG] AdminApartments.handleCallback received: "${data}"`);
         
         // 👇 ADD THIS - Check for wizard callbacks first
         if (data.startsWith('wizard_')) {
+            console.log('🔍 [DEBUG] Routing to wizard.handleWizardCallback');
             await this.wizard.handleWizardCallback(callbackQuery);
             return;
         }
@@ -57,9 +63,19 @@ class AdminApartments extends AdminBase {
         else if (data.startsWith('filter_') || data.startsWith('sort_')) {
             await this.handleApartmentFilters(callbackQuery);
         }
-        // 👇 UPDATE THIS - Use wizard for adding apartment
+        // 👇 UPDATED WITH DEBUG LOGS
         else if (data === 'admin_add_apartment') {
-            await this.wizard.startWizard(callbackQuery);  // Use wizard instead of old method
+            console.log('🔍 [DEBUG] admin_add_apartment received, calling wizard.startWizard');
+            console.log('🔍 [DEBUG] wizard object exists:', !!this.wizard);
+            
+            try {
+                await this.wizard.startWizard(callbackQuery);
+                console.log('🔍 [DEBUG] wizard.startWizard completed successfully');
+            } catch (error) {
+                console.log('🔍 [DEBUG] ERROR in wizard.startWizard:', error);
+                await this.bot.sendMessage(callbackQuery.message.chat.id, 
+                    '❌ Error starting apartment wizard. Please check logs.');
+            }
         }
     }
 
