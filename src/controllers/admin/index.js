@@ -5,11 +5,14 @@ const AdminApartments = require('./adminApartments');
 const AdminStats = require('./adminStats');
 
 class AdminController extends AdminBase {
-    constructor(bot) {
+    constructor(bot, redisClient) {  // 👈 ADD redisClient parameter
         super(bot);
+        this.redisClient = redisClient;  // 👈 Store it
+        
+        // Initialize all admin modules - pass redis to apartments
         this.core = new AdminCore(bot);
         this.users = new AdminUsers(bot);
-        this.apartments = new AdminApartments(bot);
+        this.apartments = new AdminApartments(bot, redisClient);  // 👈 Pass redis to apartments
         this.stats = new AdminStats(bot);
         
         // Bind methods to preserve 'this'
@@ -72,7 +75,9 @@ class AdminController extends AdminBase {
                  data.startsWith('admin_filter_') ||           // admin filter actions
                  data.startsWith('sort_') ||                   // sort actions
                  data.startsWith('admin_sort_') ||             // admin sort actions
-                 data === 'admin_add_apartment') {             // ✅ ADD THIS LINE
+                 data === 'admin_add_apartment' ||             // ✅ ADD APARTMENT BUTTON
+                 // 👇 ADD THESE NEW WIZARD CALLBACKS
+                 data.startsWith('wizard_')) {                  // All wizard-related callbacks
             await this.apartments.handleCallback(callbackQuery);
         }
         else if (data === 'admin_stats') {
