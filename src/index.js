@@ -94,7 +94,7 @@ bot.onText(/\/start/, async (msg) => {
     );
     
     if (users.length === 0) {
-      // Store user with placeholder name and phone (will update during booking)
+      // Store user with Telegram name (will update during booking if needed)
       await pool.execute(
         'INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)',
         [userId, name, 'pending']
@@ -356,12 +356,15 @@ bot.on('callback_query', async (callbackQuery) => {
           return bot.sendMessage(chatId, 'Please /start first to register');
         }
         
-        // Check if user needs to provide name
-        if (!user[0].name || user[0].name === 'User' || user[0].name === 'pending') {
+        // Check if user needs to provide name (optional - they already have Telegram name)
+        // We'll ask if they want to provide a different name
+        if (user[0].name === 'User' || user[0].name === 'pending' || confirmNamePrompt) {
           userSessions[chatId].awaitingName = true;
           return bot.sendMessage(chatId,
-            `📝 *One more step*\n\n` +
-            `Please enter your full name for the booking:`,
+            `📝 *Your Name*\n\n` +
+            `Your Telegram name is *${user[0].name}*.\n` +
+            `If you want to use a different name for this booking, please enter it now.\n\n` +
+            `Or type *skip* to use your Telegram name:`,
             {
               parse_mode: 'Markdown',
               reply_markup: { 
@@ -378,7 +381,7 @@ bot.on('callback_query', async (callbackQuery) => {
         if (user[0].phone === 'pending') {
           userSessions[chatId].awaitingPhone = true;
           return bot.sendMessage(chatId,
-            `📱 *One more step*\n\n` +
+            `📱 *Your Phone Number*\n\n` +
             `Please enter your phone number so the owner can contact you:`,
             {
               parse_mode: 'Markdown',
@@ -392,7 +395,7 @@ bot.on('callback_query', async (callbackQuery) => {
           );
         }
         
-        // If we have name and phone, ask for dates
+        // STEP 3: If we have name and phone, ask for dates
         askForDates(chatId, apt);
       }
     } catch (error) {
@@ -643,13 +646,21 @@ bot.on('message', async (msg) => {
   
   // Check if we're awaiting name
   if (userSessions[chatId] && userSessions[chatId].awaitingName) {
-    const name = text.trim();
     const apt = userSessions[chatId].pendingBooking;
+    let name = text.trim();
     
-    if (name.length < 2) {
+    if (name.toLowerCase() === 'skip') {
+      // Use Telegram name from database
+      const [user] = await pool.execute(
+        'SELECT * FROM users WHERE telegram_id = ?',
+        [chatId.toString()]
+      );
+      name = user[0].name; // Keep the Telegram name
+    } else if (name.length < 2) {
       return bot.sendMessage(chatId,
-        `❌ Please enter a valid name (at least 2 characters):`,
+        `❌ Please enter a valid name (at least 2 characters) or type *skip*:`,
         { 
+          parse_mode: 'Markdown',
           reply_markup: { 
             force_reply: true,
             inline_keyboard: [
@@ -658,48 +669,42 @@ bot.on('message', async (msg) => {
           } 
         }
       );
-    }
-    
-    try {
-      // Update user's name in database
+    } else {
+      // Update user's name in database with provided name
       await pool.execute(
         'UPDATE users SET name = ? WHERE telegram_id = ?',
         [name, chatId.toString()]
       );
-      
-      // Clear name flag
-      delete userSessions[chatId].awaitingName;
-      
-      // Check if we need phone too
-      const [user] = await pool.execute(
-        'SELECT * FROM users WHERE telegram_id = ?',
-        [chatId.toString()]
-      );
-      
-      if (user[0].phone === 'pending') {
-        userSessions[chatId].awaitingPhone = true;
-        return bot.sendMessage(chatId,
-          `📱 *One more step*\n\n` +
-          `Please enter your phone number so the owner can contact you:`,
-          {
-            parse_mode: 'Markdown',
-            reply_markup: { 
-              force_reply: true,
-              inline_keyboard: [
-                [{ text: '🔙 Cancel', callback_data: 'search' }]
-              ]
-            }
-          }
-        );
-      }
-      
-      // If we have phone, ask for dates
-      askForDates(chatId, apt);
-      
-    } catch (error) {
-      logger.error('Name update error:', error);
-      bot.sendMessage(chatId, 'Error saving name. Please try again.');
     }
+    
+    // Clear name flag
+    delete userSessions[chatId].awaitingName;
+    
+    // Check if we need phone too
+    const [user] = await pool.execute(
+      'SELECT * FROM users WHERE telegram_id = ?',
+      [chatId.toString()]
+    );
+    
+    if (user[0].phone === 'pending') {
+      userSessions[chatId].awaitingPhone = true;
+      return bot.sendMessage(chatId,
+        `📱 *Your Phone Number*\n\n` +
+        `Please enter your phone number so the owner can contact you:`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: { 
+            force_reply: true,
+            inline_keyboard: [
+              [{ text: '🔙 Cancel', callback_data: 'search' }]
+            ]
+          }
+        }
+      );
+    }
+    
+    // STEP 3: If we have phone, ask for dates
+    askForDates(chatId, apt);
     
     return;
   }
@@ -734,7 +739,7 @@ bot.on('message', async (msg) => {
       // Clear phone flag
       delete userSessions[chatId].awaitingPhone;
       
-      // Ask for dates
+      // STEP 3: Ask for dates
       askForDates(chatId, apt);
       
     } catch (error) {
@@ -745,7 +750,7 @@ bot.on('message', async (msg) => {
     return;
   }
   
-  // Check if we're awaiting dates for booking
+  // STEP 3: Check if we're awaiting dates for booking
   if (userSessions[chatId] && userSessions[chatId].pendingBooking) {
     const apt = userSessions[chatId].pendingBooking;
     const dates = text.split(' to ');
@@ -763,7 +768,7 @@ bot.on('message', async (msg) => {
           [chatId.toString()]
         );
         
-        // Process the booking
+        // STEP 4: Process the booking
         await processBooking(chatId, user[0], apt, checkIn, checkOut);
         return;
       }
@@ -875,7 +880,7 @@ async function processBooking(chatId, user, apt, checkIn, checkOut) {
       { parse_mode: 'Markdown' }
     );
 
-    // Confirm to user
+    // Confirm to user - STEP 4 COMPLETE
     bot.sendMessage(chatId,
       `✅ *Booking Request Sent!*\n\n` +
       `*Apartment:* ${apt.title}\n` +
@@ -906,4 +911,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running with new flow: Location → Guests → Results → Book → Name/Phone → Dates');
+logger.info('🚀 Abuja Shortlet Bot is running with corrected flow: Location → Guests → Results → Book → Name/Phone → Dates → Create Booking');
