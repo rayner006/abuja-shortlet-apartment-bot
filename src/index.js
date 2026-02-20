@@ -287,7 +287,7 @@ bot.on('callback_query', async (callbackQuery) => {
         reply_markup: {
           inline_keyboard: [
             [
-              { text: '🛋️ Studio', callback_data: `type_Studio_${location}_${guests}` },
+              { text: '🛋️ Studio Apt.', callback_data: `type_Studio_${location}_${guests}` },
               { text: '🛏️ 1-Bedroom', callback_data: `type_1-Bedroom_${location}_${guests}` }
             ],
             [
