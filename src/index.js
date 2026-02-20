@@ -304,7 +304,7 @@ bot.on('message', async (msg) => {
       }
       
       // ============================================
-      // HANDLE PHOTOS - FORCED to handle ANY photo during apartment flow
+      // HANDLE PHOTOS - FIXED (removed step forcing)
       // ============================================
       if (msg.photo) {
         console.log('📸 [DEBUG] Photo received');
