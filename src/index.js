@@ -75,40 +75,14 @@ bot.on('message', async (msg) => {
     console.log(`\n📨 [DEBUG] Message received from chat ${chatId}:`, msg.text ? `"${msg.text}"` : '📸 Photo');
     
     // ============================================
-    // STEP 1: Check if user is in apartment addition flow
+    // STEP 1: ALWAYS check if user is in apartment addition flow FIRST
     // ============================================
     if (global.apartmentStates && global.apartmentStates[chatId]) {
       const state = global.apartmentStates[chatId];
       console.log(`🏠 [DEBUG] User in apartment flow. Current step: "${state.step}"`);
-      console.log(`📊 [DEBUG] State data:`, JSON.stringify(state.data, null, 2));
       
       // ============================================
-      // HANDLE PHOTOS
-      // ============================================
-      if (msg.photo && state.step === 'photos') {
-        console.log('📸 [DEBUG] Processing photo for apartment addition');
-        
-        // Get the largest photo (best quality)
-        const photo = msg.photo[msg.photo.length - 1];
-        const fileId = photo.file_id;
-        
-        // Add to images array
-        if (!state.data.images) state.data.images = [];
-        state.data.images.push(fileId);
-        
-        // Save state back to global
-        global.apartmentStates[chatId] = state;
-        
-        await bot.sendMessage(chatId, 
-          `✅ Photo received! (${state.data.images.length} so far)\n\n` +
-          `Send more photos or type *done* to finish.`,
-          { parse_mode: 'Markdown' }
-        );
-        return;
-      }
-      
-      // ============================================
-      // HANDLE "DONE" COMMAND DURING PHOTO UPLOAD
+      // HANDLE "DONE" COMMAND DURING PHOTO UPLOAD (HIGHEST PRIORITY)
       // ============================================
       if (msg.text && msg.text.toLowerCase() === 'done' && state.step === 'photos') {
         console.log('✅ [DEBUG] "done" received during photo upload');
@@ -133,12 +107,41 @@ bot.on('message', async (msg) => {
       }
       
       // ============================================
-      // HANDLE NON-PHOTO STEPS (description, amenities, etc.)
+      // HANDLE PHOTOS - ONLY if step is 'photos'
       // ============================================
-      if (state.step !== 'photos') {
-        console.log(`📝 [DEBUG] Passing to adminController for step: "${state.step}"`);
+      if (msg.photo && state.step === 'photos') {
+        console.log('📸 [DEBUG] Processing photo for apartment addition');
         
-        // Pass to admin controller and wait for response
+        // Get the largest photo (best quality)
+        const photo = msg.photo[msg.photo.length - 1];
+        const fileId = photo.file_id;
+        
+        // Add to images array
+        if (!state.data.images) state.data.images = [];
+        state.data.images.push(fileId);
+        
+        // Save state back to global
+        global.apartmentStates[chatId] = state;
+        
+        await bot.sendMessage(chatId, 
+          `✅ Photo received! (${state.data.images.length} so far)\n\n` +
+          `Send more photos or type *done* to finish.`,
+          { parse_mode: 'Markdown' }
+        );
+        return;
+      }
+      
+      // ============================================
+      // HANDLE ALL OTHER STEPS (description, amenities, price, location)
+      // ============================================
+      // This catches ANY text message when step is not 'photos'
+      if (state.step !== 'photos' && msg.text) {
+        console.log(`📝 [DEBUG] Passing to adminController for step: "${state.step}" with text: "${msg.text}"`);
+        
+        // Store the current step before handling
+        const beforeStep = state.step;
+        
+        // Pass to admin controller
         const handled = await adminController.apartments.handleAddApartmentMessage(chatId, msg.text);
         
         if (handled) {
@@ -146,14 +149,21 @@ bot.on('message', async (msg) => {
           
           // Get updated state after handling
           const updatedState = global.apartmentStates[chatId];
+          
           if (updatedState) {
-            console.log(`🔄 [DEBUG] New step after handling: "${updatedState.step}"`);
+            console.log(`🔄 [DEBUG] Step changed from "${beforeStep}" to "${updatedState.step}"`);
+            
+            // If step hasn't changed, something's wrong
+            if (updatedState.step === beforeStep) {
+              console.log('⚠️ [DEBUG] WARNING: Step did not advance! Check adminController');
+            }
           } else {
             console.log('✅ [DEBUG] Apartment addition flow completed (state cleared)');
           }
           return;
         } else {
           console.log('⚠️ [DEBUG] adminController did NOT handle the message');
+          // If not handled, let it fall through to other handlers
         }
       }
     }
