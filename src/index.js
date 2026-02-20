@@ -276,7 +276,7 @@ bot.on('callback_query', async (callbackQuery) => {
       guests: guests 
     };
     
-    // ========== NEW: APARTMENT TYPE BUTTONS ==========
+    // ========== APARTMENT TYPE BUTTONS ==========
     bot.sendMessage(chatId,
       `🏠 *Apartment Type*\n\n` +
       `What type of apartment are you looking for?\n\n` +
@@ -302,7 +302,7 @@ bot.on('callback_query', async (callbackQuery) => {
     );
   }
   
-  // ========== NEW: APARTMENT TYPE HANDLER ==========
+  // ========== APARTMENT TYPE HANDLER ==========
   else if (data.startsWith('type_')) {
     const parts = data.split('_');
     const aptType = parts[1];
@@ -317,12 +317,12 @@ bot.on('callback_query', async (callbackQuery) => {
     
     // Search apartments with location AND type
     try {
-      // Convert button text to search format
+      // Convert button text to search format - FIXED to match database
       let searchType = aptType;
       if (aptType === 'Studio') searchType = 'Studio';
-      if (aptType === '1-Bedroom') searchType = '1BR';
-      if (aptType === '2-Bedroom') searchType = '2BR';
-      if (aptType === '3-Bedroom') searchType = '3BR';
+      if (aptType === '1-Bedroom') searchType = '1-Bedroom';  // CHANGED from '1BR'
+      if (aptType === '2-Bedroom') searchType = '2-Bedroom';  // CHANGED from '2BR'
+      if (aptType === '3-Bedroom') searchType = '3-Bedroom';  // CHANGED from '3BR'
       
       const [apartments] = await pool.execute(
         `SELECT * FROM apartments 
