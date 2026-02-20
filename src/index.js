@@ -60,7 +60,7 @@ logger.info('Bot started');
 // Temporary storage
 const userSessions = {};
 
-// Abuja locations list
+// Abuja locations list (UPDATED: Nyanya → Galadima)
 const ABUJA_LOCATIONS = [
   'Asokoro',
   'Maitama',
@@ -76,7 +76,7 @@ const ABUJA_LOCATIONS = [
   'Lokogoma',
   'Apo',
   'Lugbe',
-  'Nyanya',
+  'Galadima',  // Changed from Nyanya to Galadima
   'Dutse'
 ];
 
@@ -117,7 +117,7 @@ bot.onText(/\/start/, async (msg) => {
   }
 });
 
-// Main menu
+// Main menu (UPDATED: Changed "Browse by Location" to "Browse By Budget")
 function showMainMenu(chatId, name) {
   bot.sendMessage(chatId,
     `🏠 *Main Menu*\n\n` +
@@ -128,7 +128,7 @@ function showMainMenu(chatId, name) {
       reply_markup: {
         inline_keyboard: [
           [{ text: '🔍 Search Apartments', callback_data: 'search' }],
-          [{ text: '📍 Browse by Location', callback_data: 'locations' }],
+          [{ text: '💰 Browse By Budget', callback_data: 'budget' }],  // CHANGED HERE
           [{ text: '📅 My Bookings', callback_data: 'my_bookings' }],
           [{ text: '❓ Help', callback_data: 'help' }]
         ]
@@ -175,19 +175,17 @@ bot.on('callback_query', async (callbackQuery) => {
     );
   }
   
-  else if (data === 'locations') {
-    // Format locations nicely for display
-    const locationsList = ABUJA_LOCATIONS.map(loc => `📍 ${loc}`).join('\n');
-    
+  // ========== NEW BUDGET HANDLER ==========
+  else if (data === 'budget') {
     bot.sendMessage(chatId,
-      `📍 *Popular Locations in Abuja*\n\n` +
-      `${locationsList}\n\n` +
-      `Use 🔍 Search to find apartments in any of these areas.`,
+      `💰 *Browse By Budget*\n\n` +
+      `This feature is coming soon!\n\n` +
+      `For now, please use 🔍 Search Apartments to find properties by location.`,
       { 
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
-            [{ text: '🔍 Search Now', callback_data: 'search' }],
+            [{ text: '🔍 Search Apartments', callback_data: 'search' }],
             [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
           ]
         }
@@ -200,7 +198,7 @@ bot.on('callback_query', async (callbackQuery) => {
       `❓ *Help*\n\n` +
       `/start - Main menu\n` +
       `🔍 Search Apartments - Find by location\n` +
-      `📍 Browse Locations - See all areas\n` +
+      `💰 Browse By Budget - Coming soon\n` +  // UPDATED HERE
       `📅 My Bookings - View your bookings\n\n` +
       `Need more help? Contact support.`,
       { 
@@ -790,4 +788,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running with complete Abuja locations (16 areas)');
+logger.info('🚀 Abuja Shortlet Bot is running with Galadima and Browse By Budget');
