@@ -45,7 +45,7 @@ class AdminApartments extends AdminBase {
         else if (data.startsWith('filter_') || data.startsWith('sort_')) {
             await this.handleApartmentFilters(callbackQuery);
         }
-        // Handle Add Apartment button
+        // ✅ FIXED: Handle Add Apartment button
         else if (data === 'admin_add_apartment') {
             await this.startAddApartment(callbackQuery);
         }
@@ -536,11 +536,7 @@ To cancel, type /cancel
             const pendingApartments = await Apartment.count({ where: { isApproved: false } });
             
             // Get total views
-            const allApartments = await Apartment.findAll({
-                attributes: ['views'],
-                where: { isApproved: true }
-            });
-            const totalViews = allApartments.reduce((sum, apt) => sum + (apt.views || 0), 0);
+            const totalViews = await Apartment.sum('views', { where: { isApproved: true } }) || 0;
             
             // Get total bookings
             const totalBookings = await Booking.count({
@@ -551,8 +547,7 @@ To cancel, type /cancel
             });
             
             // Get total revenue
-            const revenueResult = await Booking.findAll({
-                attributes: ['totalPrice'],
+            const totalRevenue = await Booking.sum('totalPrice', {
                 where: { 
                     paymentStatus: 'paid',
                     status: 'completed'
@@ -561,8 +556,7 @@ To cancel, type /cancel
                     model: Apartment,
                     where: { isApproved: true }
                 }]
-            });
-            const totalRevenue = revenueResult.reduce((sum, booking) => sum + parseFloat(booking.totalPrice || 0), 0);
+            }) || 0;
             
             // Get location stats
             const locationStats = await Apartment.findAll({
@@ -1155,7 +1149,7 @@ Please enter the apartment title:
                 case 'title':
                     data.title = text;
                     state.step = 'location';
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId, 
                         `📍 *Location*\n\nWhich area/neighborhood? (e.g., Kubwa, Asokoro, Maitama)\n\nThis is what users will click in the filter menu.`,
                         { parse_mode: 'Markdown' }
@@ -1165,7 +1159,7 @@ Please enter the apartment title:
                 case 'location':
                     data.location = text;
                     state.step = 'address';
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId,
                         `📍 *Address*\n\nWhat is the full street address?\n(e.g., 12 Bobo Street, Off Udi Hill, Asokoro)`,
                         { parse_mode: 'Markdown' }
@@ -1175,7 +1169,7 @@ Please enter the apartment title:
                 case 'address':
                     data.address = text;
                     state.step = 'price';
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId,
                         `💰 *Price*\n\nWhat is the price per night? (in Naira)`,
                         { parse_mode: 'Markdown' }
@@ -1193,7 +1187,7 @@ Please enter the apartment title:
                     }
                     data.pricePerNight = price;
                     state.step = 'bedrooms';
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId,
                         `🛏️ *Bedrooms*\n\nHow many bedrooms? (0 for studio)`,
                         { parse_mode: 'Markdown' }
@@ -1211,7 +1205,7 @@ Please enter the apartment title:
                     }
                     data.bedrooms = bedrooms;
                     state.step = 'bathrooms';
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId,
                         `🚿 *Bathrooms*\n\nHow many bathrooms?`,
                         { parse_mode: 'Markdown' }
@@ -1229,7 +1223,7 @@ Please enter the apartment title:
                     }
                     data.bathrooms = bathrooms;
                     state.step = 'maxGuests';
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId,
                         `👥 *Max Guests*\n\nMaximum number of guests?`,
                         { parse_mode: 'Markdown' }
@@ -1247,7 +1241,7 @@ Please enter the apartment title:
                     }
                     data.maxGuests = maxGuests;
                     state.step = 'description';
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId,
                         `📝 *Description*\n\nPlease enter a description of the apartment:`,
                         { parse_mode: 'Markdown' }
@@ -1257,7 +1251,7 @@ Please enter the apartment title:
                 case 'description':
                     data.description = text;
                     state.step = 'amenities';
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId,
                         `✨ *Amenities*\n\n` +
                         `List the amenities (comma separated):\n` +
@@ -1271,7 +1265,7 @@ Please enter the apartment title:
                     data.amenities = text.split(',').map(item => item.trim()).filter(item => item.length > 0);
                     state.step = 'photos';
                     data.images = data.images || []; // Ensure images array exists
-                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE - THIS WAS MISSING!
+                    global.apartmentStates[chatId] = state;
                     await this.bot.sendMessage(chatId,
                         `📸 *Photos*\n\n` +
                         `Please send photos of the apartment.\n\n` +
@@ -1314,7 +1308,7 @@ Please enter the apartment title:
                             amenities: data.amenities || [],
                             images: data.images || [], // Photos from index.js
                             
-                            // ✅ ADDED: Missing database fields
+                            // Database fields
                             isApproved: true,
                             isAvailable: true,
                             views: 0,
@@ -1366,6 +1360,51 @@ Please enter the apartment title:
             delete global.apartmentStates?.[chatId];
             return true;
         }
+    }
+
+    // ============================================
+    // MISSING HELPER METHODS - ADD THESE!
+    // ============================================
+
+    formatCurrency(amount) {
+        return new Intl.NumberFormat('en-NG', {
+            style: 'currency',
+            currency: 'NGN',
+            minimumFractionDigits: 0
+        }).format(amount).replace('NGN', '₦');
+    }
+
+    formatDate(date) {
+        return new Date(date).toLocaleDateString('en-NG', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    }
+
+    getRoleEmoji(role) {
+        const emojis = { admin: '👑', owner: '🏠', user: '👤' };
+        return emojis[role] || '👤';
+    }
+
+    getStatusEmoji(isActive) {
+        return isActive ? '🟢' : '🔴';
+    }
+
+    async answerCallback(callbackQuery, text = null, showAlert = false) {
+        try {
+            await this.bot.answerCallbackQuery(callbackQuery.id, {
+                text: text,
+                show_alert: showAlert
+            });
+        } catch (error) {
+            console.error('Error answering callback:', error);
+        }
+    }
+
+    async handleError(chatId, error, context) {
+        console.error(`Error in ${context}:`, error);
+        await this.bot.sendMessage(chatId, '❌ An error occurred. Please try again.');
     }
 }
 
