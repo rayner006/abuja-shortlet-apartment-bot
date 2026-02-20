@@ -382,7 +382,7 @@ bot.on('callback_query', async (callbackQuery) => {
       }
       
       // Navigation buttons at the end
-      await bot.sendMessage(chatId, 'What would you like to do next?', {
+      await bot.sendMessage(chatId, 'Or Click Any Menu Below👇', {
         reply_markup: {
           inline_keyboard: [
             [
