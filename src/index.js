@@ -237,29 +237,47 @@ bot.on('message', async (msg) => {
         // ✅ FIX: Create the apartment directly here instead of looping back
         console.log('✅ [DEBUG] Creating apartment with photos:', state.data.images.length);
         
-        // Create the apartment with ALL database fields
+        // Create the apartment with ALL database fields in CORRECT ORDER
         const { Apartment } = require('./models');
         const data = state.data;
         
         try {
-          // ✅ FIX: Add id: undefined to let database auto-increment
-          const apartment = await Apartment.create({
-            id: undefined,  // 👈 THIS FIXES THE SQL ERROR
+          // Log the data being sent to database for debugging
+          console.log('📦 [DEBUG] Creating apartment with data:', {
             ownerId: data.ownerId,
             title: data.title,
-            address: data.address,
             description: data.description,
             pricePerNight: data.pricePerNight,
             location: data.location,
+            address: data.address,
             bedrooms: data.bedrooms,
             bathrooms: data.bathrooms,
             maxGuests: data.maxGuests,
             amenities: data.amenities || [],
             images: data.images || [],
-            isApproved: true,
             isAvailable: true,
-            views: 0,
-            createdAt: new Date()
+            isApproved: true,
+            views: 0
+          });
+
+          // ✅ FIXED: Proper order matching the model fields
+          const apartment = await Apartment.create({
+            id: undefined,                    // Auto-increment
+            ownerId: data.ownerId,             // 1
+            title: data.title,                  // 2
+            description: data.description,      // 3
+            pricePerNight: data.pricePerNight,  // 4
+            location: data.location,            // 5
+            address: data.address,              // 6
+            bedrooms: data.bedrooms,            // 7
+            bathrooms: data.bathrooms,          // 8
+            maxGuests: data.maxGuests,          // 9
+            amenities: data.amenities || [],    // 10 - MUST BE HERE
+            images: data.images || [],           // 11 - MUST BE HERE
+            isAvailable: true,                   // 12
+            isApproved: true,                    // 13
+            views: 0,                            // 14
+            createdAt: new Date()                 // 15
           });
           
           // Clear state
@@ -299,6 +317,7 @@ bot.on('message', async (msg) => {
           );
         } catch (createError) {
           console.error('❌ Error creating apartment:', createError);
+          console.error('❌ Data that caused error:', JSON.stringify(data, null, 2));
           await bot.sendMessage(chatId, '❌ Error creating apartment. Please try again.');
           // Don't clear state on error so they can retry
         }
