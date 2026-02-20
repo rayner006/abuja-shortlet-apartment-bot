@@ -122,10 +122,17 @@ bot.on('message', async (msg) => {
       }
       
       // ============================================
-      // HANDLE PHOTOS - ONLY if step is 'photos'
+      // HANDLE PHOTOS - FORCED to handle ANY photo during apartment flow
       // ============================================
-      if (msg.photo && state.step === 'photos') {
-        console.log('📸 [DEBUG] Processing photo for apartment addition');
+      if (msg.photo) {
+        console.log('📸 [DEBUG] Photo received, forcing to photos step');
+        
+        // Force the step to 'photos' if we're in apartment flow
+        // This fixes the issue where state gets stuck on description/amenities
+        if (state.step !== 'photos') {
+          console.log(`⚠️ [DEBUG] State was "${state.step}" but forcing to "photos"`);
+          state.step = 'photos';
+        }
         
         // Get the largest photo (best quality)
         const photo = msg.photo[msg.photo.length - 1];
