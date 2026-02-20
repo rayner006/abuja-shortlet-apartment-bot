@@ -4,7 +4,6 @@ const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
 const mysql = require('mysql2/promise');
 const winston = require('winston');
-// REMOVED: const cron = require('node-cron');
 
 // Load environment variables
 dotenv.config();
@@ -61,68 +60,40 @@ logger.info('Bot started');
 // Temporary storage
 const userSessions = {};
 
-// ==================== USER REGISTRATION ====================
+// ==================== SIMPLIFIED USER REGISTRATION ====================
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
   const userId = msg.from.id.toString();
+  const name = msg.from.first_name || 'User';
   
   try {
-    // Check if user exists
+    // Check if user exists in database
     const [users] = await pool.execute(
       'SELECT * FROM users WHERE telegram_id = ?',
       [userId]
     );
     
     if (users.length === 0) {
-      // New user - ask for phone
-      bot.sendMessage(chatId, 
-        `👋 Welcome to Abuja Shortlet Apartment Bot!\n\n` +
-        `To help you find apartments, I need your phone number so owners can contact you.`,
-        {
-          reply_markup: {
-            keyboard: [[{
-              text: "📱 Share Phone Number",
-              request_contact: true
-            }]],
-            resize_keyboard: true,
-            one_time_keyboard: true
-          }
-        }
+      // Store user with placeholder phone (will update during booking)
+      await pool.execute(
+        'INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)',
+        [userId, name, 'pending']
       );
+      logger.info(`New user registered: ${name} (${userId})`);
     } else {
-      // Existing user - show menu
-      showMainMenu(chatId, users[0].name);
+      // Update last active
+      await pool.execute(
+        'UPDATE users SET last_active = NOW() WHERE telegram_id = ?',
+        [userId]
+      );
     }
+    
+    // Show main menu immediately - no phone request!
+    showMainMenu(chatId, name);
+    
   } catch (error) {
     logger.error('Start error:', error);
     bot.sendMessage(chatId, 'Something went wrong. Please try again.');
-  }
-});
-
-// Handle phone number
-bot.on('contact', async (msg) => {
-  const chatId = msg.chat.id;
-  const phone = msg.contact.phone_number;
-  const userId = msg.from.id.toString();
-  const name = msg.from.first_name || 'User';
-  
-  try {
-    await pool.execute(
-      'INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)',
-      [userId, name, phone]
-    );
-    
-    bot.sendMessage(chatId, 
-      `✅ Registration complete!\n\nWelcome ${name}!`,
-      {
-        reply_markup: { remove_keyboard: true }
-      }
-    );
-    
-    showMainMenu(chatId, name);
-  } catch (error) {
-    logger.error('Contact error:', error);
-    bot.sendMessage(chatId, 'Registration failed. Try /start again.');
   }
 });
 
@@ -312,70 +283,26 @@ bot.on('callback_query', async (callbackQuery) => {
           return bot.sendMessage(chatId, 'Please /start first to register');
         }
         
-        // Create booking
-        const bookingId = 'BK' + Date.now();
-        const commission = apt.price * 0.1;
+        // Check if user needs to provide phone number
+        if (user[0].phone === 'pending') {
+          // Store booking details in session and ask for phone
+          userSessions[chatId] = {
+            pendingBooking: apt,
+            awaitingPhone: true
+          };
+          
+          return bot.sendMessage(chatId,
+            `📱 *One more step*\n\n` +
+            `Please enter your phone number so the owner can contact you:`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: { force_reply: true }
+            }
+          );
+        }
         
-        await pool.execute(
-          `INSERT INTO bookings 
-          (id, user_id, user_name, user_phone, apartment_id, apartment_name, 
-           owner_id, owner_name, price, commission, status) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-          [
-            bookingId, chatId.toString(), user[0].name, user[0].phone,
-            apt.id, apt.title, apt.owner_id, apt.owner_name,
-            apt.price, commission
-          ]
-        );
-        
-        // ========== WEEK 2: OWNER NOTIFICATION ==========
-        const ownerButtons = {
-          inline_keyboard: [
-            [
-              { text: '✅ Confirm Payment', callback_data: `owner_confirm_${bookingId}` },
-              { text: '❌ Reject', callback_data: `owner_reject_${bookingId}` }
-            ]
-          ]
-        };
-
-        await bot.sendMessage(
-          apt.owner_id,
-          `🏠 *New Booking Request!*\n\n` +
-          `*Booking ID:* \`${bookingId}\`\n` +
-          `*Apartment:* ${apt.title}\n` +
-          `*Guest:* ${user[0].name}\n` +
-          `*Phone:* ${user[0].phone}\n` +
-          `*Price:* ₦${apt.price}\n` +
-          `*Your Commission:* ₦${commission}\n\n` +
-          `Please confirm once payment is received:`,
-          {
-            parse_mode: 'Markdown',
-            reply_markup: ownerButtons
-          }
-        );
-
-        // ========== WEEK 2: ADMIN NOTIFICATION ==========
-        await bot.sendMessage(
-          ADMIN_ID,
-          `👑 *ADMIN NOTIFICATION*\n\n` +
-          `*New Booking:* \`${bookingId}\`\n` +
-          `*Apartment:* ${apt.title}\n` +
-          `*Guest:* ${user[0].name} (${user[0].phone})\n` +
-          `*Owner:* ${apt.owner_name}\n` +
-          `*Price:* ₦${apt.price}\n` +
-          `*Commission:* ₦${commission}`,
-          { parse_mode: 'Markdown' }
-        );
-
-        // ========== WEEK 2: CONFIRM TO USER ==========
-        bot.sendMessage(chatId,
-          `✅ *Booking Request Sent!*\n\n` +
-          `*Apartment:* ${apt.title}\n` +
-          `*Booking ID:* \`${bookingId}\`\n` +
-          `*Price:* ₦${apt.price}\n\n` +
-          `The owner will review your request. You'll be notified once they respond.`,
-          { parse_mode: 'Markdown' }
-        );
+        // User already has phone, proceed with booking
+        await processBooking(chatId, user[0], apt);
       }
     } catch (error) {
       logger.error('Booking error:', error);
@@ -383,7 +310,7 @@ bot.on('callback_query', async (callbackQuery) => {
     }
   }
   
-  // ========== WEEK 2: OWNER CONFIRMATION HANDLER ==========
+  // ========== OWNER CONFIRMATION HANDLER ==========
   else if (data.startsWith('owner_confirm_')) {
     const bookingId = data.replace('owner_confirm_', '');
     
@@ -462,7 +389,7 @@ bot.on('callback_query', async (callbackQuery) => {
     }
   }
   
-  // ========== WEEK 2: OWNER REJECTION HANDLER ==========
+  // ========== OWNER REJECTION HANDLER ==========
   else if (data.startsWith('owner_reject_')) {
     const bookingId = data.replace('owner_reject_', '');
     
@@ -545,6 +472,46 @@ bot.on('message', async (msg) => {
   // Skip commands
   if (!text || text.startsWith('/')) return;
   
+  // Check if we're awaiting phone number for a booking
+  if (userSessions[chatId] && userSessions[chatId].awaitingPhone) {
+    const phone = text.trim();
+    const apt = userSessions[chatId].pendingBooking;
+    
+    // Basic phone validation (you can make this stricter)
+    if (phone.length < 10) {
+      return bot.sendMessage(chatId,
+        `❌ Please enter a valid phone number (at least 10 digits):`,
+        { reply_markup: { force_reply: true } }
+      );
+    }
+    
+    try {
+      // Update user's phone in database
+      await pool.execute(
+        'UPDATE users SET phone = ? WHERE telegram_id = ?',
+        [phone, chatId.toString()]
+      );
+      
+      // Get updated user info
+      const [user] = await pool.execute(
+        'SELECT * FROM users WHERE telegram_id = ?',
+        [chatId.toString()]
+      );
+      
+      // Clear session
+      delete userSessions[chatId];
+      
+      // Process the booking
+      await processBooking(chatId, user[0], apt);
+      
+    } catch (error) {
+      logger.error('Phone update error:', error);
+      bot.sendMessage(chatId, 'Error saving phone number. Please try again.');
+    }
+    
+    return;
+  }
+  
   // If this is a reply to location question
   if (msg.reply_to_message && msg.reply_to_message.text && 
       msg.reply_to_message.text.includes('Enter location')) {
@@ -590,7 +557,78 @@ bot.on('message', async (msg) => {
   }
 });
 
-// REMOVED: Entire cron job section for stale bookings
+// ==================== HELPER FUNCTION TO PROCESS BOOKING ====================
+async function processBooking(chatId, user, apt) {
+  try {
+    const bookingId = 'BK' + Date.now();
+    const commission = apt.price * 0.1;
+    
+    await pool.execute(
+      `INSERT INTO bookings 
+      (id, user_id, user_name, user_phone, apartment_id, apartment_name, 
+       owner_id, owner_name, price, commission, status) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+      [
+        bookingId, chatId.toString(), user.name, user.phone,
+        apt.id, apt.title, apt.owner_id, apt.owner_name,
+        apt.price, commission
+      ]
+    );
+    
+    // Owner notification
+    const ownerButtons = {
+      inline_keyboard: [
+        [
+          { text: '✅ Confirm Payment', callback_data: `owner_confirm_${bookingId}` },
+          { text: '❌ Reject', callback_data: `owner_reject_${bookingId}` }
+        ]
+      ]
+    };
+
+    await bot.sendMessage(
+      apt.owner_id,
+      `🏠 *New Booking Request!*\n\n` +
+      `*Booking ID:* \`${bookingId}\`\n` +
+      `*Apartment:* ${apt.title}\n` +
+      `*Guest:* ${user.name}\n` +
+      `*Phone:* ${user.phone}\n` +
+      `*Price:* ₦${apt.price}\n` +
+      `*Your Commission:* ₦${commission}\n\n` +
+      `Please confirm once payment is received:`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: ownerButtons
+      }
+    );
+
+    // Admin notification
+    await bot.sendMessage(
+      ADMIN_ID,
+      `👑 *ADMIN NOTIFICATION*\n\n` +
+      `*New Booking:* \`${bookingId}\`\n` +
+      `*Apartment:* ${apt.title}\n` +
+      `*Guest:* ${user.name} (${user.phone})\n` +
+      `*Owner:* ${apt.owner_name}\n` +
+      `*Price:* ₦${apt.price}\n` +
+      `*Commission:* ₦${commission}`,
+      { parse_mode: 'Markdown' }
+    );
+
+    // Confirm to user
+    bot.sendMessage(chatId,
+      `✅ *Booking Request Sent!*\n\n` +
+      `*Apartment:* ${apt.title}\n` +
+      `*Booking ID:* \`${bookingId}\`\n` +
+      `*Price:* ₦${apt.price}\n\n` +
+      `The owner will review your request. You'll be notified once they respond.`,
+      { parse_mode: 'Markdown' }
+    );
+    
+  } catch (error) {
+    logger.error('Process booking error:', error);
+    bot.sendMessage(chatId, 'Booking failed. Try again.');
+  }
+}
 
 // ==================== ERROR HANDLER ====================
 bot.on('polling_error', (error) => {
@@ -598,4 +636,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running with all Week 2 features');
+logger.info('🚀 Abuja Shortlet Bot is running with simplified registration');
