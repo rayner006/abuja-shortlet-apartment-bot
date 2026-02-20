@@ -2,449 +2,337 @@
 const express = require('express');
 const TelegramBot = require('node-telegram-bot-api');
 const dotenv = require('dotenv');
+const mysql = require('mysql2/promise');
 const winston = require('winston');
 
 // Load environment variables
 dotenv.config();
 
-// ==================== LOGGER SETUP ====================
+// ==================== LOGGER ====================
 const logger = winston.createLogger({
   level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
+  format: winston.format.json(),
   transports: [
-    new winston.transports.File({ filename: 'error.log', level: 'error' }),
-    new winston.transports.File({ filename: 'combined.log' }),
     new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      )
+      format: winston.format.simple()
     })
   ]
 });
 
-// ==================== HEALTH SERVER SETUP ====================
+// ==================== HEALTH SERVER ====================
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// Middleware
-app.use(express.json());
-
-// Basic health check
 app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    service: 'abuja-shortlet-bot'
-  });
+  res.status(200).json({ status: 'healthy' });
 });
 
-// Detailed health check
-app.get('/health/detailed', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    memory: process.memoryUsage(),
-    nodeVersion: process.version,
-    platform: process.platform
-  });
+app.listen(PORT, () => {
+  logger.info(`Health server running on port ${PORT}`);
 });
 
-// Root endpoint (optional)
-app.get('/', (req, res) => {
-  res.send('🤖 Abuja Shortlet Apartment Bot is running!');
+// ==================== DATABASE CONNECTION ====================
+const pool = mysql.createPool({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10
 });
 
-// Start health server
-const server = app.listen(PORT, () => {
-  logger.info(`✅ Health check server running on port ${PORT}`);
-});
-
-// ==================== TELEGRAM BOT SETUP ====================
+// ==================== TELEGRAM BOT ====================
 const token = process.env.BOT_TOKEN;
 if (!token) {
-  logger.error('❌ BOT_TOKEN environment variable is not set!');
+  logger.error('BOT_TOKEN not set');
   process.exit(1);
 }
 
-// Create bot instance with polling
-const bot = new TelegramBot(token, { 
-  polling: true,
-  // Only set webhook if you're using it instead of polling
-  // webhook: {
-  //   port: PORT,
-  //   host: '0.0.0.0'
-  // }
-});
+const bot = new TelegramBot(token, { polling: true });
+logger.info('Bot started');
 
-logger.info('✅ Telegram bot initialized successfully');
+// Temporary storage
+const userSessions = {};
 
-// ==================== DATABASE SETUP (COMING SOON) ====================
-// We'll add MySQL with Sequelize in the next phase
-
-// ==================== BOT COMMANDS ====================
-
-// Welcome message with inline keyboard
-bot.onText(/\/start/, (msg) => {
+// ==================== USER REGISTRATION ====================
+bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id;
-  const firstName = msg.from.first_name || 'there';
+  const userId = msg.from.id.toString();
   
-  const options = {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          { text: '🔍 Search Apartments', callback_data: 'search' },
-          { text: '📅 My Bookings', callback_data: 'bookings' }
-        ],
-        [
-          { text: '📍 Popular Locations', callback_data: 'locations' },
-          { text: '📞 Contact Support', callback_data: 'contact' }
-        ],
-        [
-          { text: '❓ Help', callback_data: 'help' }
-        ]
-      ]
-    }
-  };
-  
-  bot.sendMessage(
-    chatId, 
-    `👋 Welcome *${firstName}* to Abuja Shortlet Apartment Bot!\n\n` +
-    `🏠 Find the perfect shortlet apartment in Abuja.\n\n` +
-    `*What would you like to do?*`,
-    { 
-      parse_mode: 'Markdown',
-      ...options 
-    }
-  );
-  
-  logger.info(`User ${chatId} (${firstName}) started the bot`);
-});
-
-// Handle callback queries (when users click inline buttons)
-bot.on('callback_query', async (callbackQuery) => {
-  const message = callbackQuery.message;
-  const chatId = message.chat.id;
-  const data = callbackQuery.data;
-  const userId = callbackQuery.from.id;
-  
-  // Answer callback query to remove loading state
-  await bot.answerCallbackQuery(callbackQuery.id);
-  
-  logger.info(`Callback query from user ${userId}: ${data}`);
-  
-  switch(data) {
-    case 'search':
-      bot.sendMessage(chatId,
-        `🔍 *Search Apartments*\n\n` +
-        `Please use the format:\n` +
-        `\`/search [location] [guests] [check_in] [check_out]\`\n\n` +
-        `*Example:*\n` +
-        `/search wuse 2 2024-12-01 2024-12-05\n\n` +
-        `Or tell me your requirements in plain text!`,
-        { parse_mode: 'Markdown' }
-      );
-      break;
-      
-    case 'bookings':
-      bot.sendMessage(chatId,
-        `📅 *Your Bookings*\n\n` +
-        `You don't have any active bookings yet.\n\n` +
-        `Use /search to find apartments!`,
-        { parse_mode: 'Markdown' }
-      );
-      break;
-      
-    case 'locations':
-      const locationsKeyboard = {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '🏙️ Wuse', callback_data: 'loc_wuse' }],
-            [{ text: '🌳 Maitama', callback_data: 'loc_maitama' }],
-            [{ text: '🏛️ Asokoro', callback_data: 'loc_asokoro' }],
-            [{ text: '🛍️ Jabi', callback_data: 'loc_jabi' }],
-            [{ text: '🛒 Garki', callback_data: 'loc_garki' }],
-            [{ text: '🔙 Back', callback_data: 'back_to_main' }]
-          ]
-        }
-      };
-      
-      bot.sendMessage(chatId,
-        `📍 *Popular Locations in Abuja*\n\n` +
-        `Select a location to see available apartments:`,
-        { 
-          parse_mode: 'Markdown',
-          ...locationsKeyboard 
+  try {
+    // Check if user exists
+    const [users] = await pool.execute(
+      'SELECT * FROM users WHERE telegram_id = ?',
+      [userId]
+    );
+    
+    if (users.length === 0) {
+      // New user - ask for phone
+      bot.sendMessage(chatId, 
+        `👋 Welcome to Abuja Shortlet Apartment Bot!\n\n` +
+        `To help you find apartments, I need your phone number so owners can contact you.`,
+        {
+          reply_markup: {
+            keyboard: [[{
+              text: "📱 Share Phone Number",
+              request_contact: true
+            }]],
+            resize_keyboard: true,
+            one_time_keyboard: true
+          }
         }
       );
-      break;
-      
-    case 'contact':
-      bot.sendMessage(chatId,
-        `📞 *Contact Support*\n\n` +
-        `• *Phone:* +234 800 123 4567\n` +
-        `• *Email:* support@abujashortlet.com\n` +
-        `• *WhatsApp:* wa.me/2348001234567\n\n` +
-        `• *Office:* 123 Aminu Kano Crescent, Wuse II, Abuja\n\n` +
-        `⏰ *Hours:* 24/7 Support Available`,
-        { parse_mode: 'Markdown' }
-      );
-      break;
-      
-    case 'help':
-      bot.sendMessage(chatId,
-        `❓ *Help & Commands*\n\n` +
-        `• /start - Main menu\n` +
-        `• /search - Find apartments\n` +
-        `• /bookings - View your bookings\n` +
-        `• /locations - Browse by area\n` +
-        `• /contact - Get support\n` +
-        `• /about - About us\n` +
-        `• /help - Show this message`,
-        { parse_mode: 'Markdown' }
-      );
-      break;
-      
-    case 'back_to_main':
-      // Trigger the start command again
-      bot.emit('text', {
-        chat: { id: chatId },
-        from: { first_name: callbackQuery.from.first_name },
-        text: '/start'
-      });
-      break;
-      
-    // Handle location selections
-    case 'loc_wuse':
-    case 'loc_maitama':
-    case 'loc_asokoro':
-    case 'loc_jabi':
-    case 'loc_garki':
-      const locationName = data.replace('loc_', '').charAt(0).toUpperCase() + data.replace('loc_', '').slice(1);
-      bot.sendMessage(chatId,
-        `🏠 *Apartments in ${locationName}*\n\n` +
-        `We're fetching available apartments in ${locationName}...\n\n` +
-        `*Coming Soon:* This feature will be available when we connect the database!\n\n` +
-        `For now, please use /search to specify your requirements.`,
-        { parse_mode: 'Markdown' }
-      );
-      break;
+    } else {
+      // Existing user - show menu
+      showMainMenu(chatId, users[0].name);
+    }
+  } catch (error) {
+    logger.error('Start error:', error);
+    bot.sendMessage(chatId, 'Something went wrong. Please try again.');
   }
 });
 
-// Search command
-bot.onText(/\/search(.+)?/, (msg, match) => {
+// Handle phone number
+bot.on('contact', async (msg) => {
   const chatId = msg.chat.id;
-  const searchQuery = match[1]?.trim();
+  const phone = msg.contact.phone_number;
+  const userId = msg.from.id.toString();
+  const name = msg.from.first_name || 'User';
   
-  if (!searchQuery) {
-    // No search parameters provided
-    bot.sendMessage(chatId,
-      `🔍 *Search Apartments*\n\n` +
-      `Please provide your search criteria:\n\n` +
-      `*Format:*\n` +
-      `/search [location] [guests] [check_in] [check_out]\n\n` +
-      `*Example:*\n` +
-      `/search wuse 2 2024-12-01 2024-12-05\n\n` +
-      `Or use the buttons below to browse:`,
+  try {
+    await pool.execute(
+      'INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)',
+      [userId, name, phone]
+    );
+    
+    bot.sendMessage(chatId, 
+      `✅ Registration complete!\n\nWelcome ${name}!`,
       {
-        parse_mode: 'Markdown',
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '📍 Browse by Location', callback_data: 'locations' }],
-            [{ text: '💰 Price Range', callback_data: 'price_range' }]
-          ]
-        }
+        reply_markup: { remove_keyboard: true }
       }
     );
-  } else {
-    // Parse search query (you'll implement actual search when DB is ready)
+    
+    showMainMenu(chatId, name);
+  } catch (error) {
+    logger.error('Contact error:', error);
+    bot.sendMessage(chatId, 'Registration failed. Try /start again.');
+  }
+});
+
+// Main menu
+function showMainMenu(chatId, name) {
+  bot.sendMessage(chatId,
+    `🏠 *Main Menu*\n\n` +
+    `Welcome back, ${name}!\n\n` +
+    `What would you like to do?`,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '🔍 Search Apartments', callback_data: 'search' }],
+          [{ text: '📍 Browse by Location', callback_data: 'locations' }],
+          [{ text: '📅 My Bookings', callback_data: 'my_bookings' }],
+          [{ text: '❓ Help', callback_data: 'help' }]
+        ]
+      }
+    }
+  );
+}
+
+// ==================== CALLBACK HANDLER ====================
+bot.on('callback_query', async (callbackQuery) => {
+  const data = callbackQuery.data;
+  const chatId = callbackQuery.message.chat.id;
+  
+  await bot.answerCallbackQuery(callbackQuery.id);
+  
+  if (data === 'search') {
     bot.sendMessage(chatId,
-      `🔍 *Searching for:*\n` +
-      `\`${searchQuery}\`\n\n` +
-      `⏳ Searching for available apartments...\n\n` +
-      `*Coming Soon:* Database integration for real apartment search!`,
+      `🔍 *Search Apartments*\n\n` +
+      `Enter location (e.g., Wuse, Maitama, Asokoro):`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { force_reply: true }
+      }
+    );
+  }
+  
+  else if (data === 'locations') {
+    bot.sendMessage(chatId,
+      `📍 *Popular Locations*\n\n` +
+      `Wuse\nMaitama\nAsokoro\nJabi\nGarki\nUtako\nGwarinpa`,
       { parse_mode: 'Markdown' }
     );
   }
-});
-
-// Bookings command
-bot.onText(/\/bookings/, (msg) => {
-  const chatId = msg.chat.id;
   
-  bot.sendMessage(chatId,
-    `📅 *Your Bookings*\n\n` +
-    `*Active Bookings:*\n` +
-    `You have no active bookings.\n\n` +
-    `*Past Bookings:*\n` +
-    `No booking history found.\n\n` +
-    `Want to make a booking? Use /search to find apartments!`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-// Locations command
-bot.onText(/\/locations/, (msg) => {
-  const chatId = msg.chat.id;
-  
-  const locationsKeyboard = {
-    reply_markup: {
-      inline_keyboard: [
-        [{ text: '🏙️ Wuse', callback_data: 'loc_wuse' }],
-        [{ text: '🌳 Maitama', callback_data: 'loc_maitama' }],
-        [{ text: '🏛️ Asokoro', callback_data: 'loc_asokoro' }],
-        [{ text: '🛍️ Jabi', callback_data: 'loc_jabi' }],
-        [{ text: '🛒 Garki', callback_data: 'loc_garki' }],
-        [{ text: '🏢 Central Area', callback_data: 'loc_central' }],
-        [{ text: '🛣️ Utako', callback_data: 'loc_utako' }],
-        [{ text: '🏘️ Gwarinpa', callback_data: 'loc_gwarinpa' }]
-      ]
-    }
-  };
-  
-  bot.sendMessage(chatId,
-    `📍 *Popular Locations in Abuja*\n\n` +
-    `Select a location to see available apartments:`,
-    { 
-      parse_mode: 'Markdown',
-      ...locationsKeyboard 
-    }
-  );
-});
-
-// Contact command
-bot.onText(/\/contact/, (msg) => {
-  const chatId = msg.chat.id;
-  
-  bot.sendMessage(chatId,
-    `📞 *Contact Support*\n\n` +
-    `• *Phone:* +234 800 123 4567\n` +
-    `• *Email:* support@abujashortlet.com\n` +
-    `• *WhatsApp:* wa.me/2348001234567\n\n` +
-    `• *Office Hours:* Mon-Fri 9am-6pm\n` +
-    `• *Emergency Support:* 24/7`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-// About command
-bot.onText(/\/about/, (msg) => {
-  const chatId = msg.chat.id;
-  
-  bot.sendMessage(chatId,
-    `🏠 *About Abuja Shortlet Apartments*\n\n` +
-    `We provide premium short-term apartment rentals in Abuja since 2020.\n\n` +
-    `*Why choose us?*\n` +
-    `✓ 500+ Verified Properties\n` +
-    `✓ Secure Online Booking\n` +
-    `✓ 24/7 Customer Support\n` +
-    `✓ Best Price Guarantee\n` +
-    `✓ Flexible Check-in/out\n\n` +
-    `*📍 Coverage Areas:*\n` +
-    `Wuse, Maitama, Asokoro, Jabi, Garki, and more...`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-// Help command
-bot.onText(/\/help/, (msg) => {
-  const chatId = msg.chat.id;
-  
-  bot.sendMessage(chatId,
-    `❓ *Available Commands*\n\n` +
-    `• /start - Main menu\n` +
-    `• /search - Find apartments\n` +
-    `• /bookings - View your bookings\n` +
-    `• /locations - Browse by area\n` +
-    `• /contact - Get support\n` +
-    `• /about - About us\n` +
-    `• /help - Show this help\n\n` +
-    `*Need assistance?*\n` +
-    `Contact support using /contact`,
-    { parse_mode: 'Markdown' }
-  );
-});
-
-// Handle regular messages (non-commands)
-bot.on('message', (msg) => {
-  const chatId = msg.chat.id;
-  const text = msg.text;
-  
-  // Ignore commands
-  if (text && text.startsWith('/')) return;
-  
-  // Check if message is about booking/search
-  const lowerText = text?.toLowerCase() || '';
-  
-  if (lowerText.includes('book') || lowerText.includes('apartment') || lowerText.includes('rent')) {
+  else if (data === 'help') {
     bot.sendMessage(chatId,
-      `I can help you find an apartment! 🏠\n\n` +
-      `Use /search to start your search, or tell me:\n` +
-      `• Location (e.g., Wuse, Maitama)\n` +
-      `• Number of guests\n` +
-      `• Check-in and check-out dates`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '🔍 Start Search', callback_data: 'search' }]
-          ]
-        }
-      }
-    );
-  } else {
-    // Generic response
-    bot.sendMessage(chatId,
-      `I received your message: "${text}"\n\n` +
-      `Type /help to see what I can do!`
+      `❓ *Help*\n\n` +
+      `/start - Main menu\n` +
+      `Search apartments by location\n` +
+      `Contact owner after booking\n` +
+      `Need more help? Contact support.`,
+      { parse_mode: 'Markdown' }
     );
   }
   
-  logger.info(`Message from ${chatId}: ${text}`);
-});
-
-// Error handlers
-bot.on('polling_error', (error) => {
-  logger.error('Polling error:', error);
-});
-
-bot.on('webhook_error', (error) => {
-  logger.error('Webhook error:', error);
-});
-
-bot.on('error', (error) => {
-  logger.error('Bot error:', error);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully...');
-  
-  // Stop bot polling
-  bot.stopPolling().then(() => {
-    logger.info('Bot polling stopped');
+  else if (data.startsWith('book_')) {
+    const aptId = data.split('_')[1];
     
-    // Close health server
-    server.close(() => {
-      logger.info('Health server closed');
-      process.exit(0);
-    });
-  }).catch((error) => {
-    logger.error('Error stopping bot:', error);
-    process.exit(1);
-  });
+    // Get apartment details
+    try {
+      const [apartments] = await pool.execute(
+        'SELECT * FROM apartments WHERE id = ?',
+        [aptId]
+      );
+      
+      if (apartments.length > 0) {
+        const apt = apartments[0];
+        
+        // Create booking
+        const bookingId = 'BK' + Date.now();
+        const [user] = await pool.execute(
+          'SELECT * FROM users WHERE telegram_id = ?',
+          [chatId.toString()]
+        );
+        
+        if (user.length > 0) {
+          await pool.execute(
+            `INSERT INTO bookings 
+            (id, user_id, user_name, user_phone, apartment_id, apartment_name, 
+             owner_id, owner_name, price, commission, status) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+            [
+              bookingId, chatId.toString(), user[0].name, user[0].phone,
+              apt.id, apt.title, apt.owner_id, apt.owner_name,
+              apt.price, apt.price * 0.1
+            ]
+          );
+          
+          bot.sendMessage(chatId,
+            `✅ *Booking Request Sent!*\n\n` +
+            `Apartment: ${apt.title}\n` +
+            `Booking ID: \`${bookingId}\`\n\n` +
+            `The owner will contact you soon.`,
+            { parse_mode: 'Markdown' }
+          );
+        }
+      }
+    } catch (error) {
+      logger.error('Booking error:', error);
+      bot.sendMessage(chatId, 'Booking failed. Try again.');
+    }
+  }
 });
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down...');
-  process.exit(0);
+// ==================== MESSAGE HANDLER ====================
+bot.on('message', async (msg) => {
+  const chatId = msg.chat.id;
+  const text = msg.text;
+  
+  // Skip commands
+  if (text.startsWith('/')) return;
+  
+  // If this is a reply to location question
+  if (msg.reply_to_message && msg.reply_to_message.text.includes('Enter location')) {
+    userSessions[chatId] = { location: text };
+    
+    bot.sendMessage(chatId,
+      `📅 *When do you want to check in?*\n\n` +
+      `Format: YYYY-MM-DD to YYYY-MM-DD\n` +
+      `Example: 2024-12-01 to 2024-12-05`,
+      {
+        parse_mode: 'Markdown',
+        reply_markup: { force_reply: true }
+      }
+    );
+  }
+  
+  // If this is a reply to dates
+  else if (msg.reply_to_message && msg.reply_to_message.text.includes('check in')) {
+    const dates = text.split(' to ');
+    if (dates.length === 2) {
+      userSessions[chatId].checkIn = dates[0];
+      userSessions[chatId].checkOut = dates[1];
+      
+      bot.sendMessage(chatId,
+        `👥 *How many guests?*`,
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '1 Guest', callback_data: 'guests_1' }],
+              [{ text: '2 Guests', callback_data: 'guests_2' }],
+              [{ text: '3 Guests', callback_data: 'guests_3' }],
+              [{ text: '4+ Guests', callback_data: 'guests_4' }]
+            ]
+          }
+        }
+      );
+    }
+  }
 });
 
-// Start message
-logger.info('🚀 Abuja Shortlet Apartment Bot is running!');
-logger.info(`📊 Health check available at http://localhost:${PORT}/health`);
+// Handle guest selection
+bot.on('callback_query', async (callbackQuery) => {
+  const data = callbackQuery.data;
+  const chatId = callbackQuery.message.chat.id;
+  
+  if (data.startsWith('guests_')) {
+    await bot.answerCallbackQuery(callbackQuery.id);
+    
+    const guests = data.replace('guests_', '');
+    const session = userSessions[chatId];
+    
+    if (session) {
+      // Search apartments
+      try {
+        const [apartments] = await pool.execute(
+          `SELECT * FROM apartments 
+           WHERE location LIKE ? AND max_guests >= ? AND is_active = 1 
+           LIMIT 5`,
+          [`%${session.location}%`, guests]
+        );
+        
+        if (apartments.length === 0) {
+          bot.sendMessage(chatId,
+            `No apartments found in ${session.location} for ${guests} guests.`,
+            {
+              reply_markup: {
+                inline_keyboard: [
+                  [{ text: '🔍 New Search', callback_data: 'search' }]
+                ]
+              }
+            }
+          );
+          return;
+        }
+        
+        let message = `🔍 *Search Results*\n\n`;
+        
+        for (const apt of apartments) {
+          message += `🏠 *${apt.title}*\n`;
+          message += `📍 ${apt.location}\n`;
+          message += `💰 ₦${apt.price}/night\n`;
+          message += `👥 Max ${apt.max_guests} guests\n`;
+          message += `[Book Now](/book_${apt.id})\n\n`;
+        }
+        
+        bot.sendMessage(chatId, message, {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🔍 New Search', callback_data: 'search' }]
+            ]
+          }
+        });
+        
+      } catch (error) {
+        logger.error('Search error:', error);
+        bot.sendMessage(chatId, 'Search failed. Try again.');
+      }
+    }
+  }
+});
+
+logger.info('🚀 Abuja Shortlet Bot is running');
