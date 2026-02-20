@@ -74,6 +74,21 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
     console.log(`\n📨 [DEBUG] Message received from chat ${chatId}:`, msg.text ? `"${msg.text}"` : '📸 Photo');
     
+    // TEMPORARY: Log ALL messages and state
+    console.log(`\n🚨 [INDEX DEBUG] Full message:`, {
+        chatId: msg.chat.id,
+        text: msg.text,
+        hasPhoto: !!msg.photo,
+        apartmentState: global.apartmentStates?.[msg.chat.id] ? {
+            step: global.apartmentStates[msg.chat.id].step,
+            data: {
+                ...global.apartmentStates[msg.chat.id].data,
+                images: global.apartmentStates[msg.chat.id].data.images ? 
+                    `${global.apartmentStates[msg.chat.id].data.images.length} photos` : 'none'
+            }
+        } : 'No state'
+    });
+    
     // ============================================
     // STEP 1: ALWAYS check if user is in apartment addition flow FIRST
     // ============================================
