@@ -60,7 +60,7 @@ logger.info('Bot started');
 // Temporary storage
 const userSessions = {};
 
-// Abuja locations list (UPDATED: Nyanya → Galadima)
+// Abuja locations list
 const ABUJA_LOCATIONS = [
   'Asokoro',
   'Maitama',
@@ -76,7 +76,7 @@ const ABUJA_LOCATIONS = [
   'Lokogoma',
   'Apo',
   'Lugbe',
-  'Galadima',  // Changed from Nyanya to Galadima
+  'Galadima',
   'Dutse'
 ];
 
@@ -94,7 +94,7 @@ bot.onText(/\/start/, async (msg) => {
     );
     
     if (users.length === 0) {
-      // Store user with placeholder phone (will update during booking)
+      // Store user with placeholder name and phone (will update during booking)
       await pool.execute(
         'INSERT INTO users (telegram_id, name, phone) VALUES (?, ?, ?)',
         [userId, name, 'pending']
@@ -108,7 +108,7 @@ bot.onText(/\/start/, async (msg) => {
       );
     }
     
-    // Show main menu immediately - no phone request!
+    // Show main menu immediately
     showMainMenu(chatId, name);
     
   } catch (error) {
@@ -117,7 +117,7 @@ bot.onText(/\/start/, async (msg) => {
   }
 });
 
-// Main menu (UPDATED: Changed "Browse by Location" to "Browse By Budget")
+// Main menu
 function showMainMenu(chatId, name) {
   bot.sendMessage(chatId,
     `🏠 *Main Menu*\n\n` +
@@ -128,7 +128,7 @@ function showMainMenu(chatId, name) {
       reply_markup: {
         inline_keyboard: [
           [{ text: '🔍 Search Apartments', callback_data: 'search' }],
-          [{ text: '💰 Browse By Budget', callback_data: 'budget' }],  // CHANGED HERE
+          [{ text: '💰 Browse By Budget', callback_data: 'budget' }],
           [{ text: '📅 My Bookings', callback_data: 'my_bookings' }],
           [{ text: '❓ Help', callback_data: 'help' }]
         ]
@@ -175,7 +175,7 @@ bot.on('callback_query', async (callbackQuery) => {
     );
   }
   
-  // ========== NEW BUDGET HANDLER ==========
+  // ========== BUDGET HANDLER (placeholder) ==========
   else if (data === 'budget') {
     bot.sendMessage(chatId,
       `💰 *Browse By Budget*\n\n` +
@@ -198,7 +198,7 @@ bot.on('callback_query', async (callbackQuery) => {
       `❓ *Help*\n\n` +
       `/start - Main menu\n` +
       `🔍 Search Apartments - Find by location\n` +
-      `💰 Browse By Budget - Coming soon\n` +  // UPDATED HERE
+      `💰 Browse By Budget - Coming soon\n` +
       `📅 My Bookings - View your bookings\n\n` +
       `Need more help? Contact support.`,
       { 
@@ -242,20 +242,21 @@ bot.on('callback_query', async (callbackQuery) => {
       );
     }
     
-    // Store location in session
+    // Store location in session and ask for guests
     userSessions[chatId] = { location: location };
     
-    // Ask for dates
+    // Ask for number of guests (BUTTONS)
     bot.sendMessage(chatId,
-      `📅 *When do you want to check in?*\n\n` +
-      `Format: YYYY-MM-DD to YYYY-MM-DD\n` +
-      `Example: 2024-12-01 to 2024-12-05\n\n` +
+      `👥 *How many guests?*\n\n` +
       `*Selected Location:* ${location}`,
       {
         parse_mode: 'Markdown',
-        reply_markup: { 
-          force_reply: true,
+        reply_markup: {
           inline_keyboard: [
+            [{ text: '1 Guest', callback_data: `guests_1_${location}` }],
+            [{ text: '2 Guests', callback_data: `guests_2_${location}` }],
+            [{ text: '3 Guests', callback_data: `guests_3_${location}` }],
+            [{ text: '4+ Guests', callback_data: `guests_4_${location}` }],
             [{ text: '🔙 Change Location', callback_data: 'search' }]
           ]
         }
@@ -263,51 +264,57 @@ bot.on('callback_query', async (callbackQuery) => {
     );
   }
   
-  // ========== MY BOOKINGS FEATURE ==========
-  else if (data === 'my_bookings') {
+  // ========== GUEST SELECTION HANDLER ==========
+  else if (data.startsWith('guests_')) {
+    const parts = data.split('_');
+    const guests = parts[1];
+    const location = parts.slice(2).join('_'); // Rejoin in case location has spaces
+    
+    // Store guests in session
+    userSessions[chatId] = { 
+      location: location,
+      guests: guests 
+    };
+    
+    // Search apartments
     try {
-      const [bookings] = await pool.execute(
-        `SELECT * FROM bookings 
-         WHERE user_id = ? 
-         ORDER BY created_at DESC 
+      const [apartments] = await pool.execute(
+        `SELECT * FROM apartments 
+         WHERE location LIKE ? AND max_guests >= ? AND is_active = 1 
          LIMIT 5`,
-        [chatId.toString()]
+        [`%${location}%`, guests]
       );
       
-      if (bookings.length === 0) {
-        return bot.sendMessage(chatId, 
-          'You have no bookings yet.',
+      if (apartments.length === 0) {
+        bot.sendMessage(chatId,
+          `No apartments found in ${location} for ${guests} guests.`,
           {
             reply_markup: {
               inline_keyboard: [
-                [{ text: '🔍 Search Apartments', callback_data: 'search' }],
+                [{ text: '🔍 New Search', callback_data: 'search' }],
                 [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
               ]
             }
           }
         );
+        return;
       }
       
-      let message = '*Your Recent Bookings:*\n\n';
-      bookings.forEach(b => {
-        const statusEmoji = {
-          'pending': '⏳',
-          'confirmed': '✅',
-          'rejected': '❌',
-          'cancelled': '⚠️'
-        }[b.status] || '📅';
-        
-        message += `${statusEmoji} *${b.apartment_name}*\n`;
-        message += `ID: \`${b.id}\`\n`;
-        message += `Status: ${b.status}\n`;
-        message += `Price: ₦${b.price}\n`;
-        message += `Date: ${new Date(b.created_at).toLocaleDateString()}\n\n`;
-      });
+      let message = `🔍 *Search Results in ${location}*\n\n`;
       
-      bot.sendMessage(chatId, message, { 
+      for (const apt of apartments) {
+        message += `🏠 *${apt.title}*\n`;
+        message += `📍 ${apt.location}\n`;
+        message += `💰 ₦${apt.price}/night\n`;
+        message += `👥 Max ${apt.max_guests} guests\n`;
+        message += `[Book Now](/book_${apt.id})\n\n`;
+      }
+      
+      bot.sendMessage(chatId, message, {
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [
+            [{ text: '📅 Book Now', callback_data: `book_${apartments[0].id}` }],
             [{ text: '🔍 New Search', callback_data: 'search' }],
             [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
           ]
@@ -315,65 +322,8 @@ bot.on('callback_query', async (callbackQuery) => {
       });
       
     } catch (error) {
-      logger.error('My bookings error:', error);
-      bot.sendMessage(chatId, 'Error fetching your bookings');
-    }
-  }
-  
-  // ========== GUEST SELECTION HANDLER ==========
-  else if (data.startsWith('guests_')) {
-    const guests = data.replace('guests_', '');
-    const session = userSessions[chatId];
-    
-    if (session) {
-      // Search apartments
-      try {
-        const [apartments] = await pool.execute(
-          `SELECT * FROM apartments 
-           WHERE location LIKE ? AND max_guests >= ? AND is_active = 1 
-           LIMIT 5`,
-          [`%${session.location}%`, guests]
-        );
-        
-        if (apartments.length === 0) {
-          bot.sendMessage(chatId,
-            `No apartments found in ${session.location} for ${guests} guests.`,
-            {
-              reply_markup: {
-                inline_keyboard: [
-                  [{ text: '🔍 New Search', callback_data: 'search' }],
-                  [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
-                ]
-              }
-            }
-          );
-          return;
-        }
-        
-        let message = `🔍 *Search Results in ${session.location}*\n\n`;
-        
-        for (const apt of apartments) {
-          message += `🏠 *${apt.title}*\n`;
-          message += `📍 ${apt.location}\n`;
-          message += `💰 ₦${apt.price}/night\n`;
-          message += `👥 Max ${apt.max_guests} guests\n`;
-          message += `[Book Now](/book_${apt.id})\n\n`;
-        }
-        
-        bot.sendMessage(chatId, message, {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🔍 New Search', callback_data: 'search' }],
-              [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
-            ]
-          }
-        });
-        
-      } catch (error) {
-        logger.error('Search error:', error);
-        bot.sendMessage(chatId, 'Search failed. Try again.');
-      }
+      logger.error('Search error:', error);
+      bot.sendMessage(chatId, 'Search failed. Try again.');
     }
   }
   
@@ -390,6 +340,12 @@ bot.on('callback_query', async (callbackQuery) => {
       if (apartments.length > 0) {
         const apt = apartments[0];
         
+        // Store apartment in session for booking
+        userSessions[chatId] = {
+          ...userSessions[chatId],
+          pendingBooking: apt
+        };
+        
         // Get user details
         const [user] = await pool.execute(
           'SELECT * FROM users WHERE telegram_id = ?',
@@ -400,14 +356,27 @@ bot.on('callback_query', async (callbackQuery) => {
           return bot.sendMessage(chatId, 'Please /start first to register');
         }
         
+        // Check if user needs to provide name
+        if (!user[0].name || user[0].name === 'User' || user[0].name === 'pending') {
+          userSessions[chatId].awaitingName = true;
+          return bot.sendMessage(chatId,
+            `📝 *One more step*\n\n` +
+            `Please enter your full name for the booking:`,
+            {
+              parse_mode: 'Markdown',
+              reply_markup: { 
+                force_reply: true,
+                inline_keyboard: [
+                  [{ text: '🔙 Cancel', callback_data: 'search' }]
+                ]
+              }
+            }
+          );
+        }
+        
         // Check if user needs to provide phone number
         if (user[0].phone === 'pending') {
-          // Store booking details in session and ask for phone
-          userSessions[chatId] = {
-            pendingBooking: apt,
-            awaitingPhone: true
-          };
-          
+          userSessions[chatId].awaitingPhone = true;
           return bot.sendMessage(chatId,
             `📱 *One more step*\n\n` +
             `Please enter your phone number so the owner can contact you:`,
@@ -423,8 +392,8 @@ bot.on('callback_query', async (callbackQuery) => {
           );
         }
         
-        // User already has phone, proceed with booking
-        await processBooking(chatId, user[0], apt);
+        // If we have name and phone, ask for dates
+        askForDates(chatId, apt);
       }
     } catch (error) {
       logger.error('Booking error:', error);
@@ -584,7 +553,85 @@ bot.on('callback_query', async (callbackQuery) => {
       bot.sendMessage(chatId, 'Error rejecting booking. Please try again.');
     }
   }
+  
+  // ========== MY BOOKINGS FEATURE ==========
+  else if (data === 'my_bookings') {
+    try {
+      const [bookings] = await pool.execute(
+        `SELECT * FROM bookings 
+         WHERE user_id = ? 
+         ORDER BY created_at DESC 
+         LIMIT 5`,
+        [chatId.toString()]
+      );
+      
+      if (bookings.length === 0) {
+        return bot.sendMessage(chatId, 
+          'You have no bookings yet.',
+          {
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🔍 Search Apartments', callback_data: 'search' }],
+                [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+              ]
+            }
+          }
+        );
+      }
+      
+      let message = '*Your Recent Bookings:*\n\n';
+      bookings.forEach(b => {
+        const statusEmoji = {
+          'pending': '⏳',
+          'confirmed': '✅',
+          'rejected': '❌',
+          'cancelled': '⚠️'
+        }[b.status] || '📅';
+        
+        message += `${statusEmoji} *${b.apartment_name}*\n`;
+        message += `ID: \`${b.id}\`\n`;
+        message += `Status: ${b.status}\n`;
+        message += `Price: ₦${b.price}\n`;
+        message += `Date: ${new Date(b.created_at).toLocaleDateString()}\n\n`;
+      });
+      
+      bot.sendMessage(chatId, message, { 
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🔍 New Search', callback_data: 'search' }],
+            [{ text: '🔙 Back to Menu', callback_data: 'back_to_menu' }]
+          ]
+        }
+      });
+      
+    } catch (error) {
+      logger.error('My bookings error:', error);
+      bot.sendMessage(chatId, 'Error fetching your bookings');
+    }
+  }
 });
+
+// ==================== HELPER FUNCTION TO ASK FOR DATES ====================
+function askForDates(chatId, apt) {
+  bot.sendMessage(chatId,
+    `📅 *When do you want to check in?*\n\n` +
+    `*Apartment:* ${apt.title}\n` +
+    `*Price:* ₦${apt.price}/night\n\n` +
+    `Please enter dates in this format:\n` +
+    `\`YYYY-MM-DD to YYYY-MM-DD\`\n\n` +
+    `Example: \`2024-12-01 to 2024-12-05\``,
+    {
+      parse_mode: 'Markdown',
+      reply_markup: { 
+        force_reply: true,
+        inline_keyboard: [
+          [{ text: '🔙 Cancel', callback_data: 'search' }]
+        ]
+      }
+    }
+  );
+}
 
 // ==================== MESSAGE HANDLER ====================
 bot.on('message', async (msg) => {
@@ -594,12 +641,75 @@ bot.on('message', async (msg) => {
   // Skip commands
   if (!text || text.startsWith('/')) return;
   
+  // Check if we're awaiting name
+  if (userSessions[chatId] && userSessions[chatId].awaitingName) {
+    const name = text.trim();
+    const apt = userSessions[chatId].pendingBooking;
+    
+    if (name.length < 2) {
+      return bot.sendMessage(chatId,
+        `❌ Please enter a valid name (at least 2 characters):`,
+        { 
+          reply_markup: { 
+            force_reply: true,
+            inline_keyboard: [
+              [{ text: '🔙 Cancel', callback_data: 'search' }]
+            ]
+          } 
+        }
+      );
+    }
+    
+    try {
+      // Update user's name in database
+      await pool.execute(
+        'UPDATE users SET name = ? WHERE telegram_id = ?',
+        [name, chatId.toString()]
+      );
+      
+      // Clear name flag
+      delete userSessions[chatId].awaitingName;
+      
+      // Check if we need phone too
+      const [user] = await pool.execute(
+        'SELECT * FROM users WHERE telegram_id = ?',
+        [chatId.toString()]
+      );
+      
+      if (user[0].phone === 'pending') {
+        userSessions[chatId].awaitingPhone = true;
+        return bot.sendMessage(chatId,
+          `📱 *One more step*\n\n` +
+          `Please enter your phone number so the owner can contact you:`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: { 
+              force_reply: true,
+              inline_keyboard: [
+                [{ text: '🔙 Cancel', callback_data: 'search' }]
+              ]
+            }
+          }
+        );
+      }
+      
+      // If we have phone, ask for dates
+      askForDates(chatId, apt);
+      
+    } catch (error) {
+      logger.error('Name update error:', error);
+      bot.sendMessage(chatId, 'Error saving name. Please try again.');
+    }
+    
+    return;
+  }
+  
   // Check if we're awaiting phone number for a booking
   if (userSessions[chatId] && userSessions[chatId].awaitingPhone) {
     const phone = text.trim();
     const apt = userSessions[chatId].pendingBooking;
     
-    // Basic phone validation (you can make this stricter)
+    // Basic phone validation
     if (phone.length < 10) {
       return bot.sendMessage(chatId,
         `❌ Please enter a valid phone number (at least 10 digits):`,
@@ -621,17 +731,11 @@ bot.on('message', async (msg) => {
         [phone, chatId.toString()]
       );
       
-      // Get updated user info
-      const [user] = await pool.execute(
-        'SELECT * FROM users WHERE telegram_id = ?',
-        [chatId.toString()]
-      );
+      // Clear phone flag
+      delete userSessions[chatId].awaitingPhone;
       
-      // Clear session
-      delete userSessions[chatId];
-      
-      // Process the booking
-      await processBooking(chatId, user[0], apt);
+      // Ask for dates
+      askForDates(chatId, apt);
       
     } catch (error) {
       logger.error('Phone update error:', error);
@@ -641,69 +745,74 @@ bot.on('message', async (msg) => {
     return;
   }
   
+  // Check if we're awaiting dates for booking
+  if (userSessions[chatId] && userSessions[chatId].pendingBooking) {
+    const apt = userSessions[chatId].pendingBooking;
+    const dates = text.split(' to ');
+    
+    if (dates.length === 2) {
+      const checkIn = dates[0].trim();
+      const checkOut = dates[1].trim();
+      
+      // Basic date validation (you can make this stricter)
+      if (checkIn.length === 10 && checkOut.length === 10) {
+        
+        // Get updated user info
+        const [user] = await pool.execute(
+          'SELECT * FROM users WHERE telegram_id = ?',
+          [chatId.toString()]
+        );
+        
+        // Process the booking
+        await processBooking(chatId, user[0], apt, checkIn, checkOut);
+        return;
+      }
+    }
+    
+    // Invalid date format
+    bot.sendMessage(chatId,
+      `❌ Invalid date format.\n\n` +
+      `Please use: YYYY-MM-DD to YYYY-MM-DD\n` +
+      `Example: 2024-12-01 to 2024-12-05`,
+      { 
+        reply_markup: { 
+          force_reply: true,
+          inline_keyboard: [
+            [{ text: '🔙 Cancel', callback_data: 'search' }]
+          ]
+        } 
+      }
+    );
+    return;
+  }
+  
   // If this is a reply to "Other" location question
   if (msg.reply_to_message && msg.reply_to_message.text && 
       msg.reply_to_message.text.includes('Enter Location')) {
     userSessions[chatId] = { location: text };
     
+    // Ask for number of guests (BUTTONS)
     bot.sendMessage(chatId,
-      `📅 *When do you want to check in?*\n\n` +
-      `Format: YYYY-MM-DD to YYYY-MM-DD\n` +
-      `Example: 2024-12-01 to 2024-12-05\n\n` +
+      `👥 *How many guests?*\n\n` +
       `*Selected Location:* ${text}`,
       {
         parse_mode: 'Markdown',
-        reply_markup: { 
-          force_reply: true,
+        reply_markup: {
           inline_keyboard: [
+            [{ text: '1 Guest', callback_data: `guests_1_${text}` }],
+            [{ text: '2 Guests', callback_data: `guests_2_${text}` }],
+            [{ text: '3 Guests', callback_data: `guests_3_${text}` }],
+            [{ text: '4+ Guests', callback_data: `guests_4_${text}` }],
             [{ text: '🔙 Change Location', callback_data: 'search' }]
           ]
         }
       }
     );
   }
-  
-  // If this is a reply to dates
-  else if (msg.reply_to_message && msg.reply_to_message.text && 
-           msg.reply_to_message.text.includes('check in')) {
-    const dates = text.split(' to ');
-    if (dates.length === 2) {
-      if (!userSessions[chatId]) userSessions[chatId] = {};
-      userSessions[chatId].checkIn = dates[0];
-      userSessions[chatId].checkOut = dates[1];
-      
-      bot.sendMessage(chatId,
-        `👥 *How many guests?*`,
-        {
-          parse_mode: 'Markdown',
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '1 Guest', callback_data: 'guests_1' }],
-              [{ text: '2 Guests', callback_data: 'guests_2' }],
-              [{ text: '3 Guests', callback_data: 'guests_3' }],
-              [{ text: '4+ Guests', callback_data: 'guests_4' }],
-              [{ text: '🔙 Change Location', callback_data: 'search' }]
-            ]
-          }
-        }
-      );
-    } else {
-      bot.sendMessage(chatId, 
-        'Please use the correct format: YYYY-MM-DD to YYYY-MM-DD',
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🔙 Try Again', callback_data: 'search' }]
-            ]
-          }
-        }
-      );
-    }
-  }
 });
 
 // ==================== HELPER FUNCTION TO PROCESS BOOKING ====================
-async function processBooking(chatId, user, apt) {
+async function processBooking(chatId, user, apt, checkIn, checkOut) {
   try {
     const bookingId = 'BK' + Date.now();
     const commission = apt.price * 0.1;
@@ -719,6 +828,9 @@ async function processBooking(chatId, user, apt) {
         apt.price, commission
       ]
     );
+    
+    // Clear session
+    delete userSessions[chatId];
     
     // Owner notification
     const ownerButtons = {
@@ -737,7 +849,9 @@ async function processBooking(chatId, user, apt) {
       `*Apartment:* ${apt.title}\n` +
       `*Guest:* ${user.name}\n` +
       `*Phone:* ${user.phone}\n` +
-      `*Price:* ₦${apt.price}\n` +
+      `*Check-in:* ${checkIn}\n` +
+      `*Check-out:* ${checkOut}\n` +
+      `*Price:* ₦${apt.price}/night\n` +
       `*Your Commission:* ₦${commission}\n\n` +
       `Please confirm once payment is received:`,
       {
@@ -754,7 +868,9 @@ async function processBooking(chatId, user, apt) {
       `*Apartment:* ${apt.title}\n` +
       `*Guest:* ${user.name} (${user.phone})\n` +
       `*Owner:* ${apt.owner_name}\n` +
-      `*Price:* ₦${apt.price}\n` +
+      `*Check-in:* ${checkIn}\n` +
+      `*Check-out:* ${checkOut}\n` +
+      `*Price:* ₦${apt.price}/night\n` +
       `*Commission:* ₦${commission}`,
       { parse_mode: 'Markdown' }
     );
@@ -764,7 +880,9 @@ async function processBooking(chatId, user, apt) {
       `✅ *Booking Request Sent!*\n\n` +
       `*Apartment:* ${apt.title}\n` +
       `*Booking ID:* \`${bookingId}\`\n` +
-      `*Price:* ₦${apt.price}\n\n` +
+      `*Check-in:* ${checkIn}\n` +
+      `*Check-out:* ${checkOut}\n` +
+      `*Price:* ₦${apt.price}/night\n\n` +
       `The owner will review your request. You'll be notified once they respond.`,
       { 
         parse_mode: 'Markdown',
@@ -788,4 +906,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running with Galadima and Browse By Budget');
+logger.info('🚀 Abuja Shortlet Bot is running with new flow: Location → Guests → Results → Book → Name/Phone → Dates');
