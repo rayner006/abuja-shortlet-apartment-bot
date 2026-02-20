@@ -357,7 +357,7 @@ bot.on('callback_query', async (callbackQuery) => {
         { parse_mode: 'Markdown' }
       );
       
-      // Send each apartment as its own card with individual BOOK NOW button
+      // Send each apartment as its own card with individual Book Now button
       for (let i = 0; i < apartments.length; i++) {
         const apt = apartments[i];
         const formattedPrice = new Intl.NumberFormat('en-NG').format(apt.price);
@@ -372,7 +372,7 @@ bot.on('callback_query', async (callbackQuery) => {
             parse_mode: 'Markdown',
             reply_markup: {
               inline_keyboard: [
-                [{ text: '📅 BOOK NOW', callback_data: `book_${apt.id}` }]
+                [{ text: '📅 Book Now', callback_data: `book_${apt.id}` }]
               ]
             }
           }
@@ -947,4 +947,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running - Each apartment has its own message with BOOK NOW button!');
+logger.info('🚀 Abuja Shortlet Bot is running - Each apartment has its own message with Book Now button!');
