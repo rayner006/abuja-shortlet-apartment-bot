@@ -1155,6 +1155,7 @@ Please enter the apartment title:
                 case 'title':
                     data.title = text;
                     state.step = 'location';
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
                     await this.bot.sendMessage(chatId, 
                         `📍 *Location*\n\nWhich area/neighborhood? (e.g., Kubwa, Asokoro, Maitama)\n\nThis is what users will click in the filter menu.`,
                         { parse_mode: 'Markdown' }
@@ -1164,6 +1165,7 @@ Please enter the apartment title:
                 case 'location':
                     data.location = text;
                     state.step = 'address';
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
                     await this.bot.sendMessage(chatId,
                         `📍 *Address*\n\nWhat is the full street address?\n(e.g., 12 Bobo Street, Off Udi Hill, Asokoro)`,
                         { parse_mode: 'Markdown' }
@@ -1173,6 +1175,7 @@ Please enter the apartment title:
                 case 'address':
                     data.address = text;
                     state.step = 'price';
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
                     await this.bot.sendMessage(chatId,
                         `💰 *Price*\n\nWhat is the price per night? (in Naira)`,
                         { parse_mode: 'Markdown' }
@@ -1190,6 +1193,7 @@ Please enter the apartment title:
                     }
                     data.pricePerNight = price;
                     state.step = 'bedrooms';
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
                     await this.bot.sendMessage(chatId,
                         `🛏️ *Bedrooms*\n\nHow many bedrooms? (0 for studio)`,
                         { parse_mode: 'Markdown' }
@@ -1207,6 +1211,7 @@ Please enter the apartment title:
                     }
                     data.bedrooms = bedrooms;
                     state.step = 'bathrooms';
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
                     await this.bot.sendMessage(chatId,
                         `🚿 *Bathrooms*\n\nHow many bathrooms?`,
                         { parse_mode: 'Markdown' }
@@ -1224,6 +1229,7 @@ Please enter the apartment title:
                     }
                     data.bathrooms = bathrooms;
                     state.step = 'maxGuests';
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
                     await this.bot.sendMessage(chatId,
                         `👥 *Max Guests*\n\nMaximum number of guests?`,
                         { parse_mode: 'Markdown' }
@@ -1241,6 +1247,7 @@ Please enter the apartment title:
                     }
                     data.maxGuests = maxGuests;
                     state.step = 'description';
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
                     await this.bot.sendMessage(chatId,
                         `📝 *Description*\n\nPlease enter a description of the apartment:`,
                         { parse_mode: 'Markdown' }
@@ -1250,6 +1257,7 @@ Please enter the apartment title:
                 case 'description':
                     data.description = text;
                     state.step = 'amenities';
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE
                     await this.bot.sendMessage(chatId,
                         `✨ *Amenities*\n\n` +
                         `List the amenities (comma separated):\n` +
@@ -1263,6 +1271,7 @@ Please enter the apartment title:
                     data.amenities = text.split(',').map(item => item.trim()).filter(item => item.length > 0);
                     state.step = 'photos';
                     data.images = data.images || []; // Ensure images array exists
+                    global.apartmentStates[chatId] = state; // 👈 SAVE STATE - THIS WAS MISSING!
                     await this.bot.sendMessage(chatId,
                         `📸 *Photos*\n\n` +
                         `Please send photos of the apartment.\n\n` +
