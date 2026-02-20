@@ -1136,13 +1136,20 @@ Please enter the apartment title:
         }
     }
 
-    // Handle messages for adding apartment - FIXED with Location then Address
+    // Handle messages for adding apartment - FIXED PHOTO HANDLING
     async handleAddApartmentMessage(chatId, text) {
         try {
             const state = global.apartmentStates?.[chatId];
             if (!state) return false;
             
             const data = state.data;
+            
+            // IMPORTANT: If step is 'photos' and this is called with a photo message (text is undefined/null),
+            // the photo is already handled in index.js, so we just return true
+            if (state.step === 'photos' && !text) {
+                console.log('📸 [DEBUG] Photo message received, already handled in index.js');
+                return true;
+            }
             
             switch(state.step) {
                 case 'title':
@@ -1255,7 +1262,7 @@ Please enter the apartment title:
                     // Convert comma-separated string to array
                     data.amenities = text.split(',').map(item => item.trim()).filter(item => item.length > 0);
                     state.step = 'photos';
-                    data.images = []; // Initialize empty images array
+                    data.images = data.images || []; // Ensure images array exists
                     await this.bot.sendMessage(chatId,
                         `📸 *Photos*\n\n` +
                         `Please send photos of the apartment.\n\n` +
@@ -1268,7 +1275,21 @@ Please enter the apartment title:
                     break;
                     
                 case 'photos':
-                    if (text.toLowerCase() === 'done') {
+                    // When user types "done", create the apartment
+                    if (text && text.toLowerCase() === 'done') {
+                        // Check if any photos were uploaded
+                        if (!data.images || data.images.length === 0) {
+                            await this.bot.sendMessage(chatId,
+                                `❌ *No Photos Uploaded*\n\n` +
+                                `Please send at least one photo before typing "done".\n\n` +
+                                `Use the 📎 attachment button to send photos.`,
+                                { parse_mode: 'Markdown' }
+                            );
+                            return true;
+                        }
+                        
+                        console.log('✅ [DEBUG] Creating apartment with photos:', data.images.length);
+                        
                         // Create the apartment with ALL database fields
                         const apartment = await Apartment.create({
                             // Core fields from your flow
@@ -1282,7 +1303,7 @@ Please enter the apartment title:
                             bathrooms: data.bathrooms,
                             maxGuests: data.maxGuests,
                             amenities: data.amenities || [],
-                            images: data.images || [],
+                            images: data.images || [], // Photos from index.js
                             
                             // ✅ ADDED: Missing database fields
                             isApproved: true,
@@ -1317,10 +1338,12 @@ Please enter the apartment title:
                                 }
                             }
                         );
-                    } else {
+                    } else if (text) {
+                        // If user sends any text other than "done" during photos step
                         await this.bot.sendMessage(chatId,
-                            `❌ Please type *done* when you've finished sending photos.\n\n` +
-                            `To add photos, use the 📎 attachment button.`,
+                            `📸 *Photo Upload*\n\n` +
+                            `Please send photos using the 📎 attachment button.\n` +
+                            `Type *done* when you've finished uploading.`,
                             { parse_mode: 'Markdown' }
                         );
                     }
