@@ -302,7 +302,7 @@ bot.on('callback_query', async (callbackQuery) => {
     );
   }
   
-  // ========== APARTMENT TYPE HANDLER - PROFESSIONAL CARD LAYOUT ==========
+  // ========== APARTMENT TYPE HANDLER - CLEAN CARD LAYOUT ==========
   else if (data.startsWith('type_')) {
     const parts = data.split('_');
     const aptType = parts[1];
@@ -350,7 +350,7 @@ bot.on('callback_query', async (callbackQuery) => {
         return;
       }
       
-      // Build message with professional card layout
+      // Build message with clean card layout
       let message = `🔍 *${aptType} Results in ${location}*\n\n`;
       
       // Create keyboard rows array
@@ -363,24 +363,24 @@ bot.on('callback_query', async (callbackQuery) => {
         // Format price with commas
         const formattedPrice = new Intl.NumberFormat('en-NG').format(apt.price);
         
-        // Create a card for each apartment with emoji indicators
-        message += `┌─────────────────────────────────┐\n`;
-        message += `│ 🏠 *${apt.title}*\n`;
-        message += `│ 📍 ${apt.location}\n`;
-        message += `│ 💰 *₦${formattedPrice}* /night\n`;
-        message += `│ 👥 Max ${apt.max_guests} guests\n`;
-        message += `│                                 │\n`;
-        message += `│        📱 Contact owner         │\n`;
-        message += `│         upon booking            │\n`;
-        message += `└─────────────────────────────────┘\n\n`;
+        // Add apartment details - each apartment as its own card
+        message += `🏠 *${apt.title}*\n`;
+        message += `📍 ${apt.location}\n`;
+        message += `💰 ₦${formattedPrice}/night\n`;
+        message += `👥 Max ${apt.max_guests} guests\n\n`;
         
-        // Add Book Now button for THIS apartment
+        // Add Book Now button for THIS apartment - right under its details
         keyboardRows.push([
-          { text: `📅 BOOK NOW - ${apt.title.substring(0, 20)}`, callback_data: `book_${apt.id}` }
+          { text: `📅 BOOK NOW`, callback_data: `book_${apt.id}` }
         ]);
+        
+        // Add a blank line separator between apartments (not after the last one)
+        if (i < apartments.length - 1) {
+          message += `\n`;
+        }
       }
       
-      // Add navigation buttons in rows
+      // Add navigation buttons at the bottom
       keyboardRows.push([
         { text: '🔄 Different Type', callback_data: `guests_${guests}_${location}` },
         { text: '🔍 New Search', callback_data: 'search' }
@@ -950,4 +950,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running - Professional card layout for each apartment!');
+logger.info('🚀 Abuja Shortlet Bot is running - Each apartment has its own card with button directly under it!');
