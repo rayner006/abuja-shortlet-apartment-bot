@@ -946,23 +946,23 @@ async function processBooking(chatId, user, apt, checkIn, checkOut) {
       ]
     };
 
-    await bot.sendMessage(
-      apt.owner_id,
-      `🏠 *New Booking Request!*\n\n` +
-      `*Booking ID:* \`${bookingId}\`\n` +
-      `*Apartment:* ${apt.title}\n` +
-      `*Guest:* ${user.name}\n` +
-      `*Phone:* ${user.phone}\n` +
-      `*Check-in:* ${checkIn}\n` +
-      `*Check-out:* ${checkOut}\n` +
-      `*Price:* ₦${apt.price}/night\n` +
-      `*Your Commission:* ₦${commission}\n\n` +
-      `Please confirm once payment is received:`,
-      {
-        parse_mode: 'Markdown',
-        reply_markup: ownerButtons
-      }
-    );
+   // Get username (handle case where no username exists)
+const username = user.username ? `@${user.username}` : 'No username';
+
+await bot.sendMessage(
+  ADMIN_ID,
+  `👑 *ADMIN NOTIFICATION*\n\n` +
+  `*New Booking:* \`${bookingId}\`\n` +
+  `*Apartment:* ${apt.title}\n` +
+  `*Guest:* ${user.name} (${user.phone})\n` +
+  `*Telegram:* ${username}\n` +  // ← NEW LINE
+  `*Owner:* ${apt.owner_name}\n` +
+  `*Check-in:* ${checkIn}\n` +
+  `*Check-out:* ${checkOut}\n` +
+  `*Price:* ₦${apt.price}/night\n` +
+  `*Commission:* ₦${commission}`,
+  { parse_mode: 'Markdown' }
+);
 
     await bot.sendMessage(
       ADMIN_ID,
