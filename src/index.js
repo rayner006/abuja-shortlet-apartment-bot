@@ -56,22 +56,7 @@ if (!ADMIN_ID) {
 
 const bot = new TelegramBot(token, { polling: true });
 logger.info('Bot started');
-// Add this near your other command handlers
-bot.onText(/\/debug/, async (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  
-  let response = "🔍 *DEBUG INFO*\n\n";
-  response += `This Chat ID: \`${chatId}\`\n`;
-  response += `Your User ID: \`${userId}\`\n`;
-  response += `ADMIN_ID env: \`${ADMIN_ID}\`\n`;
-  response += `Are they equal? ${chatId.toString() === ADMIN_ID.toString() ? '✅ YES' : '❌ NO'}\n\n`;
-  
-  response += `Bot status: You received this message, so bot CAN message you here.\n`;
-  response += `But ADMIN_ID ${ADMIN_ID} might be different from this chat!`;
-  
-  await bot.sendMessage(chatId, response, { parse_mode: 'Markdown' });
-});
+
 // Temporary storage
 const userSessions = {};
 // Track date attempts
