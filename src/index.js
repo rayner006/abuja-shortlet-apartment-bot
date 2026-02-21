@@ -119,7 +119,7 @@ bot.onText(/\/start/, async (msg) => {
   }
 });
 
-// Main menu
+// Main menu - simplified to show essential options
 function showMainMenu(chatId, name) {
   bot.sendMessage(chatId,
     `🏠 *Main Menu*\n\n` +
@@ -130,7 +130,6 @@ function showMainMenu(chatId, name) {
       reply_markup: {
         inline_keyboard: [
           [{ text: '🔍 Search Apartments', callback_data: 'search' }],
-          [{ text: '💰 Browse By Budget', callback_data: 'budget' }],
           [{ text: '📅 My Bookings', callback_data: 'my_bookings' }],
           [{ text: '❓ Help', callback_data: 'help' }]
         ]
