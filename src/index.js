@@ -826,30 +826,30 @@ bot.on('message', async (msg) => {
     const dates = text.trim().split(/\s+to\s+/i);
 
     if (
-  dates.length === 2 &&
-  /^\d{4}-\d{2}-\d{2}$/.test(dates[0]) &&
-  /^\d{4}-\d{2}-\d{2}$/.test(dates[1])
-) {
-  const checkIn = dates[0];
-  const checkOut = dates[1];
+      dates.length === 2 &&
+      /^\d{4}-\d{2}-\d{2}$/.test(dates[0]) &&
+      /^\d{4}-\d{2}-\d{2}$/.test(dates[1])
+    ) {
+      const checkIn = dates[0];
+      const checkOut = dates[1];
 
-  // Reset attempts
-  delete dateAttempts[chatId];
+      // Reset attempts
+      delete dateAttempts[chatId];
 
-  const [user] = await pool.execute(
-    'SELECT * FROM users WHERE telegram_id = ?',
-    [chatId.toString()]
-  );
-  
-  // Add username from msg
-  const userData = {
-    ...user[0],
-    username: msg.from.username  // ← ADD THIS LINE
-  };
+      const [user] = await pool.execute(
+        'SELECT * FROM users WHERE telegram_id = ?',
+        [chatId.toString()]
+      );
+      
+      // Add username from msg
+      const userData = {
+        ...user[0],
+        username: msg.from.username
+      };
 
-  await processBooking(chatId, userData, apt, checkIn, checkOut);
-  return;
-}
+      await processBooking(chatId, userData, apt, checkIn, checkOut);
+      return;
+    }
 
     // Invalid format
     dateAttempts[chatId]++;
@@ -937,48 +937,69 @@ async function processBooking(chatId, user, apt, checkIn, checkOut) {
     
     delete userSessions[chatId];
     
-    const ownerButtons = {
-      inline_keyboard: [
-        [
-          { text: '✅ Confirm Payment', callback_data: `owner_confirm_${bookingId}` },
-          { text: '❌ Reject', callback_data: `owner_reject_${bookingId}` }
-        ]
-      ]
-    };
+    // Get username (handle case where no username exists)
+    const username = user.username ? `@${user.username}` : 'No username';
+    
+    // ===== SEND TO OWNER =====
+    try {
+      if (apt.owner_id) {
+        const ownerButtons = {
+          inline_keyboard: [
+            [
+              { text: '✅ Confirm Payment', callback_data: `owner_confirm_${bookingId}` },
+              { text: '❌ Reject', callback_data: `owner_reject_${bookingId}` }
+            ]
+          ]
+        };
 
-   // Get username (handle case where no username exists)
-const username = user.username ? `@${user.username}` : 'No username';
+        await bot.sendMessage(
+          apt.owner_id,
+          `🏠 *New Booking Request!*\n\n` +
+          `*Booking ID:* \`${bookingId}\`\n` +
+          `*Apartment:* ${apt.title}\n` +
+          `*Guest:* ${user.name}\n` +
+          `*Phone:* ${user.phone}\n` +
+          `*Telegram:* ${username}\n` +
+          `*Check-in:* ${checkIn}\n` +
+          `*Check-out:* ${checkOut}\n` +
+          `*Price:* ₦${apt.price}/night\n` +
+          `*Your Commission:* ₦${commission}\n\n` +
+          `Please confirm once payment is received:`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: ownerButtons
+          }
+        );
+        logger.info(`Owner ${apt.owner_id} notified`);
+      } else {
+        logger.warn(`No owner_id for apartment ${apt.id}`);
+      }
+    } catch (ownerError) {
+      logger.error('Owner notification failed:', ownerError.message);
+    }
 
-await bot.sendMessage(
-  ADMIN_ID,
-  `👑 *ADMIN NOTIFICATION*\n\n` +
-  `*New Booking:* \`${bookingId}\`\n` +
-  `*Apartment:* ${apt.title}\n` +
-  `*Guest:* ${user.name} (${user.phone})\n` +
-  `*Telegram:* ${username}\n` +  // ← NEW LINE
-  `*Owner:* ${apt.owner_name}\n` +
-  `*Check-in:* ${checkIn}\n` +
-  `*Check-out:* ${checkOut}\n` +
-  `*Price:* ₦${apt.price}/night\n` +
-  `*Commission:* ₦${commission}`,
-  { parse_mode: 'Markdown' }
-);
+    // ===== SEND TO ADMIN =====
+    try {
+      await bot.sendMessage(
+        ADMIN_ID,
+        `👑 *ADMIN NOTIFICATION*\n\n` +
+        `*New Booking:* \`${bookingId}\`\n` +
+        `*Apartment:* ${apt.title}\n` +
+        `*Guest:* ${user.name} (${user.phone})\n` +
+        `*Telegram:* ${username}\n` +
+        `*Owner:* ${apt.owner_name}\n` +
+        `*Check-in:* ${checkIn}\n` +
+        `*Check-out:* ${checkOut}\n` +
+        `*Price:* ₦${apt.price}/night\n` +
+        `*Commission:* ₦${commission}`,
+        { parse_mode: 'Markdown' }
+      );
+    } catch (adminError) {
+      logger.error('Admin notification failed:', adminError.message);
+    }
 
-    await bot.sendMessage(
-      ADMIN_ID,
-      `👑 *ADMIN NOTIFICATION*\n\n` +
-      `*New Booking:* \`${bookingId}\`\n` +
-      `*Apartment:* ${apt.title}\n` +
-      `*Guest:* ${user.name} (${user.phone})\n` +
-      `*Owner:* ${apt.owner_name}\n` +
-      `*Check-in:* ${checkIn}\n` +
-      `*Check-out:* ${checkOut}\n` +
-      `*Price:* ₦${apt.price}/night\n` +
-      `*Commission:* ₦${commission}`,
-      { parse_mode: 'Markdown' }
-    );
-
-    bot.sendMessage(chatId,
+    // ===== SEND TO USER =====
+    await bot.sendMessage(chatId,
       `✅ *Booking Request Sent!*\n\n` +
       `*Apartment:* ${apt.title}\n` +
       `*Booking ID:* \`${bookingId}\`\n` +
