@@ -826,24 +826,30 @@ bot.on('message', async (msg) => {
     const dates = text.trim().split(/\s+to\s+/i);
 
     if (
-      dates.length === 2 &&
-      /^\d{4}-\d{2}-\d{2}$/.test(dates[0]) &&
-      /^\d{4}-\d{2}-\d{2}$/.test(dates[1])
-    ) {
-      const checkIn = dates[0];
-      const checkOut = dates[1];
+  dates.length === 2 &&
+  /^\d{4}-\d{2}-\d{2}$/.test(dates[0]) &&
+  /^\d{4}-\d{2}-\d{2}$/.test(dates[1])
+) {
+  const checkIn = dates[0];
+  const checkOut = dates[1];
 
-      // Reset attempts
-      delete dateAttempts[chatId];
+  // Reset attempts
+  delete dateAttempts[chatId];
 
-      const [user] = await pool.execute(
-        'SELECT * FROM users WHERE telegram_id = ?',
-        [chatId.toString()]
-      );
+  const [user] = await pool.execute(
+    'SELECT * FROM users WHERE telegram_id = ?',
+    [chatId.toString()]
+  );
+  
+  // Add username from msg
+  const userData = {
+    ...user[0],
+    username: msg.from.username  // ← ADD THIS LINE
+  };
 
-      await processBooking(chatId, user[0], apt, checkIn, checkOut);
-      return;
-    }
+  await processBooking(chatId, userData, apt, checkIn, checkOut);
+  return;
+}
 
     // Invalid format
     dateAttempts[chatId]++;
