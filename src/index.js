@@ -129,7 +129,7 @@ function showMainMenu(chatId, name) {
       reply_markup: {
         inline_keyboard: [
           [{ text: '🔍 Search Apartments', callback_data: 'search' }],
-          [{ text: '💰 Search By Budget', callback_data: 'budget' }],  // ← NEW BUTTON
+          [{ text: '💰 Search By Budget', callback_data: 'budget' }],
           [{ text: '📅 My Bookings', callback_data: 'my_bookings' }],
           [{ text: '❓ Help', callback_data: 'help' }]
         ]
@@ -176,7 +176,7 @@ bot.on('callback_query', async (callbackQuery) => {
     );
   }
   
-  // ========== BUDGET HANDLER (placeholder) ==========
+  // ========== BUDGET HANDLER ==========
   else if (data === 'budget') {
     bot.sendMessage(chatId,
       `💰 *Browse By Budget*\n\n` +
@@ -303,7 +303,7 @@ bot.on('callback_query', async (callbackQuery) => {
     );
   }
   
-  // ========== APARTMENT TYPE HANDLER - FIXED WITH SEPARATE MESSAGES ==========
+  // ========== APARTMENT TYPE HANDLER - WITH PHOTOS! ==========
   else if (data.startsWith('type_')) {
     const parts = data.split('_');
     const aptType = parts[1];
@@ -358,11 +358,32 @@ bot.on('callback_query', async (callbackQuery) => {
         { parse_mode: 'Markdown' }
       );
       
-      // Send each apartment as its own card with individual Book Now button
+      // Send each apartment as its own card with photos!
       for (let i = 0; i < apartments.length; i++) {
         const apt = apartments[i];
         const formattedPrice = new Intl.NumberFormat('en-NG').format(apt.price);
         
+        // ===== NEW: Send photos first if available =====
+        if (apt.images && apt.images !== '[]' && apt.images !== null) {
+          try {
+            const photos = JSON.parse(apt.images);
+            if (photos && photos.length > 0) {
+              // Send in batches of 10 (Telegram limit)
+              for (let j = 0; j < photos.length; j += 10) {
+                const batch = photos.slice(j, j + 10);
+                const media = batch.map(fileId => ({ 
+                  type: 'photo', 
+                  media: fileId 
+                }));
+                await bot.sendMediaGroup(chatId, media);
+              }
+            }
+          } catch (photoError) {
+            logger.error('Error parsing photos:', photoError);
+          }
+        }
+        
+        // ===== Send apartment details with Book Now button =====
         await bot.sendMessage(
           chatId,
           `🏠 *${apt.title}*\n` +
@@ -1029,4 +1050,4 @@ bot.on('polling_error', (error) => {
 });
 
 // ==================== START BOT ====================
-logger.info('🚀 Abuja Shortlet Bot is running - Each apartment has its own message with Book Now button! - 2 attempts only for dates');
+logger.info('🚀 Abuja Shortlet Bot is running - Now with PHOTOS support! - Each apartment has its own message with photos and Book Now button!');
