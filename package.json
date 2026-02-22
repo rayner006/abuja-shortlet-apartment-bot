@@ -4,7 +4,7 @@
   "description": "Telegram bot for Abuja Shortlet Apartments",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node src/index.js & node src/extractor-bot.js",
     "dev": "nodemon src/index.js",
     "migrate-photos": "node scripts/migrate-photos.js"
   },
